@@ -1,0 +1,11 @@
+[package]
+name = "vm2"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+zkevm_opcode_defs = { git = "https://github.com/matter-labs/zkevm_opcode_defs.git", branch = "v1.3.2" }
+u256 = { package = "primitive-types", version = "0.12.1" }
+enum_dispatch = "0.3"
+arbitrary = { version = "1", features = ["derive"] }
+rand = "0.8"
