@@ -17,8 +17,8 @@ use zkevm_opcode_defs::{
 };
 
 pub fn decode_program(raw: &[u64]) -> Vec<Instruction> {
-    raw[..1 << 16]
-        .iter()
+    raw.iter()
+        .take(1 << 16)
         .map(|i| decode(*i))
         .chain(std::iter::once(if raw.len() >= 1 << 16 {
             jump_to_beginning()
