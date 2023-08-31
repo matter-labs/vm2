@@ -126,6 +126,6 @@ fn decode(raw: u64) -> Instruction {
         zkevm_opcode_defs::Opcode::Ret(_) => todo!(),
         zkevm_opcode_defs::Opcode::UMA(_) => todo!(),
         zkevm_opcode_defs::Opcode::Invalid(_) => todo!(),
-        zkevm_opcode_defs::Opcode::Nop(_) => todo!(),
+        zkevm_opcode_defs::Opcode::Nop(_) => Instruction::from_nop(),
     }
 }
