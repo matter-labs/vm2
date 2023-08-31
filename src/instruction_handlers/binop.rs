@@ -1,8 +1,8 @@
 use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{
-        AbsoluteStack, AnyDestination, AnySource, Arguments, Destination, DestinationWriter,
-        Immediate1, Register1, Register2, RelativeStack, Source, SourceWriter,
+        AbsoluteStack, AnyDestination, AnySource, Arguments, CodePage, Destination,
+        DestinationWriter, Immediate1, Register1, Register2, RelativeStack, Source, SourceWriter,
     },
     predication::{Flags, Predicate},
     state::{Handler, Instruction, State},
@@ -241,6 +241,7 @@ fn choose_binop_handler<Op: Binop>(
         AnySource::RelativeStack(_) => {
             match_output_type::<Op, RelativeStack>(output_type, swap, set_flags)
         }
+        AnySource::CodePage(_) => match_output_type::<Op, CodePage>(output_type, swap, set_flags),
     }
 }
 

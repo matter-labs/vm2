@@ -117,70 +117,29 @@ impl SourceWriter for Immediate2 {
 }
 
 #[derive(Arbitrary)]
-pub struct AbsoluteStack {
+pub struct StackLikeParameters {
     pub immediate: u16,
     pub register: Register,
 }
 
-impl Source for AbsoluteStack {
-    fn get(args: &Arguments, state: &mut State) -> U256 {
-        state.stack[source_stack_address(args, state) as usize]
-    }
+/// Any addressing mode that uses reg + imm in some way.
+/// They all encode their parameters in the same way.
+trait StackLike {
+    fn inner(&self) -> &StackLikeParameters;
 }
 
-impl SourceWriter for AbsoluteStack {
+impl<T: StackLike> SourceWriter for T {
     fn write_source(&self, args: &mut Arguments) {
-        args.immediate1 = self.immediate;
-        args.source_registers.set_register1(self.register);
+        args.immediate1 = self.inner().immediate;
+        args.source_registers.set_register1(self.inner().register);
     }
 }
 
-impl Destination for AbsoluteStack {
-    fn set(args: &Arguments, state: &mut State, value: U256) {
-        state.stack[destination_stack_address(args, state) as usize] = value;
-    }
-}
-
-impl DestinationWriter for AbsoluteStack {
+impl<T: StackLike> DestinationWriter for T {
     fn write_destination(&self, args: &mut Arguments) {
-        args.immediate2 = self.immediate;
-        args.destination_registers.set_register1(self.register)
-    }
-}
-
-#[derive(Arbitrary)]
-pub struct RelativeStack {
-    pub immediate: u16,
-    pub register: Register,
-}
-
-impl Source for RelativeStack {
-    fn get(args: &Arguments, state: &mut State) -> U256 {
-        state.sp = state.sp.wrapping_sub(source_stack_address(args, state));
-        state.stack[state.sp as usize]
-    }
-}
-
-impl SourceWriter for RelativeStack {
-    fn write_source(&self, args: &mut Arguments) {
-        args.immediate1 = self.immediate;
-        args.source_registers.set_register1(self.register);
-    }
-}
-
-impl Destination for RelativeStack {
-    fn set(args: &Arguments, state: &mut State, value: U256) {
-        state.sp = state
-            .sp
-            .wrapping_add(destination_stack_address(args, state));
-        state.stack[state.sp as usize] = value;
-    }
-}
-
-impl DestinationWriter for RelativeStack {
-    fn write_destination(&self, args: &mut Arguments) {
-        args.immediate2 = self.immediate;
-        args.destination_registers.set_register1(self.register)
+        args.immediate2 = self.inner().immediate;
+        args.destination_registers
+            .set_register1(self.inner().register)
     }
 }
 
@@ -200,6 +159,72 @@ fn destination_stack_address(args: &Arguments, state: &mut State) -> u16 {
 /// Stack addresses are always in that remainder class anyway.
 fn compute_stack_address(state: &mut State, register: Register, immediate: u16) -> u16 {
     (register.get(state).low_u32() as u16).wrapping_add(immediate)
+}
+
+#[derive(Arbitrary)]
+pub struct AbsoluteStack(pub StackLikeParameters);
+
+impl StackLike for AbsoluteStack {
+    fn inner(&self) -> &StackLikeParameters {
+        &self.0
+    }
+}
+
+impl Source for AbsoluteStack {
+    fn get(args: &Arguments, state: &mut State) -> U256 {
+        state.stack[source_stack_address(args, state) as usize]
+    }
+}
+
+impl Destination for AbsoluteStack {
+    fn set(args: &Arguments, state: &mut State, value: U256) {
+        state.stack[destination_stack_address(args, state) as usize] = value;
+    }
+}
+
+#[derive(Arbitrary)]
+pub struct RelativeStack(pub StackLikeParameters);
+
+impl StackLike for RelativeStack {
+    fn inner(&self) -> &StackLikeParameters {
+        &self.0
+    }
+}
+
+impl Source for RelativeStack {
+    fn get(args: &Arguments, state: &mut State) -> U256 {
+        state.sp = state.sp.wrapping_sub(source_stack_address(args, state));
+        state.stack[state.sp as usize]
+    }
+}
+
+impl Destination for RelativeStack {
+    fn set(args: &Arguments, state: &mut State, value: U256) {
+        state.sp = state
+            .sp
+            .wrapping_add(destination_stack_address(args, state));
+        state.stack[state.sp as usize] = value;
+    }
+}
+
+#[derive(Arbitrary)]
+pub struct CodePage(pub StackLikeParameters);
+
+impl StackLike for CodePage {
+    fn inner(&self) -> &StackLikeParameters {
+        &self.0
+    }
+}
+
+impl Source for CodePage {
+    fn get(args: &Arguments, state: &mut State) -> U256 {
+        let address = source_stack_address(args, state);
+        state
+            .code_page
+            .get(address as usize)
+            .cloned()
+            .unwrap_or(U256::zero())
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -255,6 +280,7 @@ pub enum AnySource {
     Immediate1,
     AbsoluteStack,
     RelativeStack,
+    CodePage,
 }
 
 #[enum_dispatch(DestinationWriter)]

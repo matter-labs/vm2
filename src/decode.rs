@@ -1,7 +1,7 @@
 use crate::{
     addressing_modes::{
-        AbsoluteStack, AnyDestination, AnySource, Immediate1, Register, Register1, Register2,
-        RelativeStack,
+        AbsoluteStack, AnyDestination, AnySource, CodePage, Immediate1, Register, Register1,
+        Register2, RelativeStack, StackLikeParameters,
     },
     end_execution,
     instruction_handlers::{
@@ -43,6 +43,15 @@ fn decode(raw: u64) -> Instruction {
         zkevm_opcode_defs::Condition::GtOrLt => crate::Predicate::IfGtOrLT,
     };
 
+    let stack_in = StackLikeParameters {
+        immediate: parsed.imm_0,
+        register: Register::new(parsed.src0_reg_idx),
+    };
+    let stack_out = StackLikeParameters {
+        immediate: parsed.imm_1,
+        register: Register::new(parsed.dst0_reg_idx),
+    };
+
     let src1: AnySource = match parsed.variant.src0_operand_type {
         RegOnly | RegOrImm(RegOrImmFlags::UseRegOnly) | Full(ImmMemHandlerFlags::UseRegOnly) => {
             Register1(Register::new(parsed.src0_reg_idx)).into()
@@ -50,18 +59,10 @@ fn decode(raw: u64) -> Instruction {
         RegOrImm(RegOrImmFlags::UseImm16Only) | Full(ImmMemHandlerFlags::UseImm16Only) => {
             Immediate1(parsed.imm_0).into()
         }
-        Full(ImmMemHandlerFlags::UseAbsoluteOnStack) => AbsoluteStack {
-            immediate: parsed.imm_0,
-            register: Register::new(parsed.src0_reg_idx),
-        }
-        .into(),
-        Full(ImmMemHandlerFlags::UseStackWithPushPop) => RelativeStack {
-            immediate: parsed.imm_0,
-            register: Register::new(parsed.src0_reg_idx),
-        }
-        .into(),
+        Full(ImmMemHandlerFlags::UseAbsoluteOnStack) => AbsoluteStack(stack_in).into(),
+        Full(ImmMemHandlerFlags::UseStackWithPushPop) => RelativeStack(stack_in).into(),
         Full(ImmMemHandlerFlags::UseStackWithOffset) => todo!(),
-        Full(ImmMemHandlerFlags::UseCodePage) => todo!(),
+        Full(ImmMemHandlerFlags::UseCodePage) => CodePage(stack_in).into(),
     };
 
     let out: AnyDestination = match parsed.variant.dst0_operand_type {
@@ -71,18 +72,10 @@ fn decode(raw: u64) -> Instruction {
         RegOrImm(RegOrImmFlags::UseImm16Only) | Full(ImmMemHandlerFlags::UseImm16Only) => {
             panic!("Parser wants to output to immediate")
         }
-        Full(ImmMemHandlerFlags::UseAbsoluteOnStack) => AbsoluteStack {
-            immediate: parsed.imm_1,
-            register: Register::new(parsed.dst0_reg_idx),
-        }
-        .into(),
-        Full(ImmMemHandlerFlags::UseStackWithPushPop) => RelativeStack {
-            immediate: parsed.imm_1,
-            register: Register::new(parsed.dst0_reg_idx),
-        }
-        .into(),
+        Full(ImmMemHandlerFlags::UseAbsoluteOnStack) => AbsoluteStack(stack_out).into(),
+        Full(ImmMemHandlerFlags::UseStackWithPushPop) => RelativeStack(stack_out).into(),
         Full(ImmMemHandlerFlags::UseStackWithOffset) => todo!(),
-        Full(ImmMemHandlerFlags::UseCodePage) => todo!(),
+        Full(ImmMemHandlerFlags::UseCodePage) => panic!("Parser wants to write to code page"),
     };
 
     let out2 = Register2(Register::new(parsed.dst1_reg_idx));

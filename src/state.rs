@@ -8,6 +8,7 @@ pub struct State {
     pub flags: Flags,
     pub stack: Box<[U256; 1 << 16]>,
     pub sp: u16,
+    pub code_page: Vec<U256>,
 }
 
 pub struct Instruction {
@@ -29,6 +30,7 @@ impl Default for State {
                 .try_into()
                 .unwrap(),
             sp: 1000,
+            code_page: vec![],
         }
     }
 }
