@@ -1,7 +1,7 @@
 use crate::{
     addressing_modes::{
-        AbsoluteStack, AnyDestination, AnySource, CodePage, Immediate1, Register, Register1,
-        Register2, RelativeStack, StackLikeParameters,
+        AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, CodePage, Immediate1,
+        Register, Register1, Register2, RelativeStack, StackLikeParameters,
     },
     end_execution,
     instruction_handlers::{
@@ -47,11 +47,6 @@ fn decode(raw: u64) -> Instruction {
         immediate: parsed.imm_0,
         register: Register::new(parsed.src0_reg_idx),
     };
-    let stack_out = StackLikeParameters {
-        immediate: parsed.imm_1,
-        register: Register::new(parsed.dst0_reg_idx),
-    };
-
     let src1: AnySource = match parsed.variant.src0_operand_type {
         RegOnly | RegOrImm(RegOrImmFlags::UseRegOnly) | Full(ImmMemHandlerFlags::UseRegOnly) => {
             Register1(Register::new(parsed.src0_reg_idx)).into()
@@ -60,11 +55,15 @@ fn decode(raw: u64) -> Instruction {
             Immediate1(parsed.imm_0).into()
         }
         Full(ImmMemHandlerFlags::UseAbsoluteOnStack) => AbsoluteStack(stack_in).into(),
-        Full(ImmMemHandlerFlags::UseStackWithPushPop) => RelativeStack(stack_in).into(),
-        Full(ImmMemHandlerFlags::UseStackWithOffset) => todo!(),
+        Full(ImmMemHandlerFlags::UseStackWithPushPop) => AdvanceStackPointer(stack_in).into(),
+        Full(ImmMemHandlerFlags::UseStackWithOffset) => RelativeStack(stack_in).into(),
         Full(ImmMemHandlerFlags::UseCodePage) => CodePage(stack_in).into(),
     };
 
+    let stack_out = StackLikeParameters {
+        immediate: parsed.imm_1,
+        register: Register::new(parsed.dst0_reg_idx),
+    };
     let out: AnyDestination = match parsed.variant.dst0_operand_type {
         RegOnly | RegOrImm(RegOrImmFlags::UseRegOnly) | Full(ImmMemHandlerFlags::UseRegOnly) => {
             Register1(Register::new(parsed.dst0_reg_idx)).into()
@@ -73,8 +72,8 @@ fn decode(raw: u64) -> Instruction {
             panic!("Parser wants to output to immediate")
         }
         Full(ImmMemHandlerFlags::UseAbsoluteOnStack) => AbsoluteStack(stack_out).into(),
-        Full(ImmMemHandlerFlags::UseStackWithPushPop) => RelativeStack(stack_out).into(),
-        Full(ImmMemHandlerFlags::UseStackWithOffset) => todo!(),
+        Full(ImmMemHandlerFlags::UseStackWithPushPop) => AdvanceStackPointer(stack_out).into(),
+        Full(ImmMemHandlerFlags::UseStackWithOffset) => RelativeStack(stack_out).into(),
         Full(ImmMemHandlerFlags::UseCodePage) => panic!("Parser wants to write to code page"),
     };
 

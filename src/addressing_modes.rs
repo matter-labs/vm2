@@ -193,12 +193,35 @@ impl StackLike for RelativeStack {
 
 impl Source for RelativeStack {
     fn get(args: &Arguments, state: &mut State) -> U256 {
+        state.stack[state.sp.wrapping_sub(source_stack_address(args, state)) as usize]
+    }
+}
+
+impl Destination for RelativeStack {
+    fn set(args: &Arguments, state: &mut State, value: U256) {
+        state.stack[state
+            .sp
+            .wrapping_add(destination_stack_address(args, state)) as usize] = value;
+    }
+}
+
+#[derive(Arbitrary)]
+pub struct AdvanceStackPointer(pub StackLikeParameters);
+
+impl StackLike for AdvanceStackPointer {
+    fn inner(&self) -> &StackLikeParameters {
+        &self.0
+    }
+}
+
+impl Source for AdvanceStackPointer {
+    fn get(args: &Arguments, state: &mut State) -> U256 {
         state.sp = state.sp.wrapping_sub(source_stack_address(args, state));
         state.stack[state.sp as usize]
     }
 }
 
-impl Destination for RelativeStack {
+impl Destination for AdvanceStackPointer {
     fn set(args: &Arguments, state: &mut State, value: U256) {
         state.sp = state
             .sp
@@ -280,6 +303,7 @@ pub enum AnySource {
     Immediate1,
     AbsoluteStack,
     RelativeStack,
+    AdvanceStackPointer,
     CodePage,
 }
 
@@ -289,4 +313,5 @@ pub enum AnyDestination {
     Register1,
     AbsoluteStack,
     RelativeStack,
+    AdvanceStackPointer,
 }

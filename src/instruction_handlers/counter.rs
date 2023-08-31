@@ -4,8 +4,8 @@
 use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{
-        AbsoluteStack, AnyDestination, Arguments, Destination, DestinationWriter, Register1,
-        RelativeStack,
+        AbsoluteStack, AdvanceStackPointer, AnyDestination, Arguments, Destination,
+        DestinationWriter, Register1, RelativeStack,
     },
     Instruction, State,
 };
@@ -31,6 +31,7 @@ impl Instruction {
                 AnyDestination::Register1(_) => count::<Register1>,
                 AnyDestination::AbsoluteStack(_) => count::<AbsoluteStack>,
                 AnyDestination::RelativeStack(_) => count::<RelativeStack>,
+                AnyDestination::AdvanceStackPointer(_) => count::<AdvanceStackPointer>,
             },
             arguments,
         }

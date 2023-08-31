@@ -1,7 +1,7 @@
 use crate::{
     addressing_modes::{
-        AbsoluteStack, AnySource, Arguments, CodePage, Immediate1, Register1, RelativeStack,
-        Source, SourceWriter,
+        AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Immediate1, Register1,
+        RelativeStack, Source, SourceWriter,
     },
     predication::Predicate,
     state::{Instruction, State},
@@ -38,6 +38,7 @@ impl Instruction {
                 AnySource::Immediate1(_) => jump::<Immediate1>,
                 AnySource::AbsoluteStack(_) => jump::<AbsoluteStack>,
                 AnySource::RelativeStack(_) => jump::<RelativeStack>,
+                AnySource::AdvanceStackPointer(_) => jump::<AdvanceStackPointer>,
                 AnySource::CodePage(_) => jump::<CodePage>,
             },
             arguments,

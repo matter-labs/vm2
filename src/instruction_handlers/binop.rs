@@ -1,8 +1,9 @@
 use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{
-        AbsoluteStack, AnyDestination, AnySource, Arguments, CodePage, Destination,
-        DestinationWriter, Immediate1, Register1, Register2, RelativeStack, Source, SourceWriter,
+        AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
+        Destination, DestinationWriter, Immediate1, Register1, Register2, RelativeStack, Source,
+        SourceWriter,
     },
     predication::{Flags, Predicate},
     state::{Handler, Instruction, State},
@@ -241,6 +242,9 @@ fn choose_binop_handler<Op: Binop>(
         AnySource::RelativeStack(_) => {
             match_output_type::<Op, RelativeStack>(output_type, swap, set_flags)
         }
+        AnySource::AdvanceStackPointer(_) => {
+            match_output_type::<Op, AdvanceStackPointer>(output_type, swap, set_flags)
+        }
         AnySource::CodePage(_) => match_output_type::<Op, CodePage>(output_type, swap, set_flags),
     }
 }
@@ -255,6 +259,9 @@ fn match_output_type<Op: Binop, In1: Source>(
         AnyDestination::Register1(_) => match_swap::<Op, In1, Register1>(swap, set_flags),
         AnyDestination::AbsoluteStack(_) => match_swap::<Op, In1, AbsoluteStack>(swap, set_flags),
         AnyDestination::RelativeStack(_) => match_swap::<Op, In1, RelativeStack>(swap, set_flags),
+        AnyDestination::AdvanceStackPointer(_) => {
+            match_swap::<Op, In1, AdvanceStackPointer>(swap, set_flags)
+        }
     }
 }
 
