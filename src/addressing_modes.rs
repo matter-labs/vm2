@@ -116,7 +116,7 @@ impl SourceWriter for Immediate2 {
     }
 }
 
-#[derive(Arbitrary)]
+#[derive(Arbitrary, Clone)]
 pub struct StackLikeParameters {
     pub immediate: u16,
     pub register: Register,
@@ -147,7 +147,7 @@ fn source_stack_address(args: &Arguments, state: &mut State) -> u16 {
     compute_stack_address(state, args.source_registers.register1(), args.immediate1)
 }
 
-fn destination_stack_address(args: &Arguments, state: &mut State) -> u16 {
+pub fn destination_stack_address(args: &Arguments, state: &mut State) -> u16 {
     compute_stack_address(
         state,
         args.destination_registers.register1(),
@@ -205,7 +205,7 @@ impl Destination for RelativeStack {
     }
 }
 
-#[derive(Arbitrary)]
+#[derive(Arbitrary, Clone)]
 pub struct AdvanceStackPointer(pub StackLikeParameters);
 
 impl StackLike for AdvanceStackPointer {

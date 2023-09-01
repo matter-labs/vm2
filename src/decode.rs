@@ -118,6 +118,23 @@ fn decode(raw: u64) -> Instruction {
         zkevm_opcode_defs::Opcode::Ret(_) => todo!(),
         zkevm_opcode_defs::Opcode::UMA(_) => todo!(),
         zkevm_opcode_defs::Opcode::Invalid(_) => todo!(),
-        zkevm_opcode_defs::Opcode::Nop(_) => Instruction::from_nop(),
+        zkevm_opcode_defs::Opcode::Nop(_) => {
+            let no_sp_movement = AdvanceStackPointer(StackLikeParameters {
+                immediate: 0,
+                register: Register::new(0),
+            });
+            Instruction::from_nop(
+                if let AnySource::AdvanceStackPointer(pop) = src1 {
+                    pop
+                } else {
+                    no_sp_movement.clone()
+                },
+                if let AnyDestination::AdvanceStackPointer(push) = out {
+                    push
+                } else {
+                    no_sp_movement
+                },
+            )
+        }
     }
 }
