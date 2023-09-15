@@ -7,6 +7,7 @@ mod common;
 mod counter;
 mod jump;
 mod nop;
+mod pointer;
 
 impl<'a> Arbitrary<'a> for Instruction {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {

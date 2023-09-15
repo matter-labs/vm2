@@ -111,7 +111,12 @@ fn decode(raw: u64) -> Instruction {
         },
         zkevm_opcode_defs::Opcode::Jump(_) => Instruction::from_jump(src1, predicate),
         zkevm_opcode_defs::Opcode::Context(_) => todo!(),
-        zkevm_opcode_defs::Opcode::Ptr(_) => todo!(),
+        zkevm_opcode_defs::Opcode::Ptr(x) => match x {
+            zkevm_opcode_defs::PtrOpcode::Add => todo!(),
+            zkevm_opcode_defs::PtrOpcode::Sub => todo!(),
+            zkevm_opcode_defs::PtrOpcode::Pack => todo!(),
+            zkevm_opcode_defs::PtrOpcode::Shrink => todo!(),
+        },
         zkevm_opcode_defs::Opcode::NearCall(_) => todo!(),
         zkevm_opcode_defs::Opcode::Log(_) => todo!(),
         zkevm_opcode_defs::Opcode::FarCall(_) => todo!(),
