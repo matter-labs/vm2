@@ -25,7 +25,7 @@ impl Instruction {
 
         Self {
             handler: nop,
-            arguments: arguments,
+            arguments,
         }
     }
 }
