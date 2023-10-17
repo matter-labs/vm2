@@ -5,7 +5,8 @@ use crate::{
     },
     end_execution,
     instruction_handlers::{
-        Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
+        Add, And, Div, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub, RotateLeft, RotateRight,
+        ShiftLeft, ShiftRight, Sub, Xor,
     },
     jump_to_beginning, Instruction,
 };
@@ -14,6 +15,7 @@ use zkevm_opcode_defs::{
     ImmMemHandlerFlags,
     Operand::*,
     RegOrImmFlags, SET_FLAGS_FLAG_IDX, SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES,
+    SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE,
 };
 
 pub fn decode_program(raw: &[u64]) -> Vec<Instruction> {
@@ -77,18 +79,31 @@ fn decode(raw: u64) -> Instruction {
         Full(ImmMemHandlerFlags::UseCodePage) => panic!("Parser wants to write to code page"),
     };
 
+    let src2 = Register2(Register::new(parsed.src1_reg_idx));
     let out2 = Register2(Register::new(parsed.dst1_reg_idx));
 
     macro_rules! binop {
         ($op: ident, $snd: tt) => {
             Instruction::from_binop::<$op>(
                 src1,
-                Register2(Register::new(parsed.src1_reg_idx)),
+                src2,
                 out,
                 $snd,
                 predicate,
                 parsed.variant.flags[SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES],
                 parsed.variant.flags[SET_FLAGS_FLAG_IDX],
+            )
+        };
+    }
+
+    macro_rules! ptr {
+        ($op: ident) => {
+            Instruction::from_ptr::<$op>(
+                src1,
+                src2,
+                out,
+                predicate,
+                parsed.variant.flags[SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE],
             )
         };
     }
@@ -111,7 +126,12 @@ fn decode(raw: u64) -> Instruction {
         },
         zkevm_opcode_defs::Opcode::Jump(_) => Instruction::from_jump(src1, predicate),
         zkevm_opcode_defs::Opcode::Context(_) => todo!(),
-        zkevm_opcode_defs::Opcode::Ptr(_) => todo!(),
+        zkevm_opcode_defs::Opcode::Ptr(x) => match x {
+            zkevm_opcode_defs::PtrOpcode::Add => ptr!(PtrAdd),
+            zkevm_opcode_defs::PtrOpcode::Sub => ptr!(PtrSub),
+            zkevm_opcode_defs::PtrOpcode::Pack => ptr!(PtrPack),
+            zkevm_opcode_defs::PtrOpcode::Shrink => ptr!(PtrShrink),
+        },
         zkevm_opcode_defs::Opcode::NearCall(_) => todo!(),
         zkevm_opcode_defs::Opcode::Log(_) => todo!(),
         zkevm_opcode_defs::Opcode::FarCall(_) => todo!(),

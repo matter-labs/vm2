@@ -1,12 +1,14 @@
 use crate::state::Instruction;
 use arbitrary::Arbitrary;
 pub use binop::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor};
+pub use pointer::{PtrAdd, PtrPack, PtrShrink, PtrSub};
 
 mod binop;
 mod common;
 mod counter;
 mod jump;
 mod nop;
+mod pointer;
 
 impl<'a> Arbitrary<'a> for Instruction {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
