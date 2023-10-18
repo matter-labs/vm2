@@ -40,8 +40,13 @@ impl State {
         self.program_start = &program[0];
         self.program_len = program.len();
 
-        let start = program[0].handler;
-        start(self, &program[0]);
+        // Predication is checked for the *next* instruction, not the current one.
+        // Thus, it has to be checked before executing the first instruction.
+        for instruction in program.iter() {
+            if instruction.arguments.predicate.satisfied(&self.flags) {
+                return (instruction.handler)(self, instruction);
+            }
+        }
     }
 }
 

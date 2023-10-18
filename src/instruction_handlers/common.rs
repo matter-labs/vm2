@@ -6,14 +6,16 @@ pub(crate) fn instruction_boilerplate(
     mut instruction: *const Instruction,
     business_logic: impl FnOnce(&mut State, &Arguments),
 ) {
-    let args = unsafe { &(*instruction).arguments };
     unsafe {
-        instruction = instruction.add(1);
-    };
+        business_logic(state, &(*instruction).arguments);
 
-    if args.predicate.satisfied(&state.flags) {
-        business_logic(state, args);
+        loop {
+            instruction = instruction.add(1);
+            if (*instruction).arguments.predicate.satisfied(&state.flags) {
+                break;
+            }
+        }
+
+        ((*instruction).handler)(state, instruction)
     }
-
-    unsafe { ((*instruction).handler)(state, instruction) }
 }

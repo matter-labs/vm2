@@ -8,22 +8,21 @@ use crate::{
 };
 
 fn jump<In: Source>(state: &mut State, mut instruction: *const Instruction) {
-    let args = unsafe { &(*instruction).arguments };
     unsafe {
-        instruction = instruction.add(1);
-    }
-
-    if args.predicate.satisfied(&state.flags) {
-        let target = In::get(args, state).low_u32() as u16 as usize;
+        let target = In::get(&(*instruction).arguments, state).low_u32() as u16 as usize;
         if target < state.program_len {
-            instruction = unsafe { state.program_start.add(target) };
+            instruction = state.program_start.add(target);
         } else {
             // TODO panic
             return;
         }
-    }
 
-    unsafe { ((*instruction).handler)(state, instruction) }
+        while !(*instruction).arguments.predicate.satisfied(&state.flags) {
+            instruction = instruction.add(1);
+        }
+
+        ((*instruction).handler)(state, instruction)
+    }
 }
 
 impl Instruction {
