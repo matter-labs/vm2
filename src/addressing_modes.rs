@@ -223,10 +223,10 @@ impl Source for AdvanceStackPointer {
 
 impl Destination for AdvanceStackPointer {
     fn set(args: &Arguments, state: &mut State, value: U256) {
+        state.stack[state.sp as usize] = value;
         state.sp = state
             .sp
             .wrapping_add(destination_stack_address(args, state));
-        state.stack[state.sp as usize] = value;
     }
 }
 
