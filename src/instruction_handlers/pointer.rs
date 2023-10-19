@@ -39,17 +39,19 @@ fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
         let (a, a_is_pointer) = a;
         let (b, b_is_pointer) = b;
 
-        if a_is_pointer && !b_is_pointer {
-            let result = Op::perform(a, b);
-            Out::set_fat_ptr(args, state, result);
-        } else {
-            // TODO panic
+        if !a_is_pointer || b_is_pointer {
+            return; // TODO panic
         }
+
+        let Some(result) = Op::perform(a, b) else {
+            return; // TODO panic
+        };
+        Out::set_fat_ptr(args, state, result);
     });
 }
 
 pub trait PtrOp {
-    fn perform(in1: U256, in2: U256) -> U256;
+    fn perform(in1: U256, in2: U256) -> Option<U256>;
 }
 
 pub struct PtrAddSub<const IS_ADD: bool>;
@@ -57,46 +59,42 @@ pub type PtrAdd = PtrAddSub<true>;
 pub type PtrSub = PtrAddSub<false>;
 
 impl<const IS_ADD: bool> PtrOp for PtrAddSub<IS_ADD> {
-    fn perform(mut in1: U256, in2: U256) -> U256 {
+    fn perform(mut in1: U256, in2: U256) -> Option<U256> {
         if in2 > u32::MAX.into() {
-            // TODO panic
+            return None;
         }
         let pointer: &mut FatPointer = (&mut in1).into();
 
-        let (new_offset, overflowed) = if IS_ADD {
-            pointer.offset.overflowing_add(in2.low_u32())
+        let new_offset = if IS_ADD {
+            pointer.offset.checked_add(in2.low_u32())?
         } else {
-            pointer.offset.overflowing_sub(in2.low_u32())
+            pointer.offset.checked_sub(in2.low_u32())?
         };
-        if overflowed {
-            // TODO panic
-        }
+
         pointer.offset = new_offset;
 
-        in1
+        Some(in1)
     }
 }
 
 pub struct PtrPack;
 impl PtrOp for PtrPack {
-    fn perform(in1: U256, in2: U256) -> U256 {
+    fn perform(in1: U256, in2: U256) -> Option<U256> {
         if in2.low_u128() != 0 {
-            // TODO panic
+            return None;
         }
-        U256([in1.0[0], in1.0[1], in2.0[2], in2.0[3]])
+        Some(U256([in1.0[0], in1.0[1], in2.0[2], in2.0[3]]))
     }
 }
 
 pub struct PtrShrink;
 impl PtrOp for PtrShrink {
-    fn perform(mut in1: U256, in2: U256) -> U256 {
+    fn perform(mut in1: U256, in2: U256) -> Option<U256> {
         let pointer: &mut FatPointer = (&mut in1).into();
-        let (new_len, overflowed) = pointer.length.overflowing_sub(in2.low_u32());
-        if overflowed {
-            // TODO panic
-        }
+        let new_len = pointer.length.checked_sub(in2.low_u32())?;
+
         pointer.length = new_len;
-        in1
+        Some(in1)
     }
 }
 
