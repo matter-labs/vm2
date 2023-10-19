@@ -1,4 +1,4 @@
-use crate::state::Instruction;
+use crate::{state::Instruction, Predicate};
 use arbitrary::Arbitrary;
 pub use binop::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor};
 pub use pointer::{PtrAdd, PtrPack, PtrShrink, PtrSub};
@@ -12,7 +12,11 @@ mod pointer;
 
 impl<'a> Arbitrary<'a> for Instruction {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        let predicate = u.arbitrary()?;
+        let predicate = if u.arbitrary()? {
+            Predicate::Always
+        } else {
+            u.arbitrary()?
+        };
         let swap: bool = u.arbitrary()?;
         let set_flags = u.arbitrary()?;
         let src1 = u.arbitrary()?;
