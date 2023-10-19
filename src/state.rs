@@ -1,8 +1,10 @@
-use crate::{addressing_modes::Arguments, predication::Flags};
+use crate::{addressing_modes::Arguments, bitset::Bitset, predication::Flags};
 use u256::U256;
 
 pub struct State {
     pub registers: [U256; 16],
+    pub(crate) register_pointer_flags: u16,
+
     pub flags: Flags,
 
     pub current_frame: Callframe,
@@ -14,7 +16,9 @@ pub struct Callframe {
     pub program_len: usize,
     pub code_page: Vec<U256>,
 
+    // TODO: joint allocate these. Difficult because stack must be on the stack the whole time.
     pub stack: Box<[U256; 1 << 16]>,
+    pub stack_pointer_flags: Box<Bitset>,
     pub sp: u16,
 
     pub heap: Vec<U256>,
@@ -32,6 +36,7 @@ impl Callframe {
                 .into_boxed_slice()
                 .try_into()
                 .unwrap(),
+            stack_pointer_flags: Box::new(Bitset::default()),
             sp: INITIAL_SP,
             code_page,
             heap: vec![],
@@ -51,6 +56,7 @@ impl State {
     pub fn new(program: &[Instruction], code_page: Vec<U256>) -> Self {
         Self {
             registers: Default::default(),
+            register_pointer_flags: 0,
             flags: Flags::new(false, false, false),
             current_frame: Callframe::new(program, code_page),
             previous_frames: vec![],

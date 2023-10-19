@@ -5,10 +5,15 @@ use u256::U256;
 
 pub(crate) trait Source {
     fn get(args: &Arguments, state: &mut State) -> U256;
+    fn is_fat_pointer(args: &Arguments, state: &mut State) -> bool;
 }
 
 pub(crate) trait Destination {
+    /// Set this register/stack location to value and clear its pointer flag
     fn set(args: &Arguments, state: &mut State, value: U256);
+
+    /// Same as `set` but sets the pointer flag
+    fn set_fat_ptr(args: &Arguments, state: &mut State, value: U256);
 }
 
 #[enum_dispatch]
@@ -40,7 +45,11 @@ pub struct Register2(pub Register);
 
 impl Source for Register1 {
     fn get(args: &Arguments, state: &mut State) -> U256 {
-        args.source_registers.register1().get(state)
+        args.source_registers.register1().value(state)
+    }
+
+    fn is_fat_pointer(args: &Arguments, state: &mut State) -> bool {
+        args.source_registers.register1().pointer_flag(state)
     }
 }
 
@@ -52,7 +61,11 @@ impl SourceWriter for Register1 {
 
 impl Source for Register2 {
     fn get(args: &Arguments, state: &mut State) -> U256 {
-        args.source_registers.register2().get(state)
+        args.source_registers.register2().value(state)
+    }
+
+    fn is_fat_pointer(args: &Arguments, state: &mut State) -> bool {
+        args.source_registers.register2().pointer_flag(state)
     }
 }
 
@@ -66,6 +79,10 @@ impl Destination for Register1 {
     fn set(args: &Arguments, state: &mut State, value: U256) {
         args.destination_registers.register1().set(state, value);
     }
+
+    fn set_fat_ptr(args: &Arguments, state: &mut State, value: U256) {
+        args.destination_registers.register1().set_ptr(state, value);
+    }
 }
 
 impl DestinationWriter for Register1 {
@@ -77,6 +94,10 @@ impl DestinationWriter for Register1 {
 impl Destination for Register2 {
     fn set(args: &Arguments, state: &mut State, value: U256) {
         args.destination_registers.register2().set(state, value);
+    }
+
+    fn set_fat_ptr(args: &Arguments, state: &mut State, value: U256) {
+        args.destination_registers.register2().set_ptr(state, value);
     }
 }
 
@@ -96,6 +117,10 @@ impl Source for Immediate1 {
     fn get(args: &Arguments, _state: &mut State) -> U256 {
         U256([args.immediate1 as u64, 0, 0, 0])
     }
+
+    fn is_fat_pointer(_: &Arguments, _: &mut State) -> bool {
+        false
+    }
 }
 
 impl SourceWriter for Immediate1 {
@@ -108,6 +133,10 @@ impl Source for Immediate2 {
     fn get(args: &Arguments, _state: &mut State) -> U256 {
         U256([args.immediate2 as u64, 0, 0, 0])
     }
+
+    fn is_fat_pointer(_: &Arguments, _: &mut State) -> bool {
+        false
+    }
 }
 
 impl SourceWriter for Immediate2 {
@@ -117,29 +146,59 @@ impl SourceWriter for Immediate2 {
 }
 
 #[derive(Arbitrary, Clone)]
-pub struct StackLikeParameters {
+pub struct RegisterAndImmediate {
     pub immediate: u16,
     pub register: Register,
 }
 
 /// Any addressing mode that uses reg + imm in some way.
 /// They all encode their parameters in the same way.
-trait StackLike {
-    fn inner(&self) -> &StackLikeParameters;
+trait RegisterPlusImmediate {
+    fn inner(&self) -> &RegisterAndImmediate;
 }
 
-impl<T: StackLike> SourceWriter for T {
+impl<T: RegisterPlusImmediate> SourceWriter for T {
     fn write_source(&self, args: &mut Arguments) {
         args.immediate1 = self.inner().immediate;
         args.source_registers.set_register1(self.inner().register);
     }
 }
 
-impl<T: StackLike> DestinationWriter for T {
+impl<T: RegisterPlusImmediate> DestinationWriter for T {
     fn write_destination(&self, args: &mut Arguments) {
         args.immediate2 = self.inner().immediate;
         args.destination_registers
             .set_register1(self.inner().register)
+    }
+}
+
+trait StackAddressing {
+    fn address_for_get(args: &Arguments, state: &mut State) -> u16;
+    fn address_for_set(args: &Arguments, state: &mut State) -> u16;
+}
+
+impl<T: StackAddressing> Source for T {
+    fn get(args: &Arguments, state: &mut State) -> U256 {
+        state.current_frame.stack[Self::address_for_get(args, state) as usize]
+    }
+
+    fn is_fat_pointer(args: &Arguments, state: &mut State) -> bool {
+        let address = Self::address_for_get(args, state);
+        state.current_frame.stack_pointer_flags.get(address)
+    }
+}
+
+impl<T: StackAddressing> Destination for T {
+    fn set(args: &Arguments, state: &mut State, value: U256) {
+        let address = Self::address_for_set(args, state);
+        state.current_frame.stack[address as usize] = value;
+        state.current_frame.stack_pointer_flags.clear(address);
+    }
+
+    fn set_fat_ptr(args: &Arguments, state: &mut State, value: U256) {
+        let address = Self::address_for_set(args, state);
+        state.current_frame.stack[address as usize] = value;
+        state.current_frame.stack_pointer_flags.set(address);
     }
 }
 
@@ -158,93 +217,86 @@ pub fn destination_stack_address(args: &Arguments, state: &mut State) -> u16 {
 /// Computes register + immediate (mod 2^16).
 /// Stack addresses are always in that remainder class anyway.
 fn compute_stack_address(state: &mut State, register: Register, immediate: u16) -> u16 {
-    (register.get(state).low_u32() as u16).wrapping_add(immediate)
+    (register.value(state).low_u32() as u16).wrapping_add(immediate)
 }
 
 #[derive(Arbitrary)]
-pub struct AbsoluteStack(pub StackLikeParameters);
+pub struct AbsoluteStack(pub RegisterAndImmediate);
 
-impl StackLike for AbsoluteStack {
-    fn inner(&self) -> &StackLikeParameters {
+impl RegisterPlusImmediate for AbsoluteStack {
+    fn inner(&self) -> &RegisterAndImmediate {
         &self.0
     }
 }
 
-impl Source for AbsoluteStack {
-    fn get(args: &Arguments, state: &mut State) -> U256 {
-        state.current_frame.stack[source_stack_address(args, state) as usize]
+impl StackAddressing for AbsoluteStack {
+    fn address_for_get(args: &Arguments, state: &mut State) -> u16 {
+        source_stack_address(args, state)
     }
-}
 
-impl Destination for AbsoluteStack {
-    fn set(args: &Arguments, state: &mut State, value: U256) {
-        state.current_frame.stack[destination_stack_address(args, state) as usize] = value;
+    fn address_for_set(args: &Arguments, state: &mut State) -> u16 {
+        destination_stack_address(args, state)
     }
 }
 
 #[derive(Arbitrary)]
-pub struct RelativeStack(pub StackLikeParameters);
+pub struct RelativeStack(pub RegisterAndImmediate);
 
-impl StackLike for RelativeStack {
-    fn inner(&self) -> &StackLikeParameters {
+impl RegisterPlusImmediate for RelativeStack {
+    fn inner(&self) -> &RegisterAndImmediate {
         &self.0
     }
 }
 
-impl Source for RelativeStack {
-    fn get(args: &Arguments, state: &mut State) -> U256 {
-        state.current_frame.stack[state
+impl StackAddressing for RelativeStack {
+    fn address_for_get(args: &Arguments, state: &mut State) -> u16 {
+        state
             .current_frame
             .sp
             .wrapping_sub(source_stack_address(args, state))
-            as usize]
     }
-}
 
-impl Destination for RelativeStack {
-    fn set(args: &Arguments, state: &mut State, value: U256) {
-        state.current_frame.stack[state
+    fn address_for_set(args: &Arguments, state: &mut State) -> u16 {
+        state
             .current_frame
             .sp
             .wrapping_add(destination_stack_address(args, state))
-            as usize] = value;
     }
 }
 
 #[derive(Arbitrary, Clone)]
-pub struct AdvanceStackPointer(pub StackLikeParameters);
+pub struct AdvanceStackPointer(pub RegisterAndImmediate);
 
-impl StackLike for AdvanceStackPointer {
-    fn inner(&self) -> &StackLikeParameters {
+impl RegisterPlusImmediate for AdvanceStackPointer {
+    fn inner(&self) -> &RegisterAndImmediate {
         &self.0
     }
 }
 
-impl Source for AdvanceStackPointer {
-    fn get(args: &Arguments, state: &mut State) -> U256 {
+impl StackAddressing for AdvanceStackPointer {
+    fn address_for_get(args: &Arguments, state: &mut State) -> u16 {
         state.current_frame.sp = state
             .current_frame
             .sp
             .wrapping_sub(source_stack_address(args, state));
-        state.current_frame.stack[state.current_frame.sp as usize]
+        state.current_frame.sp
     }
-}
 
-impl Destination for AdvanceStackPointer {
-    fn set(args: &Arguments, state: &mut State, value: U256) {
-        state.current_frame.stack[state.current_frame.sp as usize] = value;
+    fn address_for_set(args: &Arguments, state: &mut State) -> u16 {
+        let address_to_set = state.current_frame.sp;
         state.current_frame.sp = state
             .current_frame
             .sp
             .wrapping_add(destination_stack_address(args, state));
+        address_to_set
     }
 }
 
 #[derive(Arbitrary)]
-pub struct CodePage(pub StackLikeParameters);
+pub struct CodePage(pub RegisterAndImmediate);
 
-impl StackLike for CodePage {
-    fn inner(&self) -> &StackLikeParameters {
+impl RegisterPlusImmediate for CodePage {
+    fn inner(&self) -> &RegisterAndImmediate {
         &self.0
     }
 }
@@ -259,6 +311,10 @@ impl Source for CodePage {
             .cloned()
             .unwrap_or(U256::zero())
     }
+
+    fn is_fat_pointer(_: &Arguments, _: &mut State) -> bool {
+        false
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -270,13 +326,25 @@ impl Register {
         Self(n)
     }
 
-    fn get(&self, state: &mut State) -> U256 {
+    fn value(&self, state: &mut State) -> U256 {
         unsafe { *state.registers.get_unchecked(self.0 as usize) }
+    }
+
+    fn pointer_flag(&self, state: &mut State) -> bool {
+        state.register_pointer_flags & (1 << self.0) != 0
     }
 
     fn set(&self, state: &mut State, value: U256) {
         if self.0 != 0 {
             unsafe { *state.registers.get_unchecked_mut(self.0 as usize) = value };
+            state.register_pointer_flags &= !(1 << self.0);
+        }
+    }
+
+    fn set_ptr(&self, state: &mut State, value: U256) {
+        if self.0 != 0 {
+            unsafe { *state.registers.get_unchecked_mut(self.0 as usize) = value };
+            state.register_pointer_flags |= 1 << self.0;
         }
     }
 }
@@ -316,6 +384,13 @@ pub enum AnySource {
     RelativeStack,
     AdvanceStackPointer,
     CodePage,
+}
+
+#[enum_dispatch(SourceWriter)]
+#[derive(Arbitrary)]
+pub enum RegisterOrImmediate {
+    Register1,
+    Immediate1,
 }
 
 #[enum_dispatch(DestinationWriter)]

@@ -1,7 +1,7 @@
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, CodePage, Immediate1,
-        Register, Register1, Register2, RelativeStack, StackLikeParameters,
+        Register, Register1, Register2, RegisterAndImmediate, RelativeStack,
     },
     end_execution,
     instruction_handlers::{
@@ -45,7 +45,7 @@ fn decode(raw: u64) -> Instruction {
         zkevm_opcode_defs::Condition::GtOrLt => crate::Predicate::IfGtOrLT,
     };
 
-    let stack_in = StackLikeParameters {
+    let stack_in = RegisterAndImmediate {
         immediate: parsed.imm_0,
         register: Register::new(parsed.src0_reg_idx),
     };
@@ -62,7 +62,7 @@ fn decode(raw: u64) -> Instruction {
         Full(ImmMemHandlerFlags::UseCodePage) => CodePage(stack_in).into(),
     };
 
-    let stack_out = StackLikeParameters {
+    let stack_out = RegisterAndImmediate {
         immediate: parsed.imm_1,
         register: Register::new(parsed.dst0_reg_idx),
     };
@@ -170,7 +170,7 @@ fn decode(raw: u64) -> Instruction {
         },
         zkevm_opcode_defs::Opcode::Invalid(_) => todo!(),
         zkevm_opcode_defs::Opcode::Nop(_) => {
-            let no_sp_movement = AdvanceStackPointer(StackLikeParameters {
+            let no_sp_movement = AdvanceStackPointer(RegisterAndImmediate {
                 immediate: 0,
                 register: Register::new(0),
             });

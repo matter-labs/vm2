@@ -1,4 +1,5 @@
 pub mod addressing_modes;
+mod bitset;
 pub mod decode;
 pub mod instruction_handlers;
 mod predication;

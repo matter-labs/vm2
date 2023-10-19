@@ -30,14 +30,21 @@ fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     instruction: *const Instruction,
 ) {
     instruction_boilerplate(state, instruction, |state, args| {
-        let a = In1::get(args, state);
-        let b = Register2::get(args, state);
+        let a = (In1::get(args, state), In1::is_fat_pointer(args, state));
+        let b = (
+            Register2::get(args, state),
+            Register2::is_fat_pointer(args, state),
+        );
         let (a, b) = if SWAP { (b, a) } else { (a, b) };
+        let (a, a_is_pointer) = a;
+        let (b, b_is_pointer) = b;
 
-        // TODO Ensure a is a pointer and b is not
-
-        let result = Op::perform(a, b);
-        Out::set(args, state, result);
+        if a_is_pointer && !b_is_pointer {
+            let result = Op::perform(a, b);
+            Out::set_fat_ptr(args, state, result);
+        } else {
+            // TODO panic
+        }
     });
 }
 
