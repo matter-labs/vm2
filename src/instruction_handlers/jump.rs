@@ -10,8 +10,8 @@ use crate::{
 fn jump<In: Source>(state: &mut State, mut instruction: *const Instruction) {
     unsafe {
         let target = In::get(&(*instruction).arguments, state).low_u32() as u16 as usize;
-        if target < state.program_len {
-            instruction = state.program_start.add(target);
+        if target < state.current_frame.program_len {
+            instruction = state.current_frame.program_start.add(target);
         } else {
             // TODO panic
             return;

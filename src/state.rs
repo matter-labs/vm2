@@ -2,13 +2,42 @@ use crate::{addressing_modes::Arguments, predication::Flags};
 use u256::U256;
 
 pub struct State {
-    pub program_start: *const Instruction,
-    pub program_len: usize,
     pub registers: [U256; 16],
     pub flags: Flags,
+
+    pub current_frame: Callframe,
+    previous_frames: Vec<(*const Instruction, Callframe)>,
+}
+
+pub struct Callframe {
+    pub program_start: *const Instruction,
+    pub program_len: usize,
+    pub code_page: Vec<U256>,
+
     pub stack: Box<[U256; 1 << 16]>,
     pub sp: u16,
-    pub code_page: Vec<U256>,
+
+    pub heap: Vec<U256>,
+    pub aux_heap: Vec<U256>,
+}
+
+impl Callframe {
+    fn new(program: &[Instruction], code_page: Vec<U256>) -> Self {
+        const INITIAL_SP: u16 = 1000;
+
+        Self {
+            program_start: &program[0],
+            program_len: program.len(),
+            stack: vec![U256::zero(); 1 << 16]
+                .into_boxed_slice()
+                .try_into()
+                .unwrap(),
+            sp: INITIAL_SP,
+            code_page,
+            heap: vec![],
+            aux_heap: vec![],
+        }
+    }
 }
 
 pub struct Instruction {
@@ -18,34 +47,27 @@ pub struct Instruction {
 
 pub(crate) type Handler = fn(&mut State, *const Instruction);
 
-impl Default for State {
-    fn default() -> Self {
+impl State {
+    pub fn new(program: &[Instruction], code_page: Vec<U256>) -> Self {
         Self {
-            program_start: std::ptr::null(),
-            program_len: 0,
             registers: Default::default(),
             flags: Flags::new(false, false, false),
-            stack: vec![U256::zero(); 1 << 16]
-                .into_boxed_slice()
-                .try_into()
-                .unwrap(),
-            sp: 1000,
-            code_page: vec![],
+            current_frame: Callframe::new(program, code_page),
+            previous_frames: vec![],
         }
     }
 }
 
 impl State {
-    pub fn run<'a>(&'a mut self, program: &'a [Instruction]) {
-        self.program_start = &program[0];
-        self.program_len = program.len();
-
-        // Predication is checked for the *next* instruction, not the current one.
-        // Thus, it has to be checked before executing the first instruction.
-        for instruction in program.iter() {
-            if instruction.arguments.predicate.satisfied(&self.flags) {
-                return (instruction.handler)(self, instruction);
+    pub fn run(&mut self) {
+        let mut instruction = self.current_frame.program_start;
+        // Instructions check predication for the *next* instruction, not the current one.
+        // Thus, we can't just blindly run the first instruction.
+        unsafe {
+            while !(*instruction).arguments.predicate.satisfied(&self.flags) {
+                instruction = instruction.add(1);
             }
+            ((*instruction).handler)(self, instruction)
         }
     }
 }
@@ -65,6 +87,6 @@ pub fn jump_to_beginning() -> Instruction {
     }
 }
 fn jump_to_beginning_handler(state: &mut State, _: *const Instruction) {
-    let first_handler = unsafe { (*state.program_start).handler };
-    first_handler(state, state.program_start);
+    let first_handler = unsafe { (*state.current_frame.program_start).handler };
+    first_handler(state, state.current_frame.program_start);
 }

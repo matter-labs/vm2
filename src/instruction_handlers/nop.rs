@@ -11,7 +11,8 @@ fn nop(state: &mut State, instruction: *const Instruction) {
     instruction_boilerplate(state, instruction, |state, args| {
         // nop's addressing modes can move the stack pointer!
         AdvanceStackPointer::get(args, state);
-        state.sp = state
+        state.current_frame.sp = state
+            .current_frame
             .sp
             .wrapping_add(destination_stack_address(args, state));
     });

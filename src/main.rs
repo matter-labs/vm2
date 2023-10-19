@@ -36,10 +36,10 @@ fn main() {
     ]);
     dbg!(program.len());
 
-    let mut state = State::default();
+    let mut state = State::new(black_box(&program), vec![]);
 
     let start = std::time::Instant::now();
-    state.run(black_box(&program));
+    state.run();
 
     dbg!(start.elapsed());
     dbg!(state.registers);

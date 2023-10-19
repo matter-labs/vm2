@@ -172,13 +172,13 @@ impl StackLike for AbsoluteStack {
 
 impl Source for AbsoluteStack {
     fn get(args: &Arguments, state: &mut State) -> U256 {
-        state.stack[source_stack_address(args, state) as usize]
+        state.current_frame.stack[source_stack_address(args, state) as usize]
     }
 }
 
 impl Destination for AbsoluteStack {
     fn set(args: &Arguments, state: &mut State, value: U256) {
-        state.stack[destination_stack_address(args, state) as usize] = value;
+        state.current_frame.stack[destination_stack_address(args, state) as usize] = value;
     }
 }
 
@@ -193,15 +193,21 @@ impl StackLike for RelativeStack {
 
 impl Source for RelativeStack {
     fn get(args: &Arguments, state: &mut State) -> U256 {
-        state.stack[state.sp.wrapping_sub(source_stack_address(args, state)) as usize]
+        state.current_frame.stack[state
+            .current_frame
+            .sp
+            .wrapping_sub(source_stack_address(args, state))
+            as usize]
     }
 }
 
 impl Destination for RelativeStack {
     fn set(args: &Arguments, state: &mut State, value: U256) {
-        state.stack[state
+        state.current_frame.stack[state
+            .current_frame
             .sp
-            .wrapping_add(destination_stack_address(args, state)) as usize] = value;
+            .wrapping_add(destination_stack_address(args, state))
+            as usize] = value;
     }
 }
 
@@ -216,15 +222,19 @@ impl StackLike for AdvanceStackPointer {
 
 impl Source for AdvanceStackPointer {
     fn get(args: &Arguments, state: &mut State) -> U256 {
-        state.sp = state.sp.wrapping_sub(source_stack_address(args, state));
-        state.stack[state.sp as usize]
+        state.current_frame.sp = state
+            .current_frame
+            .sp
+            .wrapping_sub(source_stack_address(args, state));
+        state.current_frame.stack[state.current_frame.sp as usize]
     }
 }
 
 impl Destination for AdvanceStackPointer {
     fn set(args: &Arguments, state: &mut State, value: U256) {
-        state.stack[state.sp as usize] = value;
-        state.sp = state
+        state.current_frame.stack[state.current_frame.sp as usize] = value;
+        state.current_frame.sp = state
+            .current_frame
             .sp
             .wrapping_add(destination_stack_address(args, state));
     }
@@ -243,6 +253,7 @@ impl Source for CodePage {
     fn get(args: &Arguments, state: &mut State) -> U256 {
         let address = source_stack_address(args, state);
         state
+            .current_frame
             .code_page
             .get(address as usize)
             .cloned()
