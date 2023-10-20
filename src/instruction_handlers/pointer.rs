@@ -5,7 +5,6 @@ use crate::{
         Destination, DestinationWriter, Immediate1, Register1, Register2, RelativeStack, Source,
         SourceWriter,
     },
-    state::Handler,
     Instruction, Predicate, State,
 };
 use u256::U256;
@@ -108,6 +107,8 @@ impl PtrOp for PtrShrink {
     }
 }
 
+use super::monomorphization::*;
+
 impl Instruction {
     #[inline(always)]
     pub fn from_ptr<Op: PtrOp>(
@@ -124,46 +125,8 @@ impl Instruction {
         arguments.predicate = predicate;
 
         Self {
-            handler: choose_ptr_handler::<Op>(src1, out, swap),
+            handler: monomorphize!(ptr [Op] match_source src1 match_destination out match_boolean swap),
             arguments,
         }
-    }
-}
-
-/// Maps run-time information to a monomorphized version of [ptr].
-#[inline(always)]
-fn choose_ptr_handler<Op: PtrOp>(
-    input_type: AnySource,
-    output_type: AnyDestination,
-    swap: bool,
-) -> Handler {
-    match input_type {
-        AnySource::Register1(_) => match_output_type::<Op, Register1>(output_type, swap),
-        AnySource::Immediate1(_) => match_output_type::<Op, Immediate1>(output_type, swap),
-        AnySource::AbsoluteStack(_) => match_output_type::<Op, AbsoluteStack>(output_type, swap),
-        AnySource::RelativeStack(_) => match_output_type::<Op, RelativeStack>(output_type, swap),
-        AnySource::AdvanceStackPointer(_) => {
-            match_output_type::<Op, AdvanceStackPointer>(output_type, swap)
-        }
-        AnySource::CodePage(_) => match_output_type::<Op, CodePage>(output_type, swap),
-    }
-}
-
-#[inline(always)]
-fn match_output_type<Op: PtrOp, In1: Source>(output_type: AnyDestination, swap: bool) -> Handler {
-    match output_type {
-        AnyDestination::Register1(_) => match_swap::<Op, In1, Register1>(swap),
-        AnyDestination::AbsoluteStack(_) => match_swap::<Op, In1, AbsoluteStack>(swap),
-        AnyDestination::RelativeStack(_) => match_swap::<Op, In1, RelativeStack>(swap),
-        AnyDestination::AdvanceStackPointer(_) => match_swap::<Op, In1, AdvanceStackPointer>(swap),
-    }
-}
-
-#[inline(always)]
-fn match_swap<Op: PtrOp, In1: Source, Out: Destination>(swap: bool) -> Handler {
-    if swap {
-        ptr::<Op, In1, Out, true>
-    } else {
-        ptr::<Op, In1, Out, false>
     }
 }

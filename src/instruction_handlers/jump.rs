@@ -25,6 +25,8 @@ fn jump<In: Source>(state: &mut State, mut instruction: *const Instruction) {
     }
 }
 
+use super::monomorphization::*;
+
 impl Instruction {
     pub fn from_jump(source: AnySource, predicate: Predicate) -> Self {
         let mut arguments = Arguments::default();
@@ -32,14 +34,7 @@ impl Instruction {
         arguments.predicate = predicate;
 
         Self {
-            handler: match source {
-                AnySource::Register1(_) => jump::<Register1>,
-                AnySource::Immediate1(_) => jump::<Immediate1>,
-                AnySource::AbsoluteStack(_) => jump::<AbsoluteStack>,
-                AnySource::RelativeStack(_) => jump::<RelativeStack>,
-                AnySource::AdvanceStackPointer(_) => jump::<AdvanceStackPointer>,
-                AnySource::CodePage(_) => jump::<CodePage>,
-            },
+            handler: monomorphize!(jump match_source source),
             arguments,
         }
     }

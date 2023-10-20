@@ -6,7 +6,7 @@ use crate::{
         SourceWriter,
     },
     predication::{Flags, Predicate},
-    state::{Handler, Instruction, State},
+    state::{Instruction, State},
 };
 use u256::U256;
 
@@ -198,6 +198,8 @@ impl Binop for Div {
     type Out2 = U256;
 }
 
+use super::monomorphization::*;
+
 impl Instruction {
     #[inline(always)]
     pub fn from_binop<Op: Binop>(
@@ -217,70 +219,8 @@ impl Instruction {
         arguments.predicate = predicate;
 
         Self {
-            handler: choose_binop_handler::<Op>(src1, out, swap, set_flags),
+            handler: monomorphize!(binop [Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
             arguments,
         }
-    }
-}
-
-/// Maps run-time information to a monomorphized version of [binop].
-#[inline(always)]
-fn choose_binop_handler<Op: Binop>(
-    input_type: AnySource,
-    output_type: AnyDestination,
-    swap: bool,
-    set_flags: bool,
-) -> Handler {
-    match input_type {
-        AnySource::Register1(_) => match_output_type::<Op, Register1>(output_type, swap, set_flags),
-        AnySource::Immediate1(_) => {
-            match_output_type::<Op, Immediate1>(output_type, swap, set_flags)
-        }
-        AnySource::AbsoluteStack(_) => {
-            match_output_type::<Op, AbsoluteStack>(output_type, swap, set_flags)
-        }
-        AnySource::RelativeStack(_) => {
-            match_output_type::<Op, RelativeStack>(output_type, swap, set_flags)
-        }
-        AnySource::AdvanceStackPointer(_) => {
-            match_output_type::<Op, AdvanceStackPointer>(output_type, swap, set_flags)
-        }
-        AnySource::CodePage(_) => match_output_type::<Op, CodePage>(output_type, swap, set_flags),
-    }
-}
-
-#[inline(always)]
-fn match_output_type<Op: Binop, In1: Source>(
-    output_type: AnyDestination,
-    swap: bool,
-    set_flags: bool,
-) -> Handler {
-    match output_type {
-        AnyDestination::Register1(_) => match_swap::<Op, In1, Register1>(swap, set_flags),
-        AnyDestination::AbsoluteStack(_) => match_swap::<Op, In1, AbsoluteStack>(swap, set_flags),
-        AnyDestination::RelativeStack(_) => match_swap::<Op, In1, RelativeStack>(swap, set_flags),
-        AnyDestination::AdvanceStackPointer(_) => {
-            match_swap::<Op, In1, AdvanceStackPointer>(swap, set_flags)
-        }
-    }
-}
-
-#[inline(always)]
-fn match_swap<Op: Binop, In1: Source, Out: Destination>(swap: bool, set_flags: bool) -> Handler {
-    if swap {
-        match_set_flags::<Op, In1, Out, true>(set_flags)
-    } else {
-        match_set_flags::<Op, In1, Out, false>(set_flags)
-    }
-}
-
-#[inline(always)]
-fn match_set_flags<Op: Binop, In1: Source, Out: Destination, const SWAP: bool>(
-    set_flags: bool,
-) -> Handler {
-    if set_flags {
-        binop::<Op, In1, Out, SWAP, true>
-    } else {
-        binop::<Op, In1, Out, SWAP, false>
     }
 }

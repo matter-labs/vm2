@@ -22,17 +22,14 @@ fn count<Out: Destination>(state: &mut State, instruction: *const Instruction) {
     });
 }
 
+use super::monomorphization::*;
+
 impl Instruction {
     pub fn from_counter(out: AnyDestination) -> Self {
         let mut arguments = Arguments::default();
         out.write_destination(&mut arguments);
         Self {
-            handler: match out {
-                AnyDestination::Register1(_) => count::<Register1>,
-                AnyDestination::AbsoluteStack(_) => count::<AbsoluteStack>,
-                AnyDestination::RelativeStack(_) => count::<RelativeStack>,
-                AnyDestination::AdvanceStackPointer(_) => count::<AdvanceStackPointer>,
-            },
+            handler: monomorphize!(count match_destination out),
             arguments,
         }
     }

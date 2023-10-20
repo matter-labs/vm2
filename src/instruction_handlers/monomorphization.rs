@@ -10,11 +10,35 @@ macro_rules! monomorphize {
     };
 }
 
+macro_rules! match_source {
+    ([ $($types: tt)* ] $input_type: ident $next_matcher: ident $($rest: ident)*) => {
+        match $input_type {
+            AnySource::Register1(_) => $next_matcher!([$($types)* Register1] $($rest)*),
+            AnySource::Immediate1(_) => $next_matcher!([$($types)* Immediate1] $($rest)*),
+            AnySource::AbsoluteStack(_) => $next_matcher!([$($types)* AbsoluteStack] $($rest)*),
+            AnySource::RelativeStack(_) => $next_matcher!([$($types)* RelativeStack] $($rest)*),
+            AnySource::AdvanceStackPointer(_) => $next_matcher!([$($types)* AdvanceStackPointer] $($rest)*),
+            AnySource::CodePage(_) => $next_matcher!([$($types)* CodePage] $($rest)*),
+        }
+    };
+}
+
 macro_rules! match_reg_imm {
     ([ $($types: tt)* ] $input_type: ident $next_matcher: ident $($rest: ident)*) => {
         match $input_type {
             RegisterOrImmediate::Register1(_) => $next_matcher!([$($types)* Register1] $($rest)*),
             RegisterOrImmediate::Immediate1(_) => $next_matcher!([$($types)* Immediate1] $($rest)*),
+        }
+    };
+}
+
+macro_rules! match_destination {
+    ([ $($types: tt)* ] $input_type: ident $next_matcher: ident $($rest: ident)*) => {
+        match $input_type {
+            AnyDestination::Register1(_) => $next_matcher!([$($types)* Register1] $($rest)*),
+            AnyDestination::AbsoluteStack(_) => $next_matcher!([$($types)* AbsoluteStack] $($rest)*),
+            AnyDestination::RelativeStack(_) => $next_matcher!([$($types)* RelativeStack] $($rest)*),
+            AnyDestination::AdvanceStackPointer(_) => $next_matcher!([$($types)* AdvanceStackPointer] $($rest)*),
         }
     };
 }
@@ -35,4 +59,6 @@ macro_rules! parameterize {
     };
 }
 
-pub(crate) use {match_boolean, match_reg_imm, monomorphize, parameterize};
+pub(crate) use {
+    match_boolean, match_destination, match_reg_imm, match_source, monomorphize, parameterize,
+};
