@@ -9,6 +9,8 @@ pub struct State {
 
     pub current_frame: Callframe,
     previous_frames: Vec<(*const Instruction, Callframe)>,
+
+    pub(crate) heaps: Vec<Vec<u8>>,
 }
 
 pub struct Callframe {
@@ -21,12 +23,12 @@ pub struct Callframe {
     pub stack_pointer_flags: Box<Bitset>,
     pub sp: u16,
 
-    pub heap: Vec<U256>,
-    pub aux_heap: Vec<U256>,
+    pub heap: u32,
+    pub aux_heap: u32,
 }
 
 impl Callframe {
-    fn new(program: &[Instruction], code_page: Vec<U256>) -> Self {
+    fn new(program: &[Instruction], code_page: Vec<U256>, heap: u32, aux_heap: u32) -> Self {
         const INITIAL_SP: u16 = 1000;
 
         Self {
@@ -39,8 +41,8 @@ impl Callframe {
             stack_pointer_flags: Box::new(Bitset::default()),
             sp: INITIAL_SP,
             code_page,
-            heap: vec![],
-            aux_heap: vec![],
+            heap,
+            aux_heap,
         }
     }
 }
@@ -58,8 +60,9 @@ impl State {
             registers: Default::default(),
             register_pointer_flags: 0,
             flags: Flags::new(false, false, false),
-            current_frame: Callframe::new(program, code_page),
+            current_frame: Callframe::new(program, code_page, 0, 1),
             previous_frames: vec![],
+            heaps: vec![vec![], vec![]],
         }
     }
 }

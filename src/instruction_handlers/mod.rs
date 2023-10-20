@@ -6,6 +6,7 @@ pub use pointer::{PtrAdd, PtrPack, PtrShrink, PtrSub};
 mod binop;
 mod common;
 mod counter;
+mod heap_access;
 mod jump;
 mod nop;
 mod pointer;
