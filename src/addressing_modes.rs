@@ -393,6 +393,20 @@ pub enum RegisterOrImmediate {
     Immediate1,
 }
 
+#[derive(Debug)]
+pub struct NotRegisterOrImmediate;
+impl TryFrom<AnySource> for RegisterOrImmediate {
+    type Error = NotRegisterOrImmediate;
+
+    fn try_from(value: AnySource) -> Result<Self, Self::Error> {
+        match value {
+            AnySource::Register1(r) => Ok(RegisterOrImmediate::Register1(r)),
+            AnySource::Immediate1(r) => Ok(RegisterOrImmediate::Immediate1(r)),
+            _ => Err(NotRegisterOrImmediate),
+        }
+    }
+}
+
 #[enum_dispatch(DestinationWriter)]
 #[derive(Arbitrary)]
 pub enum AnyDestination {

@@ -1,29 +1,32 @@
 use super::{common::instruction_boilerplate, pointer::FatPointer};
 use crate::{
-    addressing_modes::{Destination, Register1, Register2, Source},
-    Instruction, State,
+    addressing_modes::{
+        Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
+        RegisterOrImmediate, Source, SourceWriter,
+    },
+    Instruction, Predicate, State,
 };
 use u256::U256;
 
-trait HeapFromState {
+pub trait HeapFromState {
     fn get_heap(state: &mut State) -> &mut Vec<u8>;
 }
 
-struct Heap;
+pub struct Heap;
 impl HeapFromState for Heap {
     fn get_heap(state: &mut State) -> &mut Vec<u8> {
         &mut state.heaps[state.current_frame.heap as usize]
     }
 }
 
-struct AuxHeap;
+pub struct AuxHeap;
 impl HeapFromState for AuxHeap {
     fn get_heap(state: &mut State) -> &mut Vec<u8> {
         &mut state.heaps[state.current_frame.aux_heap as usize]
     }
 }
 
-fn load<In: Source, H: HeapFromState, const INCREMENT: bool>(
+fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
     state: &mut State,
     instruction: *const Instruction,
 ) {
@@ -47,20 +50,13 @@ fn load<In: Source, H: HeapFromState, const INCREMENT: bool>(
     })
 }
 
-fn store<In1: Source, H: HeapFromState, const SWAP: bool, const INCREMENT: bool>(
+fn store<H: HeapFromState, In1: Source, const INCREMENT: bool>(
     state: &mut State,
     instruction: *const Instruction,
 ) {
     instruction_boilerplate(state, instruction, |state, args| {
-        let (pointer, value) = {
-            let a = In1::get(args, state);
-            let b = Register2::get(args, state);
-            if SWAP {
-                (b, a)
-            } else {
-                (a, b)
-            }
-        };
+        let pointer = In1::get(args, state);
+        let value = Register2::get(args, state);
 
         let address = pointer.low_u32();
         let Some(new_bound) = address.checked_add(32) else {
@@ -88,15 +84,12 @@ fn grow_heap(heap: &mut Vec<u8>, new_bound: u32) {
     }
 }
 
-fn load_pointer<In: Source, H: HeapFromState, const INCREMENT: bool>(
-    state: &mut State,
-    instruction: *const Instruction,
-) {
+fn load_pointer<const INCREMENT: bool>(state: &mut State, instruction: *const Instruction) {
     instruction_boilerplate(state, instruction, |state, args| {
-        if !In::is_fat_pointer(args, state) {
+        if !Register1::is_fat_pointer(args, state) {
             return; // TODO panic
         }
-        let input = In::get(args, state);
+        let input = Register1::get(args, state);
         let pointer = FatPointer::from(input);
 
         let value = if pointer.offset < pointer.length {
@@ -120,4 +113,77 @@ fn load_pointer<In: Source, H: HeapFromState, const INCREMENT: bool>(
             Register2::set_fat_ptr(args, state, input + 32)
         }
     })
+}
+
+use super::monomorphization::*;
+
+impl Instruction {
+    #[inline(always)]
+    pub fn from_load<H: HeapFromState>(
+        src: RegisterOrImmediate,
+        out: Register1,
+        incremented_out: Option<Register2>,
+        predicate: Predicate,
+    ) -> Self {
+        let mut arguments = Arguments::default();
+        src.write_source(&mut arguments);
+        out.write_destination(&mut arguments);
+
+        let increment = incremented_out.is_some();
+        if let Some(out2) = incremented_out {
+            out2.write_destination(&mut arguments);
+        }
+        arguments.predicate = predicate;
+
+        Self {
+            handler: monomorphize!(load [H] match_reg_imm src match_boolean increment),
+            arguments,
+        }
+    }
+
+    #[inline(always)]
+    pub fn from_store<H: HeapFromState>(
+        src1: RegisterOrImmediate,
+        src2: Register2,
+        incremented_out: Option<Register1>,
+        predicate: Predicate,
+    ) -> Self {
+        let mut arguments = Arguments::default();
+        src1.write_source(&mut arguments);
+        src2.write_source(&mut arguments);
+
+        let increment = incremented_out.is_some();
+        if let Some(out) = incremented_out {
+            out.write_destination(&mut arguments);
+        }
+        arguments.predicate = predicate;
+
+        Self {
+            handler: monomorphize!(store [H] match_reg_imm src1 match_boolean increment),
+            arguments,
+        }
+    }
+
+    #[inline(always)]
+    pub fn from_load_pointer(
+        src: Register1,
+        out: Register1,
+        incremented_out: Option<Register2>,
+        predicate: Predicate,
+    ) -> Self {
+        let mut arguments = Arguments::default();
+        src.write_source(&mut arguments);
+        out.write_destination(&mut arguments);
+
+        let increment = incremented_out.is_some();
+        if let Some(out2) = incremented_out {
+            out2.write_destination(&mut arguments);
+        }
+        arguments.predicate = predicate;
+
+        Self {
+            handler: monomorphize!(load_pointer match_boolean increment),
+            arguments,
+        }
+    }
 }

@@ -5,8 +5,8 @@ use crate::{
     },
     end_execution,
     instruction_handlers::{
-        Add, And, Div, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub, RotateLeft, RotateRight,
-        ShiftLeft, ShiftRight, Sub, Xor,
+        Add, And, AuxHeap, Div, Heap, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub, RotateLeft,
+        RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
     },
     jump_to_beginning, Instruction,
 };
@@ -15,7 +15,7 @@ use zkevm_opcode_defs::{
     ImmMemHandlerFlags,
     Operand::*,
     RegOrImmFlags, SET_FLAGS_FLAG_IDX, SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES,
-    SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE,
+    SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
 };
 
 pub fn decode_program(raw: &[u64]) -> Vec<Instruction> {
@@ -161,13 +161,41 @@ fn decode(raw: u64) -> Instruction {
             zkevm_opcode_defs::LogOpcode::Event => todo!(),
             zkevm_opcode_defs::LogOpcode::PrecompileCall => todo!(),
         },
-        zkevm_opcode_defs::Opcode::UMA(x) => match x {
-            zkevm_opcode_defs::UMAOpcode::HeapRead => todo!(),
-            zkevm_opcode_defs::UMAOpcode::HeapWrite => todo!(),
-            zkevm_opcode_defs::UMAOpcode::AuxHeapRead => todo!(),
-            zkevm_opcode_defs::UMAOpcode::AuxHeapWrite => todo!(),
-            zkevm_opcode_defs::UMAOpcode::FatPointerRead => todo!(),
-        },
+        zkevm_opcode_defs::Opcode::UMA(x) => {
+            let increment = parsed.variant.flags[UMA_INCREMENT_FLAG_IDX];
+            match x {
+                zkevm_opcode_defs::UMAOpcode::HeapRead => Instruction::from_load::<Heap>(
+                    src1.try_into().unwrap(),
+                    out.try_into().unwrap(),
+                    increment.then(|| out2),
+                    predicate,
+                ),
+                zkevm_opcode_defs::UMAOpcode::HeapWrite => Instruction::from_store::<Heap>(
+                    src1.try_into().unwrap(),
+                    src2,
+                    increment.then(|| out.try_into().unwrap()),
+                    predicate,
+                ),
+                zkevm_opcode_defs::UMAOpcode::AuxHeapRead => Instruction::from_load::<AuxHeap>(
+                    src1.try_into().unwrap(),
+                    out.try_into().unwrap(),
+                    increment.then(|| out2),
+                    predicate,
+                ),
+                zkevm_opcode_defs::UMAOpcode::AuxHeapWrite => Instruction::from_store::<AuxHeap>(
+                    src1.try_into().unwrap(),
+                    src2,
+                    increment.then(|| out.try_into().unwrap()),
+                    predicate,
+                ),
+                zkevm_opcode_defs::UMAOpcode::FatPointerRead => Instruction::from_load_pointer(
+                    src1.try_into().unwrap(),
+                    out.try_into().unwrap(),
+                    increment.then(|| out2),
+                    predicate,
+                ),
+            }
+        }
         zkevm_opcode_defs::Opcode::Invalid(_) => todo!(),
         zkevm_opcode_defs::Opcode::Nop(_) => {
             let no_sp_movement = AdvanceStackPointer(RegisterAndImmediate {

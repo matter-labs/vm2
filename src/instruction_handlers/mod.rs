@@ -1,6 +1,7 @@
 use crate::{state::Instruction, Predicate};
 use arbitrary::Arbitrary;
 pub use binop::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor};
+pub use heap_access::{AuxHeap, Heap};
 pub use pointer::{PtrAdd, PtrPack, PtrShrink, PtrSub};
 
 mod binop;
@@ -8,6 +9,7 @@ mod common;
 mod counter;
 mod heap_access;
 mod jump;
+mod monomorphization;
 mod nop;
 mod pointer;
 

@@ -130,7 +130,7 @@ impl Instruction {
     }
 }
 
-/// Maps run-time information to a monomorphized version of [binop].
+/// Maps run-time information to a monomorphized version of [ptr].
 #[inline(always)]
 fn choose_ptr_handler<Op: PtrOp>(
     input_type: AnySource,
