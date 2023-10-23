@@ -26,7 +26,7 @@ impl<'a> Arbitrary<'a> for Instruction {
         let src2 = u.arbitrary()?;
         let out = u.arbitrary()?;
 
-        Ok(match u.choose_index(16)? {
+        Ok(match u.choose_index(19)? {
             0 => Self::from_binop::<Add>(src1, src2, out, (), predicate, swap, set_flags),
             1 => Self::from_binop::<Sub>(src1, src2, out, (), predicate, swap, set_flags),
             2 => Self::from_binop::<And>(src1, src2, out, (), predicate, swap, set_flags),
@@ -47,6 +47,15 @@ impl<'a> Arbitrary<'a> for Instruction {
             13 => Self::from_ptr::<PtrSub>(src1, src2, out, predicate, swap),
             14 => Self::from_ptr::<PtrShrink>(src1, src2, out, predicate, swap),
             15 => Self::from_ptr::<PtrPack>(src1, src2, out, predicate, swap),
+            16 => {
+                Self::from_load_pointer(u.arbitrary()?, u.arbitrary()?, u.arbitrary()?, predicate)
+            }
+            17 => {
+                Self::from_load::<Heap>(u.arbitrary()?, u.arbitrary()?, u.arbitrary()?, predicate)
+            }
+            18 => {
+                Self::from_store::<Heap>(u.arbitrary()?, u.arbitrary()?, u.arbitrary()?, predicate)
+            }
             _ => unreachable!(),
         })
     }
