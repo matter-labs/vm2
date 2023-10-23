@@ -1,4 +1,4 @@
-use super::common::instruction_boilerplate;
+use super::{common::run_next_instruction, ret};
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
@@ -38,25 +38,27 @@ fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     state: &mut State,
     instruction: *const Instruction,
 ) {
-    instruction_boilerplate(state, instruction, |state, args| {
-        let a = (In1::get(args, state), In1::is_fat_pointer(args, state));
-        let b = (
-            Register2::get(args, state),
-            Register2::is_fat_pointer(args, state),
-        );
-        let (a, b) = if SWAP { (b, a) } else { (a, b) };
-        let (a, a_is_pointer) = a;
-        let (b, b_is_pointer) = b;
+    let args = unsafe { &(*instruction).arguments };
 
-        if !a_is_pointer || b_is_pointer {
-            return; // TODO panic
-        }
+    let a = (In1::get(args, state), In1::is_fat_pointer(args, state));
+    let b = (
+        Register2::get(args, state),
+        Register2::is_fat_pointer(args, state),
+    );
+    let (a, b) = if SWAP { (b, a) } else { (a, b) };
+    let (a, a_is_pointer) = a;
+    let (b, b_is_pointer) = b;
 
-        let Some(result) = Op::perform(a, b) else {
-            return; // TODO panic
-        };
-        Out::set_fat_ptr(args, state, result);
-    });
+    if !a_is_pointer || b_is_pointer {
+        return ret::panic();
+    }
+
+    let Some(result) = Op::perform(a, b) else {
+        return ret::panic();
+    };
+    Out::set_fat_ptr(args, state, result);
+
+    run_next_instruction(state, instruction)
 }
 
 pub trait PtrOp {

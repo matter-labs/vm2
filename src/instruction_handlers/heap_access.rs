@@ -1,4 +1,4 @@
-use super::{common::instruction_boilerplate, pointer::FatPointer};
+use super::{common::run_next_instruction, pointer::FatPointer, ret};
 use crate::{
     addressing_modes::{
         Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
@@ -30,49 +30,54 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
     state: &mut State,
     instruction: *const Instruction,
 ) {
-    instruction_boilerplate(state, instruction, |state, args| {
-        let pointer = In::get(args, state);
-        let address = pointer.low_u32();
-        let Some(new_bound) = address.checked_add(32) else {
-            return; // TODO panic
-        };
-        let heap = H::get_heap(state);
+    let args = unsafe { &(*instruction).arguments };
 
-        grow_heap(heap, new_bound);
+    let pointer = In::get(args, state);
+    let address = pointer.low_u32();
+    let Some(new_bound) = address.checked_add(32) else {
+        return ret::panic();
+    };
 
-        let value = U256::from_big_endian(&heap[address as usize..new_bound as usize]);
-        Register1::set(args, state, value);
+    let heap = H::get_heap(state);
 
-        if INCREMENT {
-            // TODO zk_evm preserves pointerness here. Should we?
-            Register2::set(args, state, pointer + 32)
-        }
-    })
+    grow_heap(heap, new_bound);
+
+    let value = U256::from_big_endian(&heap[address as usize..new_bound as usize]);
+    Register1::set(args, state, value);
+
+    if INCREMENT {
+        // TODO zk_evm preserves pointerness here. Should we?
+        Register2::set(args, state, pointer + 32)
+    }
+
+    run_next_instruction(state, instruction)
 }
 
 fn store<H: HeapFromState, In1: Source, const INCREMENT: bool>(
     state: &mut State,
     instruction: *const Instruction,
 ) {
-    instruction_boilerplate(state, instruction, |state, args| {
-        let pointer = In1::get(args, state);
-        let value = Register2::get(args, state);
+    let args = unsafe { &(*instruction).arguments };
 
-        let address = pointer.low_u32();
-        let Some(new_bound) = address.checked_add(32) else {
-            return; // TODO panic
-        };
-        let heap = H::get_heap(state);
+    let pointer = In1::get(args, state);
+    let value = Register2::get(args, state);
 
-        grow_heap(heap, new_bound);
+    let address = pointer.low_u32();
+    let Some(new_bound) = address.checked_add(32) else {
+        return ret::panic();
+    };
+    let heap = H::get_heap(state);
 
-        value.to_big_endian(&mut heap[address as usize..new_bound as usize]);
+    grow_heap(heap, new_bound);
 
-        if INCREMENT {
-            // TODO zk_evm preserves pointerness here. Should we?
-            Register1::set(args, state, pointer + 32)
-        }
-    })
+    value.to_big_endian(&mut heap[address as usize..new_bound as usize]);
+
+    if INCREMENT {
+        // TODO zk_evm preserves pointerness here. Should we?
+        Register1::set(args, state, pointer + 32)
+    }
+
+    run_next_instruction(state, instruction)
 }
 
 fn grow_heap(heap: &mut Vec<u8>, new_bound: u32) {
@@ -85,34 +90,36 @@ fn grow_heap(heap: &mut Vec<u8>, new_bound: u32) {
 }
 
 fn load_pointer<const INCREMENT: bool>(state: &mut State, instruction: *const Instruction) {
-    instruction_boilerplate(state, instruction, |state, args| {
-        if !Register1::is_fat_pointer(args, state) {
-            return; // TODO panic
+    let args = unsafe { &(*instruction).arguments };
+
+    if !Register1::is_fat_pointer(args, state) {
+        return ret::panic();
+    }
+    let input = Register1::get(args, state);
+    let pointer = FatPointer::from(input);
+
+    let value = if pointer.offset < pointer.length {
+        let heap = &state.heaps[pointer.memory_page as usize];
+        let address = (pointer.start + pointer.offset) as usize;
+        let mut buffer = [0; 32];
+        for (i, byte) in heap[address..(address + 32).min(heap.len())]
+            .iter()
+            .enumerate()
+        {
+            buffer[i] = *byte;
         }
-        let input = Register1::get(args, state);
-        let pointer = FatPointer::from(input);
+        U256::from_big_endian(&buffer)
+    } else {
+        U256::zero()
+    };
 
-        let value = if pointer.offset < pointer.length {
-            let heap = &state.heaps[pointer.memory_page as usize];
-            let address = (pointer.start + pointer.offset) as usize;
-            let mut buffer = [0; 32];
-            for (i, byte) in heap[address..(address + 32).min(heap.len())]
-                .iter()
-                .enumerate()
-            {
-                buffer[i] = *byte;
-            }
-            U256::from_big_endian(&buffer)
-        } else {
-            U256::zero()
-        };
+    Register1::set(args, state, value);
 
-        Register1::set(args, state, value);
+    if INCREMENT {
+        Register2::set_fat_ptr(args, state, input + 32)
+    }
 
-        if INCREMENT {
-            Register2::set_fat_ptr(args, state, input + 32)
-        }
-    })
+    run_next_instruction(state, instruction)
 }
 
 use super::monomorphization::*;

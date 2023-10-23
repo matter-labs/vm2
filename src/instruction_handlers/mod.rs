@@ -12,6 +12,7 @@ mod jump;
 mod monomorphization;
 mod nop;
 mod pointer;
+mod ret;
 
 impl<'a> Arbitrary<'a> for Instruction {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
@@ -48,13 +49,13 @@ impl<'a> Arbitrary<'a> for Instruction {
             14 => Self::from_ptr::<PtrShrink>(src1, src2, out, predicate, swap),
             15 => Self::from_ptr::<PtrPack>(src1, src2, out, predicate, swap),
             16 => {
-                Self::from_load_pointer(u.arbitrary()?, u.arbitrary()?, u.arbitrary()?, predicate)
-            }
-            17 => {
                 Self::from_load::<Heap>(u.arbitrary()?, u.arbitrary()?, u.arbitrary()?, predicate)
             }
-            18 => {
+            17 => {
                 Self::from_store::<Heap>(u.arbitrary()?, u.arbitrary()?, u.arbitrary()?, predicate)
+            }
+            18 => {
+                Self::from_load_pointer(u.arbitrary()?, u.arbitrary()?, u.arbitrary()?, predicate)
             }
             _ => unreachable!(),
         })

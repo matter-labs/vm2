@@ -13,8 +13,7 @@ fn jump<In: Source>(state: &mut State, mut instruction: *const Instruction) {
         if target < state.current_frame.program_len {
             instruction = state.current_frame.program_start.add(target);
         } else {
-            // TODO panic
-            return;
+            return ret::panic();
         }
 
         while !(*instruction).arguments.predicate.satisfied(&state.flags) {
@@ -25,7 +24,7 @@ fn jump<In: Source>(state: &mut State, mut instruction: *const Instruction) {
     }
 }
 
-use super::monomorphization::*;
+use super::{monomorphization::*, ret};
 
 impl Instruction {
     pub fn from_jump(source: AnySource, predicate: Predicate) -> Self {
