@@ -11,7 +11,7 @@ fn main() {
     // Maximum contract length is 2^16
     let mut program: Vec<_> = (0..(1 << 16) - 3)
         .map(|_| {
-            let buf: [u8; 10] = rand::random();
+            let buf: [u8; 20] = rand::random();
             let mut unstructured = Unstructured::new(&buf);
             Arbitrary::arbitrary(&mut unstructured).unwrap()
         })
