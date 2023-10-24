@@ -6,4 +6,4 @@ mod predication;
 mod state;
 
 pub use predication::Predicate;
-pub use state::{end_execution, jump_to_beginning, Instruction, State};
+pub use state::{end_execution, jump_to_beginning, run_arbitrary_program, Instruction, State};

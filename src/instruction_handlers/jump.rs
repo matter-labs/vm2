@@ -16,8 +16,15 @@ fn jump<In: Source>(state: &mut State, mut instruction: *const Instruction) {
             return ret::panic();
         }
 
+        if state.use_gas(1) {
+            return ret::panic();
+        }
+
         while !(*instruction).arguments.predicate.satisfied(&state.flags) {
             instruction = instruction.add(1);
+            if state.use_gas(1) {
+                return ret::panic();
+            }
         }
 
         ((*instruction).handler)(state, instruction)

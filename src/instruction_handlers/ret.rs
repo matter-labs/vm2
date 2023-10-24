@@ -1,3 +1,3 @@
 pub fn panic() {
-    println!("program panicked");
+    //println!("program panicked");
 }

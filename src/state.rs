@@ -1,4 +1,7 @@
-use crate::{addressing_modes::Arguments, bitset::Bitset, predication::Flags};
+use crate::{
+    addressing_modes::Arguments, bitset::Bitset, instruction_handlers, predication::Flags,
+};
+use arbitrary::{Arbitrary, Unstructured};
 use u256::U256;
 
 pub struct State {
@@ -11,6 +14,8 @@ pub struct State {
     previous_frames: Vec<(*const Instruction, Callframe)>,
 
     pub(crate) heaps: Vec<Vec<u8>>,
+
+    gas: u32,
 }
 
 pub struct Callframe {
@@ -63,20 +68,37 @@ impl State {
             current_frame: Callframe::new(program, code_page, 0, 1),
             previous_frames: vec![],
             heaps: vec![vec![], vec![]],
+            gas: 4000,
         }
     }
-}
 
-impl State {
     pub fn run(&mut self) {
         let mut instruction = self.current_frame.program_start;
+
+        if self.use_gas(1) {
+            return instruction_handlers::panic();
+        }
+
         // Instructions check predication for the *next* instruction, not the current one.
         // Thus, we can't just blindly run the first instruction.
         unsafe {
             while !(*instruction).arguments.predicate.satisfied(&self.flags) {
                 instruction = instruction.add(1);
+                if self.use_gas(1) {
+                    return instruction_handlers::panic();
+                }
             }
             ((*instruction).handler)(self, instruction)
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn use_gas(&mut self, amount: u32) -> bool {
+        if self.gas >= amount {
+            self.gas -= amount;
+            false
+        } else {
+            true
         }
     }
 }
@@ -98,4 +120,20 @@ pub fn jump_to_beginning() -> Instruction {
 fn jump_to_beginning_handler(state: &mut State, _: *const Instruction) {
     let first_handler = unsafe { (*state.current_frame.program_start).handler };
     first_handler(state, state.current_frame.program_start);
+}
+
+pub fn run_arbitrary_program(input: &[u8]) {
+    let mut u = Unstructured::new(&input);
+    let mut program: Vec<Instruction> = Arbitrary::arbitrary(&mut u).unwrap();
+
+    if program.len() >= 1 << 16 {
+        program.truncate(1 << 16);
+        program.push(jump_to_beginning());
+    } else {
+        // TODO execute invalid instruction or something instead
+        program.push(end_execution());
+    }
+
+    let mut state = State::new(&program, vec![]);
+    state.run();
 }

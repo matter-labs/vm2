@@ -38,10 +38,11 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
         return ret::panic();
     };
 
+    if !grow_heap::<H>(state, new_bound) {
+        return ret::panic();
+    }
+
     let heap = H::get_heap(state);
-
-    grow_heap(heap, new_bound);
-
     let value = U256::from_big_endian(&heap[address as usize..new_bound as usize]);
     Register1::set(args, state, value);
 
@@ -66,10 +67,12 @@ fn store<H: HeapFromState, In1: Source, const INCREMENT: bool>(
     let Some(new_bound) = address.checked_add(32) else {
         return ret::panic();
     };
+
+    if !grow_heap::<H>(state, new_bound) {
+        return ret::panic();
+    }
+
     let heap = H::get_heap(state);
-
-    grow_heap(heap, new_bound);
-
     value.to_big_endian(&mut heap[address as usize..new_bound as usize]);
 
     if INCREMENT {
@@ -80,13 +83,17 @@ fn store<H: HeapFromState, In1: Source, const INCREMENT: bool>(
     run_next_instruction(state, instruction)
 }
 
-fn grow_heap(heap: &mut Vec<u8>, new_bound: u32) {
-    if new_bound as usize > heap.len() {
-        // This will not cause frequent reallocations; it allocates in a geometric series like push.
-        heap.resize(new_bound as usize, 0);
+fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> bool {
+    if let Some(growth) = new_bound.checked_sub(H::get_heap(state).len() as u32) {
+        // TODO use the proper formula instead
+        if state.use_gas(growth) {
+            return false;
+        }
 
-        // TODO pay for growth
+        // This will not cause frequent reallocations; it allocates in a geometric series like push.
+        H::get_heap(state).resize(new_bound as usize, 0);
     }
+    true
 }
 
 fn load_pointer<const INCREMENT: bool>(state: &mut State, instruction: *const Instruction) {
