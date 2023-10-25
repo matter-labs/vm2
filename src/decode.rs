@@ -167,31 +167,31 @@ fn decode<W: World>(raw: u64) -> Instruction<W> {
                 zkevm_opcode_defs::UMAOpcode::HeapRead => Instruction::from_load::<Heap>(
                     src1.try_into().unwrap(),
                     out.try_into().unwrap(),
-                    increment.then(|| out2),
+                    increment.then_some(out2),
                     predicate,
                 ),
                 zkevm_opcode_defs::UMAOpcode::HeapWrite => Instruction::from_store::<Heap>(
                     src1.try_into().unwrap(),
                     src2,
-                    increment.then(|| out.try_into().unwrap()),
+                    increment.then_some(out.try_into().unwrap()),
                     predicate,
                 ),
                 zkevm_opcode_defs::UMAOpcode::AuxHeapRead => Instruction::from_load::<AuxHeap>(
                     src1.try_into().unwrap(),
                     out.try_into().unwrap(),
-                    increment.then(|| out2),
+                    increment.then_some(out2),
                     predicate,
                 ),
                 zkevm_opcode_defs::UMAOpcode::AuxHeapWrite => Instruction::from_store::<AuxHeap>(
                     src1.try_into().unwrap(),
                     src2,
-                    increment.then(|| out.try_into().unwrap()),
+                    increment.then_some(out.try_into().unwrap()),
                     predicate,
                 ),
                 zkevm_opcode_defs::UMAOpcode::FatPointerRead => Instruction::from_load_pointer(
                     src1.try_into().unwrap(),
                     out.try_into().unwrap(),
-                    increment.then(|| out2),
+                    increment.then_some(out2),
                     predicate,
                 ),
             }

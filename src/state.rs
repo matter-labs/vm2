@@ -75,7 +75,7 @@ impl<W: World> Callframe<W> {
                 .into_boxed_slice()
                 .try_into()
                 .unwrap(),
-            stack_pointer_flags: Box::new(Bitset::default()),
+            stack_pointer_flags: Default::default(),
             sp: INITIAL_SP,
             code_page,
             heap,
@@ -175,7 +175,7 @@ fn jump_to_beginning_handler<W: World>(state: &mut State<W>, _: *const Instructi
 }
 
 pub fn run_arbitrary_program(input: &[u8]) {
-    let mut u = Unstructured::new(&input);
+    let mut u = Unstructured::new(input);
     let mut program: Vec<Instruction<FakeWorld>> = Arbitrary::arbitrary(&mut u).unwrap();
 
     if program.len() >= 1 << 16 {
