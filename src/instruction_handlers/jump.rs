@@ -5,13 +5,14 @@ use crate::{
     },
     predication::Predicate,
     state::{Instruction, State},
+    World,
 };
 
-fn jump<In: Source>(state: &mut State, mut instruction: *const Instruction) {
+fn jump<W: World, In: Source>(state: &mut State<W>, mut instruction: *const Instruction<W>) {
     unsafe {
         let target = In::get(&(*instruction).arguments, state).low_u32() as u16 as usize;
-        if target < state.current_frame.program_len {
-            instruction = state.current_frame.program_start.add(target);
+        if let Some(i) = state.current_frame.program.get(target) {
+            instruction = i;
         } else {
             return ret::panic();
         }
@@ -33,14 +34,14 @@ fn jump<In: Source>(state: &mut State, mut instruction: *const Instruction) {
 
 use super::{monomorphization::*, ret};
 
-impl Instruction {
+impl<W: World> Instruction<W> {
     pub fn from_jump(source: AnySource, predicate: Predicate) -> Self {
         let mut arguments = Arguments::default();
         source.write_source(&mut arguments);
         arguments.predicate = predicate;
 
         Self {
-            handler: monomorphize!(jump match_source source),
+            handler: monomorphize!(jump [W] match_source source),
             arguments,
         }
     }

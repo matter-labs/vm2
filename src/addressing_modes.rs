@@ -1,19 +1,31 @@
-use crate::{predication::Predicate, state::State};
+use crate::{bitset::Bitset, predication::Predicate};
 use arbitrary::{Arbitrary, Unstructured};
 use enum_dispatch::enum_dispatch;
 use u256::U256;
 
 pub(crate) trait Source {
-    fn get(args: &Arguments, state: &mut State) -> U256;
-    fn is_fat_pointer(args: &Arguments, state: &mut State) -> bool;
+    fn get(args: &Arguments, state: &mut impl Addressable) -> U256;
+    fn is_fat_pointer(args: &Arguments, state: &mut impl Addressable) -> bool;
 }
 
 pub(crate) trait Destination {
     /// Set this register/stack location to value and clear its pointer flag
-    fn set(args: &Arguments, state: &mut State, value: U256);
+    fn set(args: &Arguments, state: &mut impl Addressable, value: U256);
 
     /// Same as `set` but sets the pointer flag
-    fn set_fat_ptr(args: &Arguments, state: &mut State, value: U256);
+    fn set_fat_ptr(args: &Arguments, state: &mut impl Addressable, value: U256);
+}
+
+/// The part of VM state that addressing modes need to operate on
+pub trait Addressable {
+    fn registers(&mut self) -> &mut [U256; 16];
+    fn register_pointer_flags(&mut self) -> &mut u16;
+
+    fn stack(&mut self) -> &mut [U256; 1 << 16];
+    fn stack_pointer_flags(&mut self) -> &mut Bitset;
+    fn stack_pointer(&mut self) -> &mut u16;
+
+    fn code_page(&self) -> &[U256];
 }
 
 #[enum_dispatch]
@@ -44,11 +56,11 @@ pub struct Register1(pub Register);
 pub struct Register2(pub Register);
 
 impl Source for Register1 {
-    fn get(args: &Arguments, state: &mut State) -> U256 {
+    fn get(args: &Arguments, state: &mut impl Addressable) -> U256 {
         args.source_registers.register1().value(state)
     }
 
-    fn is_fat_pointer(args: &Arguments, state: &mut State) -> bool {
+    fn is_fat_pointer(args: &Arguments, state: &mut impl Addressable) -> bool {
         args.source_registers.register1().pointer_flag(state)
     }
 }
@@ -60,11 +72,11 @@ impl SourceWriter for Register1 {
 }
 
 impl Source for Register2 {
-    fn get(args: &Arguments, state: &mut State) -> U256 {
+    fn get(args: &Arguments, state: &mut impl Addressable) -> U256 {
         args.source_registers.register2().value(state)
     }
 
-    fn is_fat_pointer(args: &Arguments, state: &mut State) -> bool {
+    fn is_fat_pointer(args: &Arguments, state: &mut impl Addressable) -> bool {
         args.source_registers.register2().pointer_flag(state)
     }
 }
@@ -76,11 +88,11 @@ impl SourceWriter for Register2 {
 }
 
 impl Destination for Register1 {
-    fn set(args: &Arguments, state: &mut State, value: U256) {
+    fn set(args: &Arguments, state: &mut impl Addressable, value: U256) {
         args.destination_registers.register1().set(state, value);
     }
 
-    fn set_fat_ptr(args: &Arguments, state: &mut State, value: U256) {
+    fn set_fat_ptr(args: &Arguments, state: &mut impl Addressable, value: U256) {
         args.destination_registers.register1().set_ptr(state, value);
     }
 }
@@ -92,11 +104,11 @@ impl DestinationWriter for Register1 {
 }
 
 impl Destination for Register2 {
-    fn set(args: &Arguments, state: &mut State, value: U256) {
+    fn set(args: &Arguments, state: &mut impl Addressable, value: U256) {
         args.destination_registers.register2().set(state, value);
     }
 
-    fn set_fat_ptr(args: &Arguments, state: &mut State, value: U256) {
+    fn set_fat_ptr(args: &Arguments, state: &mut impl Addressable, value: U256) {
         args.destination_registers.register2().set_ptr(state, value);
     }
 }
@@ -114,11 +126,11 @@ pub struct Immediate1(pub u16);
 pub struct Immediate2(pub u16);
 
 impl Source for Immediate1 {
-    fn get(args: &Arguments, _state: &mut State) -> U256 {
+    fn get(args: &Arguments, _state: &mut impl Addressable) -> U256 {
         U256([args.immediate1 as u64, 0, 0, 0])
     }
 
-    fn is_fat_pointer(_: &Arguments, _: &mut State) -> bool {
+    fn is_fat_pointer(_: &Arguments, _: &mut impl Addressable) -> bool {
         false
     }
 }
@@ -130,11 +142,11 @@ impl SourceWriter for Immediate1 {
 }
 
 impl Source for Immediate2 {
-    fn get(args: &Arguments, _state: &mut State) -> U256 {
+    fn get(args: &Arguments, _state: &mut impl Addressable) -> U256 {
         U256([args.immediate2 as u64, 0, 0, 0])
     }
 
-    fn is_fat_pointer(_: &Arguments, _: &mut State) -> bool {
+    fn is_fat_pointer(_: &Arguments, _: &mut impl Addressable) -> bool {
         false
     }
 }
@@ -173,40 +185,41 @@ impl<T: RegisterPlusImmediate> DestinationWriter for T {
 }
 
 trait StackAddressing {
-    fn address_for_get(args: &Arguments, state: &mut State) -> u16;
-    fn address_for_set(args: &Arguments, state: &mut State) -> u16;
+    fn address_for_get(args: &Arguments, state: &mut impl Addressable) -> u16;
+    fn address_for_set(args: &Arguments, state: &mut impl Addressable) -> u16;
 }
 
 impl<T: StackAddressing> Source for T {
-    fn get(args: &Arguments, state: &mut State) -> U256 {
-        state.current_frame.stack[Self::address_for_get(args, state) as usize]
+    fn get(args: &Arguments, state: &mut impl Addressable) -> U256 {
+        let address = Self::address_for_get(args, state);
+        state.stack()[address as usize]
     }
 
-    fn is_fat_pointer(args: &Arguments, state: &mut State) -> bool {
+    fn is_fat_pointer(args: &Arguments, state: &mut impl Addressable) -> bool {
         let address = Self::address_for_get(args, state);
-        state.current_frame.stack_pointer_flags.get(address)
+        state.stack_pointer_flags().get(address)
     }
 }
 
 impl<T: StackAddressing> Destination for T {
-    fn set(args: &Arguments, state: &mut State, value: U256) {
+    fn set(args: &Arguments, state: &mut impl Addressable, value: U256) {
         let address = Self::address_for_set(args, state);
-        state.current_frame.stack[address as usize] = value;
-        state.current_frame.stack_pointer_flags.clear(address);
+        state.stack()[address as usize] = value;
+        state.stack_pointer_flags().clear(address);
     }
 
-    fn set_fat_ptr(args: &Arguments, state: &mut State, value: U256) {
+    fn set_fat_ptr(args: &Arguments, state: &mut impl Addressable, value: U256) {
         let address = Self::address_for_set(args, state);
-        state.current_frame.stack[address as usize] = value;
-        state.current_frame.stack_pointer_flags.set(address);
+        state.stack()[address as usize] = value;
+        state.stack_pointer_flags().set(address);
     }
 }
 
-fn source_stack_address(args: &Arguments, state: &mut State) -> u16 {
+fn source_stack_address(args: &Arguments, state: &mut impl Addressable) -> u16 {
     compute_stack_address(state, args.source_registers.register1(), args.immediate1)
 }
 
-pub fn destination_stack_address(args: &Arguments, state: &mut State) -> u16 {
+pub fn destination_stack_address(args: &Arguments, state: &mut impl Addressable) -> u16 {
     compute_stack_address(
         state,
         args.destination_registers.register1(),
@@ -216,7 +229,7 @@ pub fn destination_stack_address(args: &Arguments, state: &mut State) -> u16 {
 
 /// Computes register + immediate (mod 2^16).
 /// Stack addresses are always in that remainder class anyway.
-fn compute_stack_address(state: &mut State, register: Register, immediate: u16) -> u16 {
+fn compute_stack_address(state: &mut impl Addressable, register: Register, immediate: u16) -> u16 {
     (register.value(state).low_u32() as u16).wrapping_add(immediate)
 }
 
@@ -230,11 +243,11 @@ impl RegisterPlusImmediate for AbsoluteStack {
 }
 
 impl StackAddressing for AbsoluteStack {
-    fn address_for_get(args: &Arguments, state: &mut State) -> u16 {
+    fn address_for_get(args: &Arguments, state: &mut impl Addressable) -> u16 {
         source_stack_address(args, state)
     }
 
-    fn address_for_set(args: &Arguments, state: &mut State) -> u16 {
+    fn address_for_set(args: &Arguments, state: &mut impl Addressable) -> u16 {
         destination_stack_address(args, state)
     }
 }
@@ -249,17 +262,15 @@ impl RegisterPlusImmediate for RelativeStack {
 }
 
 impl StackAddressing for RelativeStack {
-    fn address_for_get(args: &Arguments, state: &mut State) -> u16 {
+    fn address_for_get(args: &Arguments, state: &mut impl Addressable) -> u16 {
         state
-            .current_frame
-            .sp
+            .stack_pointer()
             .wrapping_sub(source_stack_address(args, state))
     }
 
-    fn address_for_set(args: &Arguments, state: &mut State) -> u16 {
+    fn address_for_set(args: &Arguments, state: &mut impl Addressable) -> u16 {
         state
-            .current_frame
-            .sp
+            .stack_pointer()
             .wrapping_add(destination_stack_address(args, state))
     }
 }
@@ -274,20 +285,18 @@ impl RegisterPlusImmediate for AdvanceStackPointer {
 }
 
 impl StackAddressing for AdvanceStackPointer {
-    fn address_for_get(args: &Arguments, state: &mut State) -> u16 {
-        state.current_frame.sp = state
-            .current_frame
-            .sp
-            .wrapping_sub(source_stack_address(args, state));
-        state.current_frame.sp
+    fn address_for_get(args: &Arguments, state: &mut impl Addressable) -> u16 {
+        let offset = source_stack_address(args, state);
+        let sp = state.stack_pointer();
+        *sp = sp.wrapping_sub(offset);
+        *sp
     }
 
-    fn address_for_set(args: &Arguments, state: &mut State) -> u16 {
-        let address_to_set = state.current_frame.sp;
-        state.current_frame.sp = state
-            .current_frame
-            .sp
-            .wrapping_add(destination_stack_address(args, state));
+    fn address_for_set(args: &Arguments, state: &mut impl Addressable) -> u16 {
+        let offset = destination_stack_address(args, state);
+        let sp = state.stack_pointer();
+        let address_to_set = *sp;
+        *sp = sp.wrapping_add(offset);
         address_to_set
     }
 }
@@ -302,17 +311,16 @@ impl RegisterPlusImmediate for CodePage {
 }
 
 impl Source for CodePage {
-    fn get(args: &Arguments, state: &mut State) -> U256 {
+    fn get(args: &Arguments, state: &mut impl Addressable) -> U256 {
         let address = source_stack_address(args, state);
         state
-            .current_frame
-            .code_page
+            .code_page()
             .get(address as usize)
             .cloned()
             .unwrap_or(U256::zero())
     }
 
-    fn is_fat_pointer(_: &Arguments, _: &mut State) -> bool {
+    fn is_fat_pointer(_: &Arguments, _: &mut impl Addressable) -> bool {
         false
     }
 }
@@ -326,25 +334,25 @@ impl Register {
         Self(n)
     }
 
-    fn value(&self, state: &mut State) -> U256 {
-        unsafe { *state.registers.get_unchecked(self.0 as usize) }
+    fn value(&self, state: &mut impl Addressable) -> U256 {
+        unsafe { *state.registers().get_unchecked(self.0 as usize) }
     }
 
-    fn pointer_flag(&self, state: &mut State) -> bool {
-        state.register_pointer_flags & (1 << self.0) != 0
+    fn pointer_flag(&self, state: &mut impl Addressable) -> bool {
+        *state.register_pointer_flags() & (1 << self.0) != 0
     }
 
-    fn set(&self, state: &mut State, value: U256) {
+    fn set(&self, state: &mut impl Addressable, value: U256) {
         if self.0 != 0 {
-            unsafe { *state.registers.get_unchecked_mut(self.0 as usize) = value };
-            state.register_pointer_flags &= !(1 << self.0);
+            unsafe { *state.registers().get_unchecked_mut(self.0 as usize) = value };
+            *state.register_pointer_flags() &= !(1 << self.0);
         }
     }
 
-    fn set_ptr(&self, state: &mut State, value: U256) {
+    fn set_ptr(&self, state: &mut impl Addressable, value: U256) {
         if self.0 != 0 {
-            unsafe { *state.registers.get_unchecked_mut(self.0 as usize) = value };
-            state.register_pointer_flags |= 1 << self.0;
+            unsafe { *state.registers().get_unchecked_mut(self.0 as usize) = value };
+            *state.register_pointer_flags() |= 1 << self.0;
         }
     }
 }

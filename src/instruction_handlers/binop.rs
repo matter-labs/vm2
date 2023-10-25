@@ -1,18 +1,26 @@
 use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{
-        AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
-        Destination, DestinationWriter, Immediate1, Register1, Register2, RelativeStack, Source,
-        SourceWriter,
+        AbsoluteStack, Addressable, AdvanceStackPointer, AnyDestination, AnySource, Arguments,
+        CodePage, Destination, DestinationWriter, Immediate1, Register1, Register2, RelativeStack,
+        Source, SourceWriter,
     },
     predication::{Flags, Predicate},
     state::{Instruction, State},
+    World,
 };
 use u256::U256;
 
-fn binop<Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SET_FLAGS: bool>(
-    state: &mut State,
-    instruction: *const Instruction,
+fn binop<
+    W: World,
+    Op: Binop,
+    In1: Source,
+    Out: Destination,
+    const SWAP: bool,
+    const SET_FLAGS: bool,
+>(
+    state: &mut State<W>,
+    instruction: *const Instruction<W>,
 ) {
     instruction_boilerplate(state, instruction, |state, args| {
         let a = In1::get(args, state);
@@ -135,12 +143,12 @@ impl Binop for RotateRight {
 
 pub trait SecondOutput {
     type Destination: DestinationWriter;
-    fn write(self, args: &Arguments, state: &mut State);
+    fn write(self, args: &Arguments, state: &mut impl Addressable);
 }
 
 impl SecondOutput for () {
     type Destination = ();
-    fn write(self, _: &Arguments, _: &mut State) {}
+    fn write(self, _: &Arguments, _: &mut impl Addressable) {}
 }
 
 impl DestinationWriter for () {
@@ -149,7 +157,7 @@ impl DestinationWriter for () {
 
 impl SecondOutput for U256 {
     type Destination = Register2;
-    fn write(self, args: &Arguments, state: &mut State) {
+    fn write(self, args: &Arguments, state: &mut impl Addressable) {
         Self::Destination::set(args, state, self);
     }
 }
@@ -200,7 +208,7 @@ impl Binop for Div {
 
 use super::monomorphization::*;
 
-impl Instruction {
+impl<W: World> Instruction<W> {
     #[inline(always)]
     pub fn from_binop<Op: Binop>(
         src1: AnySource,
@@ -219,7 +227,7 @@ impl Instruction {
         arguments.predicate = predicate;
 
         Self {
-            handler: monomorphize!(binop [Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
+            handler: monomorphize!(binop [W Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
             arguments,
         }
     }

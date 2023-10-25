@@ -4,31 +4,31 @@ use crate::{
         Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
         RegisterOrImmediate, Source, SourceWriter,
     },
-    Instruction, Predicate, State,
+    Instruction, Predicate, State, World,
 };
 use u256::U256;
 
 pub trait HeapFromState {
-    fn get_heap(state: &mut State) -> &mut Vec<u8>;
+    fn get_heap<W: World>(state: &mut State<W>) -> &mut Vec<u8>;
 }
 
 pub struct Heap;
 impl HeapFromState for Heap {
-    fn get_heap(state: &mut State) -> &mut Vec<u8> {
+    fn get_heap<W: World>(state: &mut State<W>) -> &mut Vec<u8> {
         &mut state.heaps[state.current_frame.heap as usize]
     }
 }
 
 pub struct AuxHeap;
 impl HeapFromState for AuxHeap {
-    fn get_heap(state: &mut State) -> &mut Vec<u8> {
+    fn get_heap<W: World>(state: &mut State<W>) -> &mut Vec<u8> {
         &mut state.heaps[state.current_frame.aux_heap as usize]
     }
 }
 
-fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
-    state: &mut State,
-    instruction: *const Instruction,
+fn load<W: World, H: HeapFromState, In: Source, const INCREMENT: bool>(
+    state: &mut State<W>,
+    instruction: *const Instruction<W>,
 ) {
     let args = unsafe { &(*instruction).arguments };
 
@@ -38,7 +38,7 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
         return ret::panic();
     };
 
-    if !grow_heap::<H>(state, new_bound) {
+    if !grow_heap::<W, H>(state, new_bound) {
         return ret::panic();
     }
 
@@ -54,9 +54,9 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
     run_next_instruction(state, instruction)
 }
 
-fn store<H: HeapFromState, In1: Source, const INCREMENT: bool>(
-    state: &mut State,
-    instruction: *const Instruction,
+fn store<W: World, H: HeapFromState, In1: Source, const INCREMENT: bool>(
+    state: &mut State<W>,
+    instruction: *const Instruction<W>,
 ) {
     let args = unsafe { &(*instruction).arguments };
 
@@ -68,7 +68,7 @@ fn store<H: HeapFromState, In1: Source, const INCREMENT: bool>(
         return ret::panic();
     };
 
-    if !grow_heap::<H>(state, new_bound) {
+    if !grow_heap::<W, H>(state, new_bound) {
         return ret::panic();
     }
 
@@ -83,7 +83,7 @@ fn store<H: HeapFromState, In1: Source, const INCREMENT: bool>(
     run_next_instruction(state, instruction)
 }
 
-fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> bool {
+fn grow_heap<W: World, H: HeapFromState>(state: &mut State<W>, new_bound: u32) -> bool {
     if let Some(growth) = new_bound.checked_sub(H::get_heap(state).len() as u32) {
         // TODO use the proper formula instead
         if state.use_gas(growth) {
@@ -96,7 +96,10 @@ fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> bool {
     true
 }
 
-fn load_pointer<const INCREMENT: bool>(state: &mut State, instruction: *const Instruction) {
+fn load_pointer<W: World, const INCREMENT: bool>(
+    state: &mut State<W>,
+    instruction: *const Instruction<W>,
+) {
     let args = unsafe { &(*instruction).arguments };
 
     if !Register1::is_fat_pointer(args, state) {
@@ -131,7 +134,7 @@ fn load_pointer<const INCREMENT: bool>(state: &mut State, instruction: *const In
 
 use super::monomorphization::*;
 
-impl Instruction {
+impl<W: World> Instruction<W> {
     #[inline(always)]
     pub fn from_load<H: HeapFromState>(
         src: RegisterOrImmediate,
@@ -150,7 +153,7 @@ impl Instruction {
         arguments.predicate = predicate;
 
         Self {
-            handler: monomorphize!(load [H] match_reg_imm src match_boolean increment),
+            handler: monomorphize!(load [W H] match_reg_imm src match_boolean increment),
             arguments,
         }
     }
@@ -173,7 +176,7 @@ impl Instruction {
         arguments.predicate = predicate;
 
         Self {
-            handler: monomorphize!(store [H] match_reg_imm src1 match_boolean increment),
+            handler: monomorphize!(store [W H] match_reg_imm src1 match_boolean increment),
             arguments,
         }
     }
@@ -196,7 +199,7 @@ impl Instruction {
         arguments.predicate = predicate;
 
         Self {
-            handler: monomorphize!(load_pointer match_boolean increment),
+            handler: monomorphize!(load_pointer [W] match_boolean increment),
             arguments,
         }
     }

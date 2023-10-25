@@ -8,7 +8,7 @@ use crate::{
         Add, And, AuxHeap, Div, Heap, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub, RotateLeft,
         RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
     },
-    jump_to_beginning, Instruction,
+    jump_to_beginning, Instruction, World,
 };
 use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
@@ -18,7 +18,7 @@ use zkevm_opcode_defs::{
     SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
 };
 
-pub fn decode_program(raw: &[u64]) -> Vec<Instruction> {
+pub fn decode_program<W: World>(raw: &[u64]) -> Vec<Instruction<W>> {
     raw.iter()
         .take(1 << 16)
         .map(|i| decode(*i))
@@ -31,7 +31,7 @@ pub fn decode_program(raw: &[u64]) -> Vec<Instruction> {
         .collect()
 }
 
-fn decode(raw: u64) -> Instruction {
+fn decode<W: World>(raw: u64) -> Instruction<W> {
     let (parsed, _) = EncodingModeProduction::parse_preliminary_variant_and_absolute_number(raw);
 
     let predicate = match parsed.condition {

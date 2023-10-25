@@ -4,10 +4,10 @@ use crate::{
         destination_stack_address, AdvanceStackPointer, Arguments, DestinationWriter, Source,
         SourceWriter,
     },
-    Instruction, State,
+    Instruction, State, World,
 };
 
-fn nop(state: &mut State, instruction: *const Instruction) {
+fn nop<W: World>(state: &mut State<W>, instruction: *const Instruction<W>) {
     instruction_boilerplate(state, instruction, |state, args| {
         // nop's addressing modes can move the stack pointer!
         AdvanceStackPointer::get(args, state);
@@ -18,7 +18,7 @@ fn nop(state: &mut State, instruction: *const Instruction) {
     });
 }
 
-impl Instruction {
+impl<W: World> Instruction<W> {
     pub fn from_nop(pop: AdvanceStackPointer, push: AdvanceStackPointer) -> Self {
         let mut arguments = Arguments::default();
         pop.write_source(&mut arguments);

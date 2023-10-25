@@ -1,4 +1,4 @@
-use crate::{state::Instruction, Predicate};
+use crate::{state::Instruction, Predicate, World};
 use arbitrary::Arbitrary;
 pub use binop::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor};
 pub use heap_access::{AuxHeap, Heap};
@@ -6,8 +6,8 @@ pub use pointer::{PtrAdd, PtrPack, PtrShrink, PtrSub};
 pub use ret::panic;
 
 mod binop;
+mod call;
 mod common;
-mod counter;
 mod heap_access;
 mod jump;
 mod monomorphization;
@@ -15,7 +15,7 @@ mod nop;
 mod pointer;
 mod ret;
 
-impl<'a> Arbitrary<'a> for Instruction {
+impl<'a, W: World> Arbitrary<'a> for Instruction<W> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         let predicate = if u.arbitrary()? {
             Predicate::Always
