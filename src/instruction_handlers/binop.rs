@@ -7,20 +7,12 @@ use crate::{
     },
     predication::{Flags, Predicate},
     state::{Instruction, State},
-    World,
 };
 use u256::U256;
 
-fn binop<
-    W: World,
-    Op: Binop,
-    In1: Source,
-    Out: Destination,
-    const SWAP: bool,
-    const SET_FLAGS: bool,
->(
-    state: &mut State<W>,
-    instruction: *const Instruction<W>,
+fn binop<Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SET_FLAGS: bool>(
+    state: &mut State,
+    instruction: *const Instruction,
 ) {
     instruction_boilerplate(state, instruction, |state, args| {
         let a = In1::get(args, state);
@@ -208,7 +200,7 @@ impl Binop for Div {
 
 use super::monomorphization::*;
 
-impl<W: World> Instruction<W> {
+impl Instruction {
     #[inline(always)]
     pub fn from_binop<Op: Binop>(
         src1: AnySource,
@@ -227,7 +219,7 @@ impl<W: World> Instruction<W> {
         arguments.predicate = predicate;
 
         Self {
-            handler: monomorphize!(binop [W Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
+            handler: monomorphize!(binop [Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
             arguments,
         }
     }

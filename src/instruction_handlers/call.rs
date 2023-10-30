@@ -23,10 +23,7 @@ impl FatPointerSource {
     }
 }
 
-fn far_call<W: World, const IS_STATIC: bool>(
-    state: &mut State<W>,
-    instruction: *const Instruction<W>,
-) {
+fn far_call<const IS_STATIC: bool>(state: &mut State, instruction: *const Instruction) {
     let args = unsafe { &(*instruction).arguments };
 
     let settings_and_pointer = Register1::get(args, state);
@@ -91,7 +88,7 @@ impl FatPointer {
 
 use super::monomorphization::*;
 
-impl<W: World> Instruction<W> {
+impl Instruction {
     pub fn from_far_call(
         src1: Register1,
         src2: Register2,
@@ -106,7 +103,7 @@ impl<W: World> Instruction<W> {
         args.predicate = predicate;
 
         Self {
-            handler: monomorphize!(far_call [W] match_boolean is_static),
+            handler: monomorphize!(far_call match_boolean is_static),
             arguments: args,
         }
     }

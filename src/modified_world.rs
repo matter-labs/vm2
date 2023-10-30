@@ -7,8 +7,8 @@ use u256::{H160, U256};
 
 /// The global state including pending modifications that are written only at
 /// the end of a block.
-pub struct ModifiedWorld<W: World> {
-    world: W,
+pub struct ModifiedWorld {
+    world: Box<dyn World>,
     storage_changes: RollbackableMap<(H160, U256), U256>,
     decommitted_hashes: RollbackableMap<U256, ()>,
     snapshots: Vec<(
@@ -17,8 +17,8 @@ pub struct ModifiedWorld<W: World> {
     )>,
 }
 
-impl<W: World> ModifiedWorld<W> {
-    pub fn new(world: W) -> Self {
+impl ModifiedWorld {
+    pub fn new(world: Box<dyn World>) -> Self {
         Self {
             world,
             storage_changes: Default::default(),
@@ -59,7 +59,7 @@ impl<W: World> ModifiedWorld<W> {
             .insert((contract, key), value, self.snapshots.is_empty())
     }
 
-    pub fn decommit(&mut self, hash: U256) -> (Arc<[Instruction<W>]>, Arc<[U256]>) {
+    pub fn decommit(&mut self, hash: U256) -> (Arc<[Instruction]>, Arc<[U256]>) {
         self.decommitted_hashes
             .insert(hash, (), self.snapshots.is_empty());
         self.world.decommit(hash)

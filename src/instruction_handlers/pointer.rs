@@ -5,7 +5,7 @@ use crate::{
         Destination, DestinationWriter, Immediate1, Register1, Register2, RelativeStack, Source,
         SourceWriter,
     },
-    Instruction, Predicate, State, World,
+    Instruction, Predicate, State,
 };
 use u256::U256;
 
@@ -34,9 +34,9 @@ impl From<U256> for FatPointer {
     }
 }
 
-fn ptr<W: World, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
-    state: &mut State<W>,
-    instruction: *const Instruction<W>,
+fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
+    state: &mut State,
+    instruction: *const Instruction,
 ) {
     let args = unsafe { &(*instruction).arguments };
 
@@ -111,7 +111,7 @@ impl PtrOp for PtrShrink {
 
 use super::monomorphization::*;
 
-impl<W: World> Instruction<W> {
+impl Instruction {
     #[inline(always)]
     pub fn from_ptr<Op: PtrOp>(
         src1: AnySource,
@@ -127,7 +127,7 @@ impl<W: World> Instruction<W> {
         arguments.predicate = predicate;
 
         Self {
-            handler: monomorphize!(ptr [W Op] match_source src1 match_destination out match_boolean swap),
+            handler: monomorphize!(ptr [Op] match_source src1 match_destination out match_boolean swap),
             arguments,
         }
     }

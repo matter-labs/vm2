@@ -18,7 +18,7 @@ use zkevm_opcode_defs::{
     SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
 };
 
-pub fn decode_program<W: World>(raw: &[u64]) -> Vec<Instruction<W>> {
+pub fn decode_program<W: World>(raw: &[u64]) -> Vec<Instruction> {
     raw.iter()
         .take(1 << 16)
         .map(|i| decode(*i))
@@ -31,7 +31,7 @@ pub fn decode_program<W: World>(raw: &[u64]) -> Vec<Instruction<W>> {
         .collect()
 }
 
-fn decode<W: World>(raw: u64) -> Instruction<W> {
+fn decode(raw: u64) -> Instruction {
     let (parsed, _) = EncodingModeProduction::parse_preliminary_variant_and_absolute_number(raw);
 
     let predicate = match parsed.condition {

@@ -6,10 +6,10 @@ use crate::{
     addressing_modes::{
         Arguments, Destination, DestinationWriter, Register1, Register2, Source, SourceWriter,
     },
-    Instruction, Predicate, State, World,
+    Instruction, Predicate, State,
 };
 
-fn sstore<W: World>(state: &mut State<W>, instruction: *const Instruction<W>) {
+fn sstore(state: &mut State, instruction: *const Instruction) {
     let args = unsafe { &(*instruction).arguments };
 
     let key = Register1::get(args, state);
@@ -26,7 +26,7 @@ fn sstore<W: World>(state: &mut State<W>, instruction: *const Instruction<W>) {
     run_next_instruction(state, instruction);
 }
 
-fn sload<W: World>(state: &mut State<W>, instruction: *const Instruction<W>) {
+fn sload(state: &mut State, instruction: *const Instruction) {
     instruction_boilerplate(state, instruction, |state, args| {
         let key = Register1::get(args, state);
         let value = state.world.read_storage(state.current_frame.address, key);
@@ -34,7 +34,7 @@ fn sload<W: World>(state: &mut State<W>, instruction: *const Instruction<W>) {
     })
 }
 
-impl<W: World> Instruction<W> {
+impl Instruction {
     #[inline(always)]
     pub fn from_sstore(src1: Register1, src2: Register2, predicate: Predicate) -> Self {
         let mut arguments = Arguments::default();
@@ -43,13 +43,13 @@ impl<W: World> Instruction<W> {
         arguments.predicate = predicate;
 
         Self {
-            handler: sstore::<W>,
+            handler: sstore,
             arguments,
         }
     }
 }
 
-impl<W: World> Instruction<W> {
+impl Instruction {
     #[inline(always)]
     pub fn from_sload(src: Register1, dst: Register1, predicate: Predicate) -> Self {
         let mut arguments = Arguments::default();
@@ -58,7 +58,7 @@ impl<W: World> Instruction<W> {
         arguments.predicate = predicate;
 
         Self {
-            handler: sload::<W>,
+            handler: sload,
             arguments,
         }
     }

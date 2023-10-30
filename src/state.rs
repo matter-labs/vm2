@@ -10,23 +10,23 @@ use arbitrary::{Arbitrary, Unstructured};
 use std::sync::Arc;
 use u256::{H160, U256};
 
-pub struct State<W: World> {
-    pub world: ModifiedWorld<W>,
+pub struct State {
+    pub world: ModifiedWorld,
 
     pub registers: [U256; 16],
     pub(crate) register_pointer_flags: u16,
 
     pub flags: Flags,
 
-    pub current_frame: Callframe<W>,
-    previous_frames: Vec<(*const Instruction<W>, Callframe<W>)>,
+    pub current_frame: Callframe,
+    previous_frames: Vec<(*const Instruction, Callframe)>,
 
     pub(crate) heaps: Vec<Vec<u8>>,
 }
 
-pub struct Callframe<W: World> {
+pub struct Callframe {
     pub address: H160,
-    pub program: Arc<[Instruction<W>]>,
+    pub program: Arc<[Instruction]>,
     pub code_page: Arc<[U256]>,
 
     // TODO: joint allocate these.
@@ -40,7 +40,7 @@ pub struct Callframe<W: World> {
     pub gas: u32,
 }
 
-impl<W: World> Addressable for State<W> {
+impl Addressable for State {
     fn registers(&mut self) -> &mut [U256; 16] {
         &mut self.registers
     }
@@ -61,10 +61,10 @@ impl<W: World> Addressable for State<W> {
     }
 }
 
-impl<W: World> Callframe<W> {
+impl Callframe {
     fn new(
         address: H160,
-        program: Arc<[Instruction<W>]>,
+        program: Arc<[Instruction]>,
         code_page: Arc<[U256]>,
         heap: u32,
         aux_heap: u32,
@@ -89,21 +89,18 @@ impl<W: World> Callframe<W> {
     }
 }
 
-pub struct Instruction<W: World> {
-    pub(crate) handler: Handler<W>,
+pub struct Instruction {
+    pub(crate) handler: Handler,
     pub(crate) arguments: Arguments,
 }
 
-pub(crate) type Handler<W> = fn(&mut State<W>, *const Instruction<W>);
+pub(crate) type Handler = fn(&mut State, *const Instruction);
 
-impl<W> State<W>
-where
-    W: World,
-{
+impl State {
     pub fn new(
-        world: W,
+        world: Box<dyn World>,
         address: H160,
-        program: Arc<[Instruction<W>]>,
+        program: Arc<[Instruction]>,
         code_page: Arc<[U256]>,
     ) -> Self {
         Self {
@@ -119,9 +116,9 @@ where
 
     pub(crate) fn push_frame(
         &mut self,
-        instruction_pointer: *const Instruction<W>,
+        instruction_pointer: *const Instruction,
         address: H160,
-        program: Arc<[Instruction<W>]>,
+        program: Arc<[Instruction]>,
         code_page: Arc<[U256]>,
         gas: u32,
     ) {
@@ -135,7 +132,7 @@ where
     }
 
     pub fn run(&mut self) {
-        let mut instruction: *const Instruction<W> = &self.current_frame.program[0];
+        let mut instruction: *const Instruction = &self.current_frame.program[0];
 
         if self.use_gas(1) {
             return instruction_handlers::panic();
@@ -165,21 +162,21 @@ where
     }
 }
 
-pub fn end_execution<W: World>() -> Instruction<W> {
+pub fn end_execution() -> Instruction {
     Instruction {
         handler: end_execution_handler,
         arguments: Arguments::default(),
     }
 }
-fn end_execution_handler<W: World>(_state: &mut State<W>, _: *const Instruction<W>) {}
+fn end_execution_handler(_state: &mut State, _: *const Instruction) {}
 
-pub fn jump_to_beginning<W: World>() -> Instruction<W> {
+pub fn jump_to_beginning() -> Instruction {
     Instruction {
         handler: jump_to_beginning_handler,
         arguments: Arguments::default(),
     }
 }
-fn jump_to_beginning_handler<W: World>(state: &mut State<W>, _: *const Instruction<W>) {
+fn jump_to_beginning_handler(state: &mut State, _: *const Instruction) {
     let first_instruction = &state.current_frame.program[0];
     let first_handler = first_instruction.handler;
     first_handler(state, first_instruction);
@@ -187,7 +184,7 @@ fn jump_to_beginning_handler<W: World>(state: &mut State<W>, _: *const Instructi
 
 pub fn run_arbitrary_program(input: &[u8]) {
     let mut u = Unstructured::new(input);
-    let mut program: Vec<Instruction<FakeWorld>> = Arbitrary::arbitrary(&mut u).unwrap();
+    let mut program: Vec<Instruction> = Arbitrary::arbitrary(&mut u).unwrap();
 
     if program.len() >= 1 << 16 {
         program.truncate(1 << 16);
@@ -199,7 +196,7 @@ pub fn run_arbitrary_program(input: &[u8]) {
 
     struct FakeWorld;
     impl World for FakeWorld {
-        fn decommit(&mut self, hash: U256) -> (Arc<[Instruction<Self>]>, Arc<[U256]>) {
+        fn decommit(&mut self, hash: U256) -> (Arc<[Instruction]>, Arc<[U256]>) {
             todo!()
         }
 
@@ -208,6 +205,11 @@ pub fn run_arbitrary_program(input: &[u8]) {
         }
     }
 
-    let mut state = State::new(FakeWorld, H160::zero(), program.into(), Arc::new([]));
+    let mut state = State::new(
+        Box::new(FakeWorld),
+        H160::zero(),
+        program.into(),
+        Arc::new([]),
+    );
     state.run();
 }
