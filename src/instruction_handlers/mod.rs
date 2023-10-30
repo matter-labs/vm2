@@ -14,6 +14,7 @@ mod monomorphization;
 mod nop;
 mod pointer;
 mod ret;
+mod storage;
 
 impl<'a, W: World> Arbitrary<'a> for Instruction<W> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
@@ -23,7 +24,7 @@ impl<'a, W: World> Arbitrary<'a> for Instruction<W> {
             u.arbitrary()?
         };
 
-        Ok(match u.choose_index(20)? {
+        Ok(match u.choose_index(22)? {
             0 => Self::from_binop::<Add>(
                 u.arbitrary()?,
                 u.arbitrary()?,
@@ -170,6 +171,8 @@ impl<'a, W: World> Arbitrary<'a> for Instruction<W> {
             19 => {
                 Self::from_load_pointer(u.arbitrary()?, u.arbitrary()?, u.arbitrary()?, predicate)
             }
+            20 => Self::from_sstore(u.arbitrary()?, u.arbitrary()?, predicate),
+            21 => Self::from_sload(u.arbitrary()?, u.arbitrary()?, predicate),
             _ => unreachable!(),
         })
     }

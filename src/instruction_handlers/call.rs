@@ -1,3 +1,5 @@
+use u256::H160;
+
 use super::{pointer::FatPointer, ret};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source, SourceWriter},
@@ -75,7 +77,7 @@ fn far_call<W: World, const IS_STATIC: bool>(
     };
 
     state.current_frame.gas -= new_frame_gas;
-    state.push_frame(instruction, program, code_page, new_frame_gas)
+    state.push_frame(instruction, H160::zero(), program, code_page, new_frame_gas)
 }
 
 impl FatPointer {

@@ -2,15 +2,16 @@ use crate::{
     addressing_modes::{Addressable, Arguments},
     bitset::Bitset,
     instruction_handlers,
+    modified_world::ModifiedWorld,
     predication::Flags,
     World,
 };
 use arbitrary::{Arbitrary, Unstructured};
 use std::sync::Arc;
-use u256::U256;
+use u256::{H160, U256};
 
 pub struct State<W: World> {
-    pub world: W,
+    pub world: ModifiedWorld<W>,
 
     pub registers: [U256; 16],
     pub(crate) register_pointer_flags: u16,
@@ -24,6 +25,7 @@ pub struct State<W: World> {
 }
 
 pub struct Callframe<W: World> {
+    pub address: H160,
     pub program: Arc<[Instruction<W>]>,
     pub code_page: Arc<[U256]>,
 
@@ -61,6 +63,7 @@ impl<W: World> Addressable for State<W> {
 
 impl<W: World> Callframe<W> {
     fn new(
+        address: H160,
         program: Arc<[Instruction<W>]>,
         code_page: Arc<[U256]>,
         heap: u32,
@@ -70,6 +73,7 @@ impl<W: World> Callframe<W> {
         const INITIAL_SP: u16 = 1000;
 
         Self {
+            address,
             program,
             stack: vec![U256::zero(); 1 << 16]
                 .into_boxed_slice()
@@ -96,13 +100,18 @@ impl<W> State<W>
 where
     W: World,
 {
-    pub fn new(world: W, program: Arc<[Instruction<W>]>, code_page: Arc<[U256]>) -> Self {
+    pub fn new(
+        world: W,
+        address: H160,
+        program: Arc<[Instruction<W>]>,
+        code_page: Arc<[U256]>,
+    ) -> Self {
         Self {
-            world,
+            world: ModifiedWorld::new(world),
             registers: Default::default(),
             register_pointer_flags: 0,
             flags: Flags::new(false, false, false),
-            current_frame: Callframe::new(program, code_page, 0, 1, 4000),
+            current_frame: Callframe::new(address, program, code_page, 0, 1, 4000),
             previous_frames: vec![],
             heaps: vec![vec![], vec![]],
         }
@@ -111,13 +120,15 @@ where
     pub(crate) fn push_frame(
         &mut self,
         instruction_pointer: *const Instruction<W>,
+        address: H160,
         program: Arc<[Instruction<W>]>,
         code_page: Arc<[U256]>,
         gas: u32,
     ) {
         let new_heap = self.heaps.len() as u32;
         self.heaps.extend([vec![], vec![]]);
-        let mut new_frame = Callframe::new(program, code_page, new_heap, new_heap + 1, gas);
+        let mut new_frame =
+            Callframe::new(address, program, code_page, new_heap, new_heap + 1, gas);
 
         std::mem::swap(&mut new_frame, &mut self.current_frame);
         self.previous_frames.push((instruction_pointer, new_frame));
@@ -192,11 +203,11 @@ pub fn run_arbitrary_program(input: &[u8]) {
             todo!()
         }
 
-        fn read_storage() -> U256 {
-            todo!()
+        fn read_storage(&mut self, _: H160, _: U256) -> U256 {
+            U256::zero()
         }
     }
 
-    let mut state = State::new(FakeWorld, program.into(), Arc::new([]));
+    let mut state = State::new(FakeWorld, H160::zero(), program.into(), Arc::new([]));
     state.run();
 }
