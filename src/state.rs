@@ -199,7 +199,7 @@ pub fn run_arbitrary_program(input: &[u8]) {
 
     struct FakeWorld;
     impl World for FakeWorld {
-        fn decommit(&mut self) -> (Arc<[Instruction<Self>]>, Arc<[U256]>) {
+        fn decommit(&mut self, hash: U256) -> (Arc<[Instruction<Self>]>, Arc<[U256]>) {
             todo!()
         }
 

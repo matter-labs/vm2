@@ -67,7 +67,8 @@ fn far_call<W: World, const IS_STATIC: bool>(
         out
     };
 
-    let (program, code_page) = state.world.decommit();
+    let code_hash = todo!();
+    let (program, code_page) = state.world.decommit(code_hash);
 
     let maximum_gas = (state.current_frame.gas as u64 * 63 / 64) as u32;
     let new_frame_gas = if gas_to_pass == 0 {

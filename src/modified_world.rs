@@ -10,7 +10,11 @@ use u256::{H160, U256};
 pub struct ModifiedWorld<W: World> {
     world: W,
     storage_changes: RollbackableMap<(H160, U256), U256>,
-    snapshots: Vec<<RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot>,
+    decommitted_hashes: RollbackableMap<U256, ()>,
+    snapshots: Vec<(
+        <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
+        <RollbackableMap<U256, ()> as Rollback>::Snapshot,
+    )>,
 }
 
 impl<W: World> ModifiedWorld<W> {
@@ -18,20 +22,28 @@ impl<W: World> ModifiedWorld<W> {
         Self {
             world,
             storage_changes: Default::default(),
+            decommitted_hashes: Default::default(),
             snapshots: vec![],
         }
     }
 
     pub fn snapshot(&mut self) {
-        self.snapshots.push(self.storage_changes.snapshot())
+        self.snapshots.push((
+            self.storage_changes.snapshot(),
+            self.decommitted_hashes.snapshot(),
+        ))
     }
 
     pub fn rollback(&mut self) {
-        self.storage_changes.rollback(self.snapshots.pop().unwrap())
+        let (storage, decommit) = self.snapshots.pop().unwrap();
+        self.storage_changes.rollback(storage);
+        self.decommitted_hashes.rollback(decommit);
     }
 
     pub fn forget_snapshot(&mut self) {
-        self.storage_changes.forget(self.snapshots.pop().unwrap())
+        let (storage, decommit) = self.snapshots.pop().unwrap();
+        self.storage_changes.forget(storage);
+        self.decommitted_hashes.forget(decommit);
     }
 
     pub fn read_storage(&mut self, contract: H160, key: U256) -> U256 {
@@ -47,7 +59,9 @@ impl<W: World> ModifiedWorld<W> {
             .insert((contract, key), value, self.snapshots.is_empty())
     }
 
-    pub fn decommit(&mut self) -> (Arc<[Instruction<W>]>, Arc<[U256]>) {
-        self.world.decommit()
+    pub fn decommit(&mut self, hash: U256) -> (Arc<[Instruction<W>]>, Arc<[U256]>) {
+        self.decommitted_hashes
+            .insert(hash, (), self.snapshots.is_empty());
+        self.world.decommit(hash)
     }
 }
