@@ -24,7 +24,7 @@ impl<'a> Arbitrary<'a> for Instruction {
             u.arbitrary()?
         };
 
-        Ok(match u.choose_index(22)? {
+        Ok(match u.choose_index(23)? {
             0 => Self::from_binop::<Add>(
                 u.arbitrary()?,
                 u.arbitrary()?,
@@ -173,6 +173,13 @@ impl<'a> Arbitrary<'a> for Instruction {
             }
             20 => Self::from_sstore(u.arbitrary()?, u.arbitrary()?, predicate),
             21 => Self::from_sload(u.arbitrary()?, u.arbitrary()?, predicate),
+            22 => Self::from_far_call(
+                u.arbitrary()?,
+                u.arbitrary()?,
+                u.arbitrary()?,
+                u.arbitrary()?,
+                predicate,
+            ),
             _ => unreachable!(),
         })
     }

@@ -34,6 +34,13 @@ impl From<U256> for FatPointer {
     }
 }
 
+impl FatPointer {
+    #[cfg(target_endian = "little")]
+    pub fn to_u256(self) -> U256 {
+        U256::zero() + unsafe { std::mem::transmute::<FatPointer, u128>(self) }
+    }
+}
+
 fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     state: &mut State,
     instruction: *const Instruction,

@@ -1,9 +1,12 @@
-use u256::H160;
-
 use super::{pointer::FatPointer, ret};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source, SourceWriter},
-    Instruction, Predicate, State, World,
+    predication::Flags,
+    Instruction, Predicate, State,
+};
+use u256::{H160, U256};
+use zkevm_opcode_defs::{
+    ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
 
 enum FatPointerSource {
@@ -26,8 +29,10 @@ impl FatPointerSource {
 fn far_call<const IS_STATIC: bool>(state: &mut State, instruction: *const Instruction) {
     let args = unsafe { &(*instruction).arguments };
 
+    let address_mask: U256 = U256::MAX >> (256 - 160);
+
     let settings_and_pointer = Register1::get(args, state);
-    let destination_address = Register2::get(args, state);
+    let destination_address = Register2::get(args, state) & address_mask;
     let error_handler = Immediate1::get(args, state);
 
     let settings = settings_and_pointer.0[3];
@@ -64,8 +69,35 @@ fn far_call<const IS_STATIC: bool>(state: &mut State, instruction: *const Instru
         out
     };
 
-    let code_hash = todo!();
-    let (program, code_page) = state.world.decommit(code_hash);
+    let deployer_system_contract_address =
+        Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
+    let code_info = state
+        .world
+        .read_storage(deployer_system_contract_address, destination_address);
+
+    // TODO default address aliasing
+
+    let mut code_info_bytes = [0; 32];
+    code_info.to_big_endian(&mut code_info_bytes);
+
+    if code_info_bytes[0] != 1 {
+        return ret::panic();
+    }
+    match code_info_bytes[1] {
+        0 => {} // At rest
+        1 => {} // constructed
+        _ => {
+            return ret::panic();
+        }
+    }
+    let code_length_in_words = u16::from_be_bytes([code_info_bytes[2], code_info_bytes[3]]);
+
+    code_info_bytes[1] = 0;
+    let code_key: U256 = U256::from_big_endian(&code_info_bytes);
+
+    // TODO pay based on program length
+
+    let (program, code_page) = state.world.decommit(code_key);
 
     let maximum_gas = (state.current_frame.gas as u64 * 63 / 64) as u32;
     let new_frame_gas = if gas_to_pass == 0 {
@@ -75,7 +107,17 @@ fn far_call<const IS_STATIC: bool>(state: &mut State, instruction: *const Instru
     };
 
     state.current_frame.gas -= new_frame_gas;
-    state.push_frame(instruction, H160::zero(), program, code_page, new_frame_gas)
+    state.push_frame(instruction, H160::zero(), program, code_page, new_frame_gas);
+
+    // TODO clear context register
+
+    state.flags = Flags::new(false, false, false);
+
+    state.registers = [U256::zero(); 16];
+    state.registers[0] = pointer_to_arguments.to_u256();
+    state.register_pointer_flags = 1;
+
+    state.run()
 }
 
 impl FatPointer {

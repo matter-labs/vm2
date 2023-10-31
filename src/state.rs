@@ -70,8 +70,6 @@ impl Callframe {
         aux_heap: u32,
         gas: u32,
     ) -> Self {
-        const INITIAL_SP: u16 = 1000;
-
         Self {
             address,
             program,
@@ -80,7 +78,7 @@ impl Callframe {
                 .try_into()
                 .unwrap(),
             stack_pointer_flags: Default::default(),
-            sp: INITIAL_SP,
+            sp: 1024,
             code_page,
             heap,
             aux_heap,
