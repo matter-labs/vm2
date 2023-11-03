@@ -1,6 +1,7 @@
 pub mod addressing_modes;
 mod bitset;
 pub mod decode;
+mod decommit;
 pub mod instruction_handlers;
 mod modified_world;
 mod predication;

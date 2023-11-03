@@ -1,6 +1,7 @@
 use crate::{
     addressing_modes::{Addressable, Arguments},
     bitset::Bitset,
+    decommit::{address_into_u256, decommit},
     instruction_handlers,
     modified_world::ModifiedWorld,
     predication::Flags,
@@ -92,23 +93,37 @@ pub struct Instruction {
     pub(crate) arguments: Arguments,
 }
 
-pub(crate) type Handler = fn(&mut State, *const Instruction);
+pub(crate) type Handler = fn(&mut State, *const Instruction) -> ExecutionResult;
+pub type ExecutionResult = Result<(), Panic>;
+
+#[derive(Debug)]
+pub enum Panic {
+    OutOfGas,
+    IncorrectPointerTags,
+    PointerOffsetTooLarge,
+    PtrPackLowBitsNotZero,
+    JumpingOutOfProgram,
+}
 
 impl State {
-    pub fn new(
-        world: Box<dyn World>,
-        address: H160,
-        program: Arc<[Instruction]>,
-        code_page: Arc<[U256]>,
-    ) -> Self {
+    pub fn new(mut world: Box<dyn World>, address: H160, calldata: Vec<u8>) -> Self {
+        let (program, code_page) = decommit(&mut *world, address_into_u256(address));
+        let mut registers: [U256; 16] = Default::default();
+        registers[1] = instruction_handlers::FatPointer {
+            memory_page: 0,
+            offset: 0,
+            start: 0,
+            length: calldata.len() as u32,
+        }
+        .into_u256();
         Self {
             world: ModifiedWorld::new(world),
-            registers: Default::default(),
-            register_pointer_flags: 0,
+            registers,
+            register_pointer_flags: 1 << 1, // calldata is a pointer
             flags: Flags::new(false, false, false),
-            current_frame: Callframe::new(address, program, code_page, 0, 1, 4000),
+            current_frame: Callframe::new(address, program, code_page, 1, 2, 4000),
             previous_frames: vec![],
-            heaps: vec![vec![], vec![]],
+            heaps: vec![calldata, vec![], vec![]],
         }
     }
 
@@ -129,33 +144,29 @@ impl State {
         self.previous_frames.push((instruction_pointer, new_frame));
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> ExecutionResult {
         let mut instruction: *const Instruction = &self.current_frame.program[0];
 
-        if self.use_gas(1) {
-            return instruction_handlers::panic();
-        }
+        self.use_gas(1)?;
 
         // Instructions check predication for the *next* instruction, not the current one.
         // Thus, we can't just blindly run the first instruction.
         unsafe {
             while !(*instruction).arguments.predicate.satisfied(&self.flags) {
                 instruction = instruction.add(1);
-                if self.use_gas(1) {
-                    return instruction_handlers::panic();
-                }
+                self.use_gas(1)?;
             }
             ((*instruction).handler)(self, instruction)
         }
     }
 
     #[inline(always)]
-    pub(crate) fn use_gas(&mut self, amount: u32) -> bool {
+    pub(crate) fn use_gas(&mut self, amount: u32) -> Result<(), Panic> {
         if self.current_frame.gas >= amount {
             self.current_frame.gas -= amount;
-            false
+            Ok(())
         } else {
-            true
+            Err(Panic::OutOfGas)
         }
     }
 }
@@ -166,7 +177,9 @@ pub fn end_execution() -> Instruction {
         arguments: Arguments::default(),
     }
 }
-fn end_execution_handler(_state: &mut State, _: *const Instruction) {}
+fn end_execution_handler(_state: &mut State, _: *const Instruction) -> ExecutionResult {
+    Ok(())
+}
 
 pub fn jump_to_beginning() -> Instruction {
     Instruction {
@@ -174,13 +187,13 @@ pub fn jump_to_beginning() -> Instruction {
         arguments: Arguments::default(),
     }
 }
-fn jump_to_beginning_handler(state: &mut State, _: *const Instruction) {
+fn jump_to_beginning_handler(state: &mut State, _: *const Instruction) -> ExecutionResult {
     let first_instruction = &state.current_frame.program[0];
     let first_handler = first_instruction.handler;
-    first_handler(state, first_instruction);
+    first_handler(state, first_instruction)
 }
 
-pub fn run_arbitrary_program(input: &[u8]) {
+pub fn run_arbitrary_program(input: &[u8]) -> ExecutionResult {
     let mut u = Unstructured::new(input);
     let mut program: Vec<Instruction> = Arbitrary::arbitrary(&mut u).unwrap();
 
@@ -203,11 +216,6 @@ pub fn run_arbitrary_program(input: &[u8]) {
         }
     }
 
-    let mut state = State::new(
-        Box::new(FakeWorld),
-        H160::zero(),
-        program.into(),
-        Arc::new([]),
-    );
-    state.run();
+    let mut state = State::new(Box::new(FakeWorld), H160::zero(), vec![]);
+    state.run()
 }

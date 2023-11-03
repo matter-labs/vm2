@@ -1,32 +1,28 @@
-use super::{
-    common::{instruction_boilerplate, run_next_instruction},
-    ret,
-};
+use super::common::{instruction_boilerplate, run_next_instruction};
 use crate::{
     addressing_modes::{
         Arguments, Destination, DestinationWriter, Register1, Register2, Source, SourceWriter,
     },
-    Instruction, Predicate, State,
+    state::ExecutionResult,
+    Instruction, Predicate, State, World,
 };
 
-fn sstore(state: &mut State, instruction: *const Instruction) {
+fn sstore(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
     let args = unsafe { &(*instruction).arguments };
 
     let key = Register1::get(args, state);
     let value = Register2::get(args, state);
 
-    if state.use_gas(1) {
-        return ret::panic();
-    }
+    state.use_gas(1)?;
 
     state
         .world
         .write_storage(state.current_frame.address, key, value);
 
-    run_next_instruction(state, instruction);
+    run_next_instruction(state, instruction)
 }
 
-fn sload(state: &mut State, instruction: *const Instruction) {
+fn sload(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
     instruction_boilerplate(state, instruction, |state, args| {
         let key = Register1::get(args, state);
         let value = state.world.read_storage(state.current_frame.address, key);

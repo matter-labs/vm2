@@ -4,34 +4,30 @@ use crate::{
         RelativeStack, Source, SourceWriter,
     },
     predication::Predicate,
-    state::{Instruction, State},
+    state::{ExecutionResult, Instruction, Panic, State},
 };
 
-fn jump<In: Source>(state: &mut State, mut instruction: *const Instruction) {
+fn jump<In: Source>(state: &mut State, mut instruction: *const Instruction) -> ExecutionResult {
     unsafe {
         let target = In::get(&(*instruction).arguments, state).low_u32() as u16 as usize;
         if let Some(i) = state.current_frame.program.get(target) {
             instruction = i;
         } else {
-            return ret::panic();
+            return Err(Panic::JumpingOutOfProgram);
         }
 
-        if state.use_gas(1) {
-            return ret::panic();
-        }
+        state.use_gas(1)?;
 
         while !(*instruction).arguments.predicate.satisfied(&state.flags) {
             instruction = instruction.add(1);
-            if state.use_gas(1) {
-                return ret::panic();
-            }
+            state.use_gas(1)?;
         }
 
         ((*instruction).handler)(state, instruction)
     }
 }
 
-use super::{monomorphization::*, ret};
+use super::monomorphization::*;
 
 impl Instruction {
     pub fn from_jump(source: AnySource, predicate: Predicate) -> Self {

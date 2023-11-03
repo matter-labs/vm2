@@ -17,6 +17,22 @@ pub struct ModifiedWorld {
     )>,
 }
 
+impl World for ModifiedWorld {
+    fn decommit(&mut self, hash: U256) -> (Arc<[Instruction]>, Arc<[U256]>) {
+        self.decommitted_hashes
+            .insert(hash, (), self.snapshots.is_empty());
+        self.world.decommit(hash)
+    }
+
+    fn read_storage(&mut self, contract: H160, key: U256) -> U256 {
+        self.storage_changes
+            .as_ref()
+            .get(&(contract, key))
+            .cloned()
+            .unwrap_or_else(|| self.world.read_storage(contract, key))
+    }
+}
+
 impl ModifiedWorld {
     pub fn new(world: Box<dyn World>) -> Self {
         Self {
@@ -46,22 +62,8 @@ impl ModifiedWorld {
         self.decommitted_hashes.forget(decommit);
     }
 
-    pub fn read_storage(&mut self, contract: H160, key: U256) -> U256 {
-        self.storage_changes
-            .as_ref()
-            .get(&(contract, key))
-            .cloned()
-            .unwrap_or_else(|| self.world.read_storage(contract, key))
-    }
-
     pub fn write_storage(&mut self, contract: H160, key: U256, value: U256) {
         self.storage_changes
             .insert((contract, key), value, self.snapshots.is_empty())
-    }
-
-    pub fn decommit(&mut self, hash: U256) -> (Arc<[Instruction]>, Arc<[U256]>) {
-        self.decommitted_hashes
-            .insert(hash, (), self.snapshots.is_empty());
-        self.world.decommit(hash)
     }
 }

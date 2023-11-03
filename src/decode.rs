@@ -1,24 +1,26 @@
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, CodePage, Immediate1,
-        Register, Register1, Register2, RegisterAndImmediate, RelativeStack,
+        Register, Register1, Register2, RegisterAndImmediate, RelativeStack, Source, SourceWriter,
     },
     end_execution,
     instruction_handlers::{
         Add, And, AuxHeap, Div, Heap, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub, RotateLeft,
         RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
     },
-    jump_to_beginning, Instruction, World,
+    jump_to_beginning,
+    state::{ExecutionResult, Panic},
+    Instruction, State,
 };
 use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
-    ImmMemHandlerFlags,
+    ImmMemHandlerFlags, Opcode,
     Operand::*,
     RegOrImmFlags, SET_FLAGS_FLAG_IDX, SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES,
     SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
 };
 
-pub fn decode_program<W: World>(raw: &[u64]) -> Vec<Instruction> {
+pub fn decode_program(raw: &[u64]) -> Vec<Instruction> {
     raw.iter()
         .take(1 << 16)
         .map(|i| decode(*i))
@@ -29,6 +31,23 @@ pub fn decode_program<W: World>(raw: &[u64]) -> Vec<Instruction> {
             end_execution()
         }))
         .collect()
+}
+
+fn unimplemented_instruction(variant: Opcode) -> Instruction {
+    let mut arguments = Default::default();
+    let variant_as_number: u16 = unsafe { std::mem::transmute(variant) };
+    Immediate1(variant_as_number).write_source(&mut arguments);
+    Instruction {
+        handler: unimplemented_handler,
+        arguments,
+    }
+}
+fn unimplemented_handler(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
+    let variant: Opcode = unsafe {
+        std::mem::transmute(Immediate1::get(&(*instruction).arguments, state).low_u32() as u16)
+    };
+    eprintln!("Unimplemented instruction: {:?}!", variant);
+    Err(Panic::JumpingOutOfProgram)
 }
 
 fn decode(raw: u64) -> Instruction {
@@ -125,42 +144,42 @@ fn decode(raw: u64) -> Instruction {
             zkevm_opcode_defs::ShiftOpcode::Ror => binop!(RotateRight, ()),
         },
         zkevm_opcode_defs::Opcode::Jump(_) => Instruction::from_jump(src1, predicate),
-        zkevm_opcode_defs::Opcode::Context(x) => match x {
-            zkevm_opcode_defs::ContextOpcode::This => todo!(),
-            zkevm_opcode_defs::ContextOpcode::Caller => todo!(),
-            zkevm_opcode_defs::ContextOpcode::CodeAddress => todo!(),
-            zkevm_opcode_defs::ContextOpcode::Meta => todo!(),
-            zkevm_opcode_defs::ContextOpcode::ErgsLeft => todo!(),
-            zkevm_opcode_defs::ContextOpcode::Sp => todo!(),
-            zkevm_opcode_defs::ContextOpcode::GetContextU128 => todo!(),
-            zkevm_opcode_defs::ContextOpcode::SetContextU128 => todo!(),
-            zkevm_opcode_defs::ContextOpcode::SetErgsPerPubdataByte => todo!(),
-            zkevm_opcode_defs::ContextOpcode::IncrementTxNumber => todo!(),
-        },
+        /*zkevm_opcode_defs::Opcode::Context(x) => match x {
+            zkevm_opcode_defs::ContextOpcode::This => ,
+            zkevm_opcode_defs::ContextOpcode::Caller => ,
+            zkevm_opcode_defs::ContextOpcode::CodeAddress => ,
+            zkevm_opcode_defs::ContextOpcode::Meta => ,
+            zkevm_opcode_defs::ContextOpcode::ErgsLeft => ,
+            zkevm_opcode_defs::ContextOpcode::Sp => ,
+            zkevm_opcode_defs::ContextOpcode::GetContextU128 => ,
+            zkevm_opcode_defs::ContextOpcode::SetContextU128 => ,
+            zkevm_opcode_defs::ContextOpcode::SetErgsPerPubdataByte => ,
+            zkevm_opcode_defs::ContextOpcode::IncrementTxNumber => ,
+        },*/
         zkevm_opcode_defs::Opcode::Ptr(x) => match x {
             zkevm_opcode_defs::PtrOpcode::Add => ptr!(PtrAdd),
             zkevm_opcode_defs::PtrOpcode::Sub => ptr!(PtrSub),
             zkevm_opcode_defs::PtrOpcode::Pack => ptr!(PtrPack),
             zkevm_opcode_defs::PtrOpcode::Shrink => ptr!(PtrShrink),
         },
-        zkevm_opcode_defs::Opcode::NearCall(_) => todo!(),
+        /*zkevm_opcode_defs::Opcode::NearCall(_) => ,
         zkevm_opcode_defs::Opcode::FarCall(kind) => match kind {
-            zkevm_opcode_defs::FarCallOpcode::Normal => todo!(),
-            zkevm_opcode_defs::FarCallOpcode::Delegate => todo!(),
-            zkevm_opcode_defs::FarCallOpcode::Mimic => todo!(),
+            zkevm_opcode_defs::FarCallOpcode::Normal => ,
+            zkevm_opcode_defs::FarCallOpcode::Delegate => ,
+            zkevm_opcode_defs::FarCallOpcode::Mimic => ,
         },
         zkevm_opcode_defs::Opcode::Ret(kind) => match kind {
-            zkevm_opcode_defs::RetOpcode::Ok => todo!(),
-            zkevm_opcode_defs::RetOpcode::Revert => todo!(),
-            zkevm_opcode_defs::RetOpcode::Panic => todo!(),
+            zkevm_opcode_defs::RetOpcode::Ok => ,
+            zkevm_opcode_defs::RetOpcode::Revert => ,
+            zkevm_opcode_defs::RetOpcode::Panic => ,
         },
         zkevm_opcode_defs::Opcode::Log(x) => match x {
-            zkevm_opcode_defs::LogOpcode::StorageRead => todo!(),
-            zkevm_opcode_defs::LogOpcode::StorageWrite => todo!(),
-            zkevm_opcode_defs::LogOpcode::ToL1Message => todo!(),
-            zkevm_opcode_defs::LogOpcode::Event => todo!(),
-            zkevm_opcode_defs::LogOpcode::PrecompileCall => todo!(),
-        },
+            zkevm_opcode_defs::LogOpcode::StorageRead => ,
+            zkevm_opcode_defs::LogOpcode::StorageWrite => ,
+            zkevm_opcode_defs::LogOpcode::ToL1Message => ,
+            zkevm_opcode_defs::LogOpcode::Event => ,
+            zkevm_opcode_defs::LogOpcode::PrecompileCall => ,
+        },*/
         zkevm_opcode_defs::Opcode::UMA(x) => {
             let increment = parsed.variant.flags[UMA_INCREMENT_FLAG_IDX];
             match x {
@@ -196,7 +215,7 @@ fn decode(raw: u64) -> Instruction {
                 ),
             }
         }
-        zkevm_opcode_defs::Opcode::Invalid(_) => todo!(),
+        //zkevm_opcode_defs::Opcode::Invalid(_) => ,
         zkevm_opcode_defs::Opcode::Nop(_) => {
             let no_sp_movement = AdvanceStackPointer(RegisterAndImmediate {
                 immediate: 0,
@@ -215,5 +234,7 @@ fn decode(raw: u64) -> Instruction {
                 },
             )
         }
+
+        x => unimplemented_instruction(x),
     }
 }
