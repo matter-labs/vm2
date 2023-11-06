@@ -35,12 +35,14 @@ pub struct Callframe {
     // TODO: joint allocate these.
     pub stack: Box<[U256; 1 << 16]>,
     pub stack_pointer_flags: Box<Bitset>,
-    pub sp: u16,
 
     pub heap: u32,
     pub aux_heap: u32,
 
+    pub sp: u16,
     pub gas: u32,
+
+    near_calls: Vec<(*const Instruction, u16, u32)>,
 }
 
 impl Addressable for State {
@@ -85,12 +87,19 @@ impl Callframe {
                 .try_into()
                 .unwrap(),
             stack_pointer_flags: Default::default(),
-            sp: 1024,
             code_page,
             heap,
             aux_heap,
+            sp: 1024,
             gas,
+            near_calls: vec![],
         }
+    }
+
+    pub(crate) fn push_near_call(&mut self, gas_to_call: u32, old_pc: *const Instruction) {
+        self.near_calls
+            .push((old_pc, self.sp, self.gas - gas_to_call));
+        self.gas = gas_to_call;
     }
 }
 

@@ -1,6 +1,8 @@
 use super::pointer::FatPointer;
 use crate::{
-    addressing_modes::{Arguments, Immediate1, Register1, Register2, Source, SourceWriter},
+    addressing_modes::{
+        Arguments, Immediate1, Immediate2, Register1, Register2, Source, SourceWriter,
+    },
     decommit::decommit,
     predication::Flags,
     state::{ExecutionResult, Panic},
@@ -102,6 +104,38 @@ impl FatPointer {
     }
 }
 
+fn near_call(state: &mut State, mut instruction: *const Instruction) -> ExecutionResult {
+    let args = unsafe { &(*instruction).arguments };
+
+    let gas_to_pass = Register1::get(args, state).0[0] as u32;
+    let destination = Immediate1::get(args, state);
+    let error_handler = Immediate2::get(args, state);
+
+    let new_frame_gas = if gas_to_pass == 0 {
+        state.current_frame.gas
+    } else {
+        gas_to_pass.min(state.current_frame.gas)
+    };
+    state
+        .current_frame
+        .push_near_call(new_frame_gas, instruction);
+
+    state.flags = Flags::new(false, false, false);
+
+    // Jump!
+    unsafe {
+        instruction = &state.current_frame.program[destination.low_u32() as usize];
+        state.use_gas(1)?;
+
+        while !(*instruction).arguments.predicate.satisfied(&state.flags) {
+            instruction = instruction.add(1);
+            state.use_gas(1)?;
+        }
+
+        ((*instruction).handler)(state, instruction)
+    }
+}
+
 use super::monomorphization::*;
 
 impl Instruction {
@@ -120,6 +154,26 @@ impl Instruction {
 
         Self {
             handler: monomorphize!(far_call match_boolean is_static),
+            arguments: args,
+        }
+    }
+}
+
+impl Instruction {
+    pub fn from_near_call(
+        gas: Register1,
+        destination: Immediate1,
+        error_handler: Immediate2,
+        predicate: Predicate,
+    ) -> Self {
+        let mut args = Arguments::default();
+        gas.write_source(&mut args);
+        destination.write_source(&mut args);
+        error_handler.write_source(&mut args);
+        args.predicate = predicate;
+
+        Self {
+            handler: near_call,
             arguments: args,
         }
     }

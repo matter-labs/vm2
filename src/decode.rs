@@ -1,7 +1,8 @@
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, CodePage, Immediate1,
-        Register, Register1, Register2, RegisterAndImmediate, RelativeStack, Source, SourceWriter,
+        Immediate2, Register, Register1, Register2, RegisterAndImmediate, RelativeStack, Source,
+        SourceWriter,
     },
     end_execution,
     instruction_handlers::{
@@ -171,8 +172,13 @@ fn decode(raw: u64) -> Instruction {
             zkevm_opcode_defs::PtrOpcode::Pack => ptr!(PtrPack),
             zkevm_opcode_defs::PtrOpcode::Shrink => ptr!(PtrShrink),
         },
-        /*zkevm_opcode_defs::Opcode::NearCall(_) => ,
-        zkevm_opcode_defs::Opcode::FarCall(kind) => match kind {
+        zkevm_opcode_defs::Opcode::NearCall(_) => Instruction::from_near_call(
+            Register1(Register::new(parsed.src0_reg_idx)),
+            Immediate1(parsed.imm_0),
+            Immediate2(parsed.imm_1),
+            predicate,
+        ),
+        /*zkevm_opcode_defs::Opcode::FarCall(kind) => match kind {
             zkevm_opcode_defs::FarCallOpcode::Normal => ,
             zkevm_opcode_defs::FarCallOpcode::Delegate => ,
             zkevm_opcode_defs::FarCallOpcode::Mimic => ,
