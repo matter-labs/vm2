@@ -3,7 +3,7 @@ use crate::{
     addressing_modes::{
         Arguments, Immediate1, Immediate2, Register1, Register2, Source, SourceWriter,
     },
-    decommit::decommit,
+    decommit::{decommit, u256_into_address},
     predication::Flags,
     state::{ExecutionResult, Panic},
     Instruction, Predicate, State,
@@ -83,15 +83,21 @@ fn far_call<const IS_STATIC: bool>(
     };
 
     state.current_frame.gas -= new_frame_gas;
-    state.push_frame(instruction, H160::zero(), program, code_page, new_frame_gas);
+    state.push_frame(
+        instruction,
+        u256_into_address(destination_address),
+        program,
+        code_page,
+        new_frame_gas,
+    );
 
     // TODO clear context register
 
     state.flags = Flags::new(false, false, false);
 
     state.registers = [U256::zero(); 16];
-    state.registers[0] = pointer_to_arguments.into_u256();
-    state.register_pointer_flags = 1;
+    state.registers[1] = pointer_to_arguments.into_u256();
+    state.register_pointer_flags = 2;
 
     state.run()
 }

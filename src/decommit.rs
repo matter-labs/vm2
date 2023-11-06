@@ -41,3 +41,11 @@ pub(crate) fn address_into_u256(address: H160) -> U256 {
     buffer[12..].copy_from_slice(address.as_bytes());
     U256::from_big_endian(&buffer)
 }
+
+pub(crate) fn u256_into_address(source: U256) -> H160 {
+    let mut result = H160::zero();
+    let mut bytes = [0; 32];
+    source.to_big_endian(&mut bytes);
+    result.assign_from_slice(&bytes[12..]);
+    result
+}

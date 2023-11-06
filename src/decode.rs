@@ -178,12 +178,19 @@ fn decode(raw: u64) -> Instruction {
             Immediate2(parsed.imm_1),
             predicate,
         ),
-        /*zkevm_opcode_defs::Opcode::FarCall(kind) => match kind {
-            zkevm_opcode_defs::FarCallOpcode::Normal => ,
-            zkevm_opcode_defs::FarCallOpcode::Delegate => ,
-            zkevm_opcode_defs::FarCallOpcode::Mimic => ,
+        zkevm_opcode_defs::Opcode::FarCall(kind) => match kind {
+            zkevm_opcode_defs::FarCallOpcode::Normal => Instruction::from_far_call(
+                src1.try_into().unwrap(),
+                src2,
+                Immediate1(parsed.imm_0),
+                false,
+                predicate,
+            ),
+            x => unimplemented_instruction(zkevm_opcode_defs::Opcode::FarCall(x)),
+            //zkevm_opcode_defs::FarCallOpcode::Delegate => todo!(),
+            //zkevm_opcode_defs::FarCallOpcode::Mimic => todo!(),
         },
-        zkevm_opcode_defs::Opcode::Ret(kind) => match kind {
+        /*zkevm_opcode_defs::Opcode::Ret(kind) => match kind {
             zkevm_opcode_defs::RetOpcode::Ok => ,
             zkevm_opcode_defs::RetOpcode::Revert => ,
             zkevm_opcode_defs::RetOpcode::Panic => ,
