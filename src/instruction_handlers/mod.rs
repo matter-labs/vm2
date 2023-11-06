@@ -8,6 +8,7 @@ pub use pointer::{PtrAdd, PtrPack, PtrShrink, PtrSub};
 mod binop;
 mod call;
 mod common;
+mod context;
 mod heap_access;
 mod jump;
 mod monomorphization;

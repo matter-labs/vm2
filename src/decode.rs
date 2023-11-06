@@ -144,18 +144,27 @@ fn decode(raw: u64) -> Instruction {
             zkevm_opcode_defs::ShiftOpcode::Ror => binop!(RotateRight, ()),
         },
         zkevm_opcode_defs::Opcode::Jump(_) => Instruction::from_jump(src1, predicate),
-        /*zkevm_opcode_defs::Opcode::Context(x) => match x {
-            zkevm_opcode_defs::ContextOpcode::This => ,
-            zkevm_opcode_defs::ContextOpcode::Caller => ,
-            zkevm_opcode_defs::ContextOpcode::CodeAddress => ,
-            zkevm_opcode_defs::ContextOpcode::Meta => ,
-            zkevm_opcode_defs::ContextOpcode::ErgsLeft => ,
+        zkevm_opcode_defs::Opcode::Context(x) => match x {
+            zkevm_opcode_defs::ContextOpcode::This => {
+                Instruction::from_this(out.try_into().unwrap())
+            }
+            zkevm_opcode_defs::ContextOpcode::Caller => {
+                Instruction::from_caller(out.try_into().unwrap())
+            }
+            zkevm_opcode_defs::ContextOpcode::CodeAddress => {
+                Instruction::from_code_address(out.try_into().unwrap())
+            }
+            zkevm_opcode_defs::ContextOpcode::ErgsLeft => {
+                Instruction::from_ergs_left(out.try_into().unwrap())
+            }
+            /*zkevm_opcode_defs::ContextOpcode::Meta => ,
             zkevm_opcode_defs::ContextOpcode::Sp => ,
             zkevm_opcode_defs::ContextOpcode::GetContextU128 => ,
             zkevm_opcode_defs::ContextOpcode::SetContextU128 => ,
             zkevm_opcode_defs::ContextOpcode::SetErgsPerPubdataByte => ,
-            zkevm_opcode_defs::ContextOpcode::IncrementTxNumber => ,
-        },*/
+            zkevm_opcode_defs::ContextOpcode::IncrementTxNumber => ,*/
+            x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Context(x)),
+        },
         zkevm_opcode_defs::Opcode::Ptr(x) => match x {
             zkevm_opcode_defs::PtrOpcode::Add => ptr!(PtrAdd),
             zkevm_opcode_defs::PtrOpcode::Sub => ptr!(PtrSub),

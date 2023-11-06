@@ -27,6 +27,8 @@ pub struct State {
 
 pub struct Callframe {
     pub address: H160,
+    pub code_address: H160,
+    pub caller: H160,
     pub program: Arc<[Instruction]>,
     pub code_page: Arc<[U256]>,
 
@@ -65,6 +67,8 @@ impl Addressable for State {
 impl Callframe {
     fn new(
         address: H160,
+        code_address: H160,
+        caller: H160,
         program: Arc<[Instruction]>,
         code_page: Arc<[U256]>,
         heap: u32,
@@ -73,6 +77,8 @@ impl Callframe {
     ) -> Self {
         Self {
             address,
+            code_address,
+            caller,
             program,
             stack: vec![U256::zero(); 1 << 16]
                 .into_boxed_slice()
@@ -121,7 +127,16 @@ impl State {
             registers,
             register_pointer_flags: 1 << 1, // calldata is a pointer
             flags: Flags::new(false, false, false),
-            current_frame: Callframe::new(address, program, code_page, 1, 2, 4000),
+            current_frame: Callframe::new(
+                address,
+                address,
+                H160::zero(),
+                program,
+                code_page,
+                1,
+                2,
+                4000,
+            ),
             previous_frames: vec![],
             heaps: vec![calldata, vec![], vec![]],
         }
@@ -137,8 +152,16 @@ impl State {
     ) {
         let new_heap = self.heaps.len() as u32;
         self.heaps.extend([vec![], vec![]]);
-        let mut new_frame =
-            Callframe::new(address, program, code_page, new_heap, new_heap + 1, gas);
+        let mut new_frame = Callframe::new(
+            address,
+            address,
+            self.current_frame.address,
+            program,
+            code_page,
+            new_heap,
+            new_heap + 1,
+            gas,
+        );
 
         std::mem::swap(&mut new_frame, &mut self.current_frame);
         self.previous_frames.push((instruction_pointer, new_frame));
