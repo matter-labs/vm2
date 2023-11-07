@@ -158,10 +158,14 @@ fn decode(raw: u64) -> Instruction {
             zkevm_opcode_defs::ContextOpcode::ErgsLeft => {
                 Instruction::from_ergs_left(out.try_into().unwrap())
             }
+            zkevm_opcode_defs::ContextOpcode::GetContextU128 => {
+                Instruction::from_context_u128(out.try_into().unwrap())
+            }
+            zkevm_opcode_defs::ContextOpcode::SetContextU128 => {
+                Instruction::from_set_context_u128(src1.try_into().unwrap())
+            }
             /*zkevm_opcode_defs::ContextOpcode::Meta => ,
             zkevm_opcode_defs::ContextOpcode::Sp => ,
-            zkevm_opcode_defs::ContextOpcode::GetContextU128 => ,
-            zkevm_opcode_defs::ContextOpcode::SetContextU128 => ,
             zkevm_opcode_defs::ContextOpcode::SetErgsPerPubdataByte => ,
             zkevm_opcode_defs::ContextOpcode::IncrementTxNumber => ,*/
             x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Context(x)),

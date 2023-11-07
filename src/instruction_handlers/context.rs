@@ -1,6 +1,8 @@
 use super::common::instruction_boilerplate;
 use crate::{
-    addressing_modes::{Arguments, Destination, DestinationWriter, Register1},
+    addressing_modes::{
+        Arguments, Destination, DestinationWriter, Register1, Source, SourceWriter,
+    },
     decommit::address_into_u256,
     state::ExecutionResult,
     Instruction, State,
@@ -45,6 +47,20 @@ impl ContextOp for ErgsLeft {
     }
 }
 
+struct U128;
+impl ContextOp for U128 {
+    fn get(state: &State) -> U256 {
+        state.current_frame.context_u128.into()
+    }
+}
+
+fn set_context_u128(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
+    instruction_boilerplate(state, instruction, |state, args| {
+        let value = Register1::get(args, state).low_u128();
+        state.set_context_u128(value)
+    })
+}
+
 impl Instruction {
     fn from_context<Op: ContextOp>(out: Register1) -> Self {
         let mut arguments = Arguments::default();
@@ -67,5 +83,16 @@ impl Instruction {
     }
     pub fn from_ergs_left(out: Register1) -> Self {
         Self::from_context::<ErgsLeft>(out)
+    }
+    pub fn from_context_u128(out: Register1) -> Self {
+        Self::from_context::<U128>(out)
+    }
+    pub fn from_set_context_u128(src: Register1) -> Self {
+        let mut arguments = Arguments::default();
+        src.write_source(&mut arguments);
+        Self {
+            handler: set_context_u128,
+            arguments: arguments,
+        }
     }
 }

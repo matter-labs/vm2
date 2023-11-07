@@ -23,6 +23,8 @@ pub struct State {
     previous_frames: Vec<(*const Instruction, Callframe)>,
 
     pub(crate) heaps: Vec<Vec<u8>>,
+
+    context_u128: u128,
 }
 
 pub struct Callframe {
@@ -31,6 +33,7 @@ pub struct Callframe {
     pub caller: H160,
     pub program: Arc<[Instruction]>,
     pub code_page: Arc<[U256]>,
+    pub context_u128: u128,
 
     // TODO: joint allocate these.
     pub stack: Box<[U256; 1 << 16]>,
@@ -76,12 +79,14 @@ impl Callframe {
         heap: u32,
         aux_heap: u32,
         gas: u32,
+        context_u128: u128,
     ) -> Self {
         Self {
             address,
             code_address,
             caller,
             program,
+            context_u128,
             stack: vec![U256::zero(); 1 << 16]
                 .into_boxed_slice()
                 .try_into()
@@ -145,9 +150,11 @@ impl State {
                 1,
                 2,
                 4000,
+                0,
             ),
             previous_frames: vec![],
             heaps: vec![calldata, vec![], vec![]],
+            context_u128: 0,
         }
     }
 
@@ -170,10 +177,16 @@ impl State {
             new_heap,
             new_heap + 1,
             gas,
+            self.context_u128,
         );
+        self.context_u128 = 0;
 
         std::mem::swap(&mut new_frame, &mut self.current_frame);
         self.previous_frames.push((instruction_pointer, new_frame));
+    }
+
+    pub(crate) fn set_context_u128(&mut self, value: u128) {
+        self.context_u128 = value;
     }
 
     pub fn run(&mut self) -> ExecutionResult {
