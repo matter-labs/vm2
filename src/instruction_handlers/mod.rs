@@ -11,9 +11,11 @@ mod common;
 mod context;
 mod heap_access;
 mod jump;
+mod keccak;
 mod monomorphization;
 mod nop;
 mod pointer;
+mod precompiles;
 mod ret;
 mod storage;
 

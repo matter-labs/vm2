@@ -198,14 +198,17 @@ fn decode(raw: u64) -> Instruction {
             zkevm_opcode_defs::RetOpcode::Ok => ,
             zkevm_opcode_defs::RetOpcode::Revert => ,
             zkevm_opcode_defs::RetOpcode::Panic => ,
-        },
+        },*/
         zkevm_opcode_defs::Opcode::Log(x) => match x {
-            zkevm_opcode_defs::LogOpcode::StorageRead => ,
+            /*zkevm_opcode_defs::LogOpcode::StorageRead => ,
             zkevm_opcode_defs::LogOpcode::StorageWrite => ,
             zkevm_opcode_defs::LogOpcode::ToL1Message => ,
-            zkevm_opcode_defs::LogOpcode::Event => ,
-            zkevm_opcode_defs::LogOpcode::PrecompileCall => ,
-        },*/
+            zkevm_opcode_defs::LogOpcode::Event => ,*/
+            zkevm_opcode_defs::LogOpcode::PrecompileCall => {
+                Instruction::from_precompile_call(src1.try_into().unwrap(), src2)
+            }
+            x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Log(x)),
+        },
         zkevm_opcode_defs::Opcode::UMA(x) => {
             let increment = parsed.variant.flags[UMA_INCREMENT_FLAG_IDX];
             match x {

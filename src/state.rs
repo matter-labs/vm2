@@ -130,7 +130,7 @@ impl State {
         let (program, code_page) = decommit(&mut *world, address_into_u256(address));
         let mut registers: [U256; 16] = Default::default();
         registers[1] = instruction_handlers::FatPointer {
-            memory_page: 0,
+            memory_page: 1,
             offset: 0,
             start: 0,
             length: calldata.len() as u32,
@@ -147,13 +147,16 @@ impl State {
                 H160::zero(),
                 program,
                 code_page,
-                1,
                 2,
+                3,
                 4000,
                 0,
             ),
             previous_frames: vec![],
-            heaps: vec![calldata, vec![], vec![]],
+
+            // The first heap can never be used because heap zero
+            // means the current heap in precompile calls
+            heaps: vec![vec![], calldata, vec![], vec![]],
             context_u128: 0,
         }
     }
