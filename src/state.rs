@@ -20,6 +20,9 @@ pub struct State {
     pub flags: Flags,
 
     pub current_frame: Callframe,
+
+    /// Contains pointers to the far call instructions currently being executed.
+    /// They are needed to continue execution from the correct spot upon return.
     previous_frames: Vec<(*const Instruction, Callframe)>,
 
     pub(crate) heaps: Vec<Vec<u8>>,
@@ -33,7 +36,7 @@ pub struct Callframe {
     pub caller: H160,
     pub program: Arc<[Instruction]>,
     pub code_page: Arc<[U256]>,
-    pub context_u128: u128,
+    context_u128: u128,
 
     // TODO: joint allocate these.
     pub stack: Box<[U256; 1 << 16]>,
@@ -106,6 +109,14 @@ impl Callframe {
             .push((old_pc, self.sp, self.gas - gas_to_call));
         self.gas = gas_to_call;
     }
+
+    pub(crate) fn pop_near_call(&mut self) -> Option<*const Instruction> {
+        self.near_calls.pop().map(|(pc, sp, gas)| {
+            self.sp = sp;
+            self.gas = gas;
+            pc
+        })
+    }
 }
 
 pub struct Instruction {
@@ -149,7 +160,7 @@ impl State {
                 code_page,
                 2,
                 3,
-                4000,
+                u32::MAX,
                 0,
             ),
             previous_frames: vec![],
@@ -188,13 +199,29 @@ impl State {
         self.previous_frames.push((instruction_pointer, new_frame));
     }
 
+    pub(crate) fn pop_frame(&mut self) -> *const Instruction {
+        let (pc, frame) = self.previous_frames.pop().unwrap();
+        self.current_frame = frame;
+        pc
+    }
+
     pub(crate) fn set_context_u128(&mut self, value: u128) {
         self.context_u128 = value;
     }
 
-    pub fn run(&mut self) -> ExecutionResult {
-        let mut instruction: *const Instruction = &self.current_frame.program[0];
+    pub(crate) fn get_context_u128(&self) -> u128 {
+        self.current_frame.context_u128
+    }
 
+    pub fn run(&mut self) -> ExecutionResult {
+        let instruction: *const Instruction = &self.current_frame.program[0];
+        self.run_starting_from(instruction)
+    }
+
+    pub(crate) fn run_starting_from(
+        &mut self,
+        mut instruction: *const Instruction,
+    ) -> ExecutionResult {
         self.use_gas(1)?;
 
         // Instructions check predication for the *next* instruction, not the current one.

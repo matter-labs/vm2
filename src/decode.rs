@@ -194,11 +194,12 @@ fn decode(raw: u64) -> Instruction {
             //zkevm_opcode_defs::FarCallOpcode::Delegate => todo!(),
             //zkevm_opcode_defs::FarCallOpcode::Mimic => todo!(),
         },
-        /*zkevm_opcode_defs::Opcode::Ret(kind) => match kind {
-            zkevm_opcode_defs::RetOpcode::Ok => ,
-            zkevm_opcode_defs::RetOpcode::Revert => ,
-            zkevm_opcode_defs::RetOpcode::Panic => ,
-        },*/
+        zkevm_opcode_defs::Opcode::Ret(kind) => match kind {
+            zkevm_opcode_defs::RetOpcode::Ok => Instruction::from_ret(src1.try_into().unwrap()),
+            /*zkevm_opcode_defs::RetOpcode::Revert => ,
+            zkevm_opcode_defs::RetOpcode::Panic => ,*/
+            x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Ret(x)),
+        },
         zkevm_opcode_defs::Opcode::Log(x) => match x {
             /*zkevm_opcode_defs::LogOpcode::StorageRead => ,
             zkevm_opcode_defs::LogOpcode::StorageWrite => ,

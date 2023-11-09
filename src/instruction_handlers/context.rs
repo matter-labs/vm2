@@ -50,7 +50,7 @@ impl ContextOp for ErgsLeft {
 struct U128;
 impl ContextOp for U128 {
     fn get(state: &State) -> U256 {
-        state.current_frame.context_u128.into()
+        state.get_context_u128().into()
     }
 }
 
