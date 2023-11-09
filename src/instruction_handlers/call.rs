@@ -61,12 +61,12 @@ fn far_call<const IS_STATIC: bool>(
                 out.narrow();
             }
             FatPointerSource::MakeNewPointerToHeap => {
+                grow_heap::<Heap>(state, out.start + out.length)?;
                 out.memory_page = state.current_frame.heap;
-                // TODO grow heap
             }
             FatPointerSource::MakeNewPointerToAuxHeap => {
+                grow_heap::<AuxHeap>(state, out.start + out.length)?;
                 out.memory_page = state.current_frame.aux_heap;
-                // TODO grow heap
             }
         }
 
@@ -142,7 +142,7 @@ fn near_call(state: &mut State, mut instruction: *const Instruction) -> Executio
     }
 }
 
-use super::monomorphization::*;
+use super::{heap_access::grow_heap, monomorphization::*, AuxHeap, Heap};
 
 impl Instruction {
     pub fn from_far_call(

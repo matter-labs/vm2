@@ -81,7 +81,7 @@ fn store<H: HeapFromState, In1: Source, const INCREMENT: bool>(
     run_next_instruction(state, instruction)
 }
 
-fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<(), Panic> {
+pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<(), Panic> {
     if let Some(growth) = new_bound.checked_sub(H::get_heap(state).len() as u32) {
         // TODO use the proper formula instead
         state.use_gas(growth)?;
