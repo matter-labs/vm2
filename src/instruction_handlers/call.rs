@@ -10,23 +10,6 @@ use crate::{
 };
 use u256::U256;
 
-enum FatPointerSource {
-    MakeNewPointerToHeap,
-    ForwardFatPointer,
-    MakeNewPointerToAuxHeap,
-}
-
-impl FatPointerSource {
-    pub const fn from_abi(value: u8) -> Self {
-        match value {
-            0 => Self::MakeNewPointerToHeap,
-            1 => Self::ForwardFatPointer,
-            2 => Self::MakeNewPointerToAuxHeap,
-            _ => Self::MakeNewPointerToHeap, // default
-        }
-    }
-}
-
 fn far_call<const IS_STATIC: bool>(
     state: &mut State,
     instruction: *const Instruction,
@@ -35,51 +18,17 @@ fn far_call<const IS_STATIC: bool>(
 
     let address_mask: U256 = U256::MAX >> (256 - 160);
 
-    let settings_and_pointer = Register1::get(args, state);
+    let abi = get_far_call_arguments(args, state)?;
     let destination_address = Register2::get(args, state) & address_mask;
     let error_handler = Immediate1::get(args, state);
-
-    let settings = settings_and_pointer.0[3];
-    let gas_to_pass = settings as u32;
-    let [pointer_source, shard_id, constructor_call_byte, system_call_byte] =
-        ((settings >> 32) as u32).to_le_bytes();
-
-    let is_constructor_call = constructor_call_byte != 0;
-    let is_system_call = system_call_byte != 0;
-
-    let pointer_to_arguments = {
-        let mut out = FatPointer::from(settings_and_pointer);
-
-        match FatPointerSource::from_abi(pointer_source) {
-            FatPointerSource::ForwardFatPointer => {
-                if !Register1::is_fat_pointer(args, state) {
-                    return Err(Panic::IncorrectPointerTags);
-                }
-
-                // TODO check validity
-
-                out.narrow();
-            }
-            FatPointerSource::MakeNewPointerToHeap => {
-                grow_heap::<Heap>(state, out.start + out.length)?;
-                out.memory_page = state.current_frame.heap;
-            }
-            FatPointerSource::MakeNewPointerToAuxHeap => {
-                grow_heap::<AuxHeap>(state, out.start + out.length)?;
-                out.memory_page = state.current_frame.aux_heap;
-            }
-        }
-
-        out
-    };
 
     let (program, code_page) = decommit(&mut state.world, destination_address);
 
     let maximum_gas = (state.current_frame.gas as u64 * 63 / 64) as u32;
-    let new_frame_gas = if gas_to_pass == 0 {
+    let new_frame_gas = if abi.gas_to_pass == 0 {
         maximum_gas
     } else {
-        gas_to_pass.min(maximum_gas)
+        abi.gas_to_pass.min(maximum_gas)
     };
 
     state.current_frame.gas -= new_frame_gas;
@@ -96,10 +45,76 @@ fn far_call<const IS_STATIC: bool>(
     state.flags = Flags::new(false, false, false);
 
     state.registers = [U256::zero(); 16];
-    state.registers[1] = pointer_to_arguments.into_u256();
+    state.registers[1] = abi.pointer.into_u256();
     state.register_pointer_flags = 2;
 
     state.run()
+}
+
+pub(crate) struct FarCallABI {
+    pub pointer: FatPointer,
+    pub gas_to_pass: u32,
+    pub shard_id: u8,
+    pub constructor_call: bool,
+    pub system_call: bool,
+}
+
+pub(crate) fn get_far_call_arguments(
+    args: &Arguments,
+    state: &mut State,
+) -> Result<FarCallABI, Panic> {
+    let abi = Register1::get(args, state);
+    let gas_to_pass = abi.0[3] as u32;
+    let settings = (abi.0[3] >> 32) as u32;
+    let [pointer_source, shard_id, constructor_call_byte, system_call_byte] =
+        settings.to_le_bytes();
+
+    let mut pointer = FatPointer::from(abi);
+
+    match FatPointerSource::from_abi(pointer_source) {
+        FatPointerSource::ForwardFatPointer => {
+            if !Register1::is_fat_pointer(args, state) {
+                return Err(Panic::IncorrectPointerTags);
+            }
+
+            // TODO check validity
+
+            pointer.narrow();
+        }
+        FatPointerSource::MakeNewPointerToHeap => {
+            grow_heap::<Heap>(state, pointer.start + pointer.length)?;
+            pointer.memory_page = state.current_frame.heap;
+        }
+        FatPointerSource::MakeNewPointerToAuxHeap => {
+            grow_heap::<AuxHeap>(state, pointer.start + pointer.length)?;
+            pointer.memory_page = state.current_frame.aux_heap;
+        }
+    }
+
+    Ok(FarCallABI {
+        pointer,
+        gas_to_pass,
+        shard_id,
+        constructor_call: constructor_call_byte != 0,
+        system_call: system_call_byte != 0,
+    })
+}
+
+enum FatPointerSource {
+    MakeNewPointerToHeap,
+    ForwardFatPointer,
+    MakeNewPointerToAuxHeap,
+}
+
+impl FatPointerSource {
+    pub const fn from_abi(value: u8) -> Self {
+        match value {
+            0 => Self::MakeNewPointerToHeap,
+            1 => Self::ForwardFatPointer,
+            2 => Self::MakeNewPointerToAuxHeap,
+            _ => Self::MakeNewPointerToHeap, // default
+        }
+    }
 }
 
 impl FatPointer {
