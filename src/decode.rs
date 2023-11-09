@@ -203,9 +203,15 @@ fn decode(raw: u64) -> Instruction {
             x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Ret(x)),
         },
         zkevm_opcode_defs::Opcode::Log(x) => match x {
-            /*zkevm_opcode_defs::LogOpcode::StorageRead => ,
-            zkevm_opcode_defs::LogOpcode::StorageWrite => ,
-            zkevm_opcode_defs::LogOpcode::ToL1Message => ,
+            zkevm_opcode_defs::LogOpcode::StorageRead => Instruction::from_sload(
+                src1.try_into().unwrap(),
+                out.try_into().unwrap(),
+                predicate,
+            ),
+            zkevm_opcode_defs::LogOpcode::StorageWrite => {
+                Instruction::from_sstore(src1.try_into().unwrap(), src2, predicate)
+            }
+            /*zkevm_opcode_defs::LogOpcode::ToL1Message => ,
             zkevm_opcode_defs::LogOpcode::Event => ,*/
             zkevm_opcode_defs::LogOpcode::PrecompileCall => {
                 Instruction::from_precompile_call(src1.try_into().unwrap(), src2, predicate)
