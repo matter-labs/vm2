@@ -8,7 +8,14 @@ use crate::{
 };
 use u256::U256;
 
-fn far_call<const IS_STATIC: bool>(
+#[repr(u8)]
+pub enum CallingMode {
+    Normal,
+    Delegate,
+    Mimic,
+}
+
+fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     state: &mut State,
     instruction: *const Instruction,
 ) -> ExecutionResult {
@@ -30,7 +37,7 @@ fn far_call<const IS_STATIC: bool>(
     };
 
     state.current_frame.gas -= new_frame_gas;
-    state.push_frame(
+    state.push_frame::<CALLING_MODE>(
         instruction,
         u256_into_address(destination_address),
         program,
@@ -158,7 +165,7 @@ fn near_call(state: &mut State, mut instruction: *const Instruction) -> Executio
 use super::{heap_access::grow_heap, monomorphization::*, AuxHeap, Heap};
 
 impl Instruction {
-    pub fn from_far_call(
+    pub fn from_far_call<const MODE: u8>(
         src1: Register1,
         src2: Register2,
         error_handler: Immediate1,
@@ -166,7 +173,7 @@ impl Instruction {
         predicate: Predicate,
     ) -> Self {
         Self {
-            handler: monomorphize!(far_call match_boolean is_static),
+            handler: monomorphize!(far_call [MODE] match_boolean is_static),
             arguments: Arguments::new(predicate)
                 .write_source(&src1)
                 .write_source(&src2)

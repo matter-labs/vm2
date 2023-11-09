@@ -1,8 +1,9 @@
 use crate::{
     addressing_modes::{Addressable, Arguments},
     bitset::Bitset,
-    decommit::{address_into_u256, decommit},
+    decommit::{address_into_u256, decommit, u256_into_address},
     fat_pointer::FatPointer,
+    instruction_handlers::CallingMode,
     modified_world::ModifiedWorld,
     predication::Flags,
     Predicate, World,
@@ -172,10 +173,10 @@ impl State {
         }
     }
 
-    pub(crate) fn push_frame(
+    pub(crate) fn push_frame<const CALLING_MODE: u8>(
         &mut self,
         instruction_pointer: *const Instruction,
-        address: H160,
+        code_address: H160,
         program: Arc<[Instruction]>,
         code_page: Arc<[U256]>,
         gas: u32,
@@ -183,15 +184,29 @@ impl State {
         let new_heap = self.heaps.len() as u32;
         self.heaps.extend([vec![], vec![]]);
         let mut new_frame = Callframe::new(
-            address,
-            address,
-            self.current_frame.address,
+            if CALLING_MODE == CallingMode::Delegate as u8 {
+                self.current_frame.address
+            } else {
+                code_address
+            },
+            code_address,
+            if CALLING_MODE == CallingMode::Normal as u8 {
+                self.current_frame.address
+            } else if CALLING_MODE == CallingMode::Delegate as u8 {
+                self.current_frame.caller
+            } else {
+                u256_into_address(self.registers[3])
+            },
             program,
             code_page,
             new_heap,
             new_heap + 1,
             gas,
-            self.context_u128,
+            if CALLING_MODE == CallingMode::Delegate as u8 {
+                self.current_frame.context_u128
+            } else {
+                self.context_u128
+            },
         );
         self.context_u128 = 0;
 

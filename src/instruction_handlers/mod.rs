@@ -1,6 +1,7 @@
 use crate::{state::Instruction, Predicate};
 use arbitrary::Arbitrary;
 pub use binop::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor};
+pub use call::CallingMode;
 pub use heap_access::{AuxHeap, Heap};
 pub use pointer::{PtrAdd, PtrPack, PtrShrink, PtrSub};
 
@@ -174,7 +175,7 @@ impl<'a> Arbitrary<'a> for Instruction {
             }
             20 => Self::from_sstore(u.arbitrary()?, u.arbitrary()?, predicate),
             21 => Self::from_sload(u.arbitrary()?, u.arbitrary()?, predicate),
-            22 => Self::from_far_call(
+            22 => Self::from_far_call::<{ CallingMode::Normal as u8 }>(
                 u.arbitrary()?,
                 u.arbitrary()?,
                 u.arbitrary()?,

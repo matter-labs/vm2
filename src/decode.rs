@@ -6,8 +6,8 @@ use crate::{
     },
     end_execution,
     instruction_handlers::{
-        Add, And, AuxHeap, Div, Heap, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub, RotateLeft,
-        RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
+        Add, And, AuxHeap, CallingMode, Div, Heap, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub,
+        RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
     },
     jump_to_beginning,
     state::{ExecutionResult, Panic},
@@ -182,18 +182,26 @@ fn decode(raw: u64) -> Instruction {
             Immediate2(parsed.imm_1),
             predicate,
         ),
-        zkevm_opcode_defs::Opcode::FarCall(kind) => match kind {
-            zkevm_opcode_defs::FarCallOpcode::Normal => Instruction::from_far_call(
+        zkevm_opcode_defs::Opcode::FarCall(kind) => {
+            let constructor = match kind {
+                zkevm_opcode_defs::FarCallOpcode::Normal => {
+                    Instruction::from_far_call::<{ CallingMode::Normal as u8 }>
+                }
+                zkevm_opcode_defs::FarCallOpcode::Delegate => {
+                    Instruction::from_far_call::<{ CallingMode::Delegate as u8 }>
+                }
+                zkevm_opcode_defs::FarCallOpcode::Mimic => {
+                    Instruction::from_far_call::<{ CallingMode::Mimic as u8 }>
+                }
+            };
+            constructor(
                 src1.try_into().unwrap(),
                 src2,
                 Immediate1(parsed.imm_0),
                 false,
                 predicate,
-            ),
-            x => unimplemented_instruction(zkevm_opcode_defs::Opcode::FarCall(x)),
-            //zkevm_opcode_defs::FarCallOpcode::Delegate => todo!(),
-            //zkevm_opcode_defs::FarCallOpcode::Mimic => todo!(),
-        },
+            )
+        }
         zkevm_opcode_defs::Opcode::Ret(kind) => match kind {
             zkevm_opcode_defs::RetOpcode::Ok => {
                 Instruction::from_ret(src1.try_into().unwrap(), predicate)
