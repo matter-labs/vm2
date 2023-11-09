@@ -1,9 +1,10 @@
-use super::{common::run_next_instruction, pointer::FatPointer};
+use super::common::run_next_instruction;
 use crate::{
     addressing_modes::{
         Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
         RegisterOrImmediate, Source, SourceWriter,
     },
+    fat_pointer::FatPointer,
     state::{ExecutionResult, Panic},
     Instruction, Predicate, State,
 };

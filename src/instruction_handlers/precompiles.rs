@@ -1,6 +1,6 @@
 use crate::{
     addressing_modes::{Arguments, Register1, Register2, Source, SourceWriter},
-    instruction_handlers::keccak,
+    keccak,
     state::ExecutionResult,
     Instruction, State,
 };

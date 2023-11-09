@@ -1,14 +1,14 @@
-use super::pointer::FatPointer;
 use crate::{
     addressing_modes::{
         Arguments, Immediate1, Immediate2, Register1, Register2, Source, SourceWriter,
     },
     decommit::{decommit, u256_into_address},
+    fat_pointer::FatPointer,
     predication::Flags,
     state::{ExecutionResult, Panic},
     Instruction, Predicate, State,
 };
-use u256::{H160, U256};
+use u256::U256;
 
 enum FatPointerSource {
     MakeNewPointerToHeap,

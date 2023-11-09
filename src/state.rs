@@ -2,7 +2,7 @@ use crate::{
     addressing_modes::{Addressable, Arguments},
     bitset::Bitset,
     decommit::{address_into_u256, decommit},
-    instruction_handlers,
+    fat_pointer::FatPointer,
     modified_world::ModifiedWorld,
     predication::Flags,
     World,
@@ -129,7 +129,7 @@ impl State {
     pub fn new(mut world: Box<dyn World>, address: H160, calldata: Vec<u8>) -> Self {
         let (program, code_page) = decommit(&mut *world, address_into_u256(address));
         let mut registers: [U256; 16] = Default::default();
-        registers[1] = instruction_handlers::FatPointer {
+        registers[1] = FatPointer {
             memory_page: 1,
             offset: 0,
             start: 0,
