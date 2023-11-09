@@ -292,7 +292,7 @@ impl StackAddressing for RelativeStack {
     fn address_for_set(args: &Arguments, state: &mut impl Addressable) -> u16 {
         state
             .stack_pointer()
-            .wrapping_add(destination_stack_address(args, state))
+            .wrapping_sub(destination_stack_address(args, state))
     }
 }
 
