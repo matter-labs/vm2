@@ -2,7 +2,7 @@ use super::common::run_next_instruction;
 use crate::{
     addressing_modes::{
         Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
-        RegisterOrImmediate, Source, SourceWriter,
+        RegisterOrImmediate, Source,
     },
     fat_pointer::FatPointer,
     state::{ExecutionResult, Panic},
@@ -138,15 +138,14 @@ impl Instruction {
         incremented_out: Option<Register2>,
         predicate: Predicate,
     ) -> Self {
-        let mut arguments = Arguments::default();
-        src.write_source(&mut arguments);
-        out.write_destination(&mut arguments);
+        let mut arguments = Arguments::new(predicate)
+            .write_source(&src)
+            .write_destination(&out);
 
         let increment = incremented_out.is_some();
         if let Some(out2) = incremented_out {
             out2.write_destination(&mut arguments);
         }
-        arguments.predicate = predicate;
 
         Self {
             handler: monomorphize!(load [H] match_reg_imm src match_boolean increment),
@@ -161,9 +160,9 @@ impl Instruction {
         incremented_out: Option<Register1>,
         predicate: Predicate,
     ) -> Self {
-        let mut arguments = Arguments::default();
-        src1.write_source(&mut arguments);
-        src2.write_source(&mut arguments);
+        let mut arguments = Arguments::new(predicate)
+            .write_source(&src1)
+            .write_source(&src2);
 
         let increment = incremented_out.is_some();
         if let Some(out) = incremented_out {
@@ -184,9 +183,9 @@ impl Instruction {
         incremented_out: Option<Register2>,
         predicate: Predicate,
     ) -> Self {
-        let mut arguments = Arguments::default();
-        src.write_source(&mut arguments);
-        out.write_destination(&mut arguments);
+        let mut arguments = Arguments::new(predicate)
+            .write_source(&src)
+            .write_destination(&out);
 
         let increment = incremented_out.is_some();
         if let Some(out2) = incremented_out {

@@ -1,7 +1,7 @@
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Immediate1, Register1,
-        RelativeStack, Source, SourceWriter,
+        RelativeStack, Source,
     },
     predication::Predicate,
     state::{ExecutionResult, Instruction, Panic, State},
@@ -31,13 +31,9 @@ use super::monomorphization::*;
 
 impl Instruction {
     pub fn from_jump(source: AnySource, predicate: Predicate) -> Self {
-        let mut arguments = Arguments::default();
-        source.write_source(&mut arguments);
-        arguments.predicate = predicate;
-
         Self {
             handler: monomorphize!(jump match_source source),
-            arguments,
+            arguments: Arguments::new(predicate).write_source(&source),
         }
     }
 }

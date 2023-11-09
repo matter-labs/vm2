@@ -1,11 +1,9 @@
 use super::common::instruction_boilerplate;
 use crate::{
-    addressing_modes::{
-        Arguments, Destination, DestinationWriter, Register1, Source, SourceWriter,
-    },
+    addressing_modes::{Arguments, Destination, Register1, Source},
     decommit::address_into_u256,
     state::ExecutionResult,
-    Instruction, State,
+    Instruction, Predicate, State,
 };
 use u256::U256;
 
@@ -62,37 +60,32 @@ fn set_context_u128(state: &mut State, instruction: *const Instruction) -> Execu
 }
 
 impl Instruction {
-    fn from_context<Op: ContextOp>(out: Register1) -> Self {
-        let mut arguments = Arguments::default();
-        out.write_destination(&mut arguments);
-
+    fn from_context<Op: ContextOp>(out: Register1, predicate: Predicate) -> Self {
         Self {
             handler: context::<Op>,
-            arguments,
+            arguments: Arguments::new(predicate).write_destination(&out),
         }
     }
 
-    pub fn from_this(out: Register1) -> Self {
-        Self::from_context::<This>(out)
+    pub fn from_this(out: Register1, predicate: Predicate) -> Self {
+        Self::from_context::<This>(out, predicate)
     }
-    pub fn from_caller(out: Register1) -> Self {
-        Self::from_context::<Caller>(out)
+    pub fn from_caller(out: Register1, predicate: Predicate) -> Self {
+        Self::from_context::<Caller>(out, predicate)
     }
-    pub fn from_code_address(out: Register1) -> Self {
-        Self::from_context::<CodeAddress>(out)
+    pub fn from_code_address(out: Register1, predicate: Predicate) -> Self {
+        Self::from_context::<CodeAddress>(out, predicate)
     }
-    pub fn from_ergs_left(out: Register1) -> Self {
-        Self::from_context::<ErgsLeft>(out)
+    pub fn from_ergs_left(out: Register1, predicate: Predicate) -> Self {
+        Self::from_context::<ErgsLeft>(out, predicate)
     }
-    pub fn from_context_u128(out: Register1) -> Self {
-        Self::from_context::<U128>(out)
+    pub fn from_context_u128(out: Register1, predicate: Predicate) -> Self {
+        Self::from_context::<U128>(out, predicate)
     }
-    pub fn from_set_context_u128(src: Register1) -> Self {
-        let mut arguments = Arguments::default();
-        src.write_source(&mut arguments);
+    pub fn from_set_context_u128(src: Register1, predicate: Predicate) -> Self {
         Self {
             handler: set_context_u128,
-            arguments: arguments,
+            arguments: Arguments::new(predicate).write_source(&src),
         }
     }
 }

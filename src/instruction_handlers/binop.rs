@@ -3,7 +3,7 @@ use crate::{
     addressing_modes::{
         AbsoluteStack, Addressable, AdvanceStackPointer, AnyDestination, AnySource, Arguments,
         CodePage, Destination, DestinationWriter, Immediate1, Register1, Register2, RelativeStack,
-        Source, SourceWriter,
+        Source,
     },
     predication::{Flags, Predicate},
     state::{ExecutionResult, Instruction, State},
@@ -211,16 +211,13 @@ impl Instruction {
         swap: bool,
         set_flags: bool,
     ) -> Self {
-        let mut arguments = Arguments::default();
-        src1.write_source(&mut arguments);
-        src2.write_source(&mut arguments);
-        out.write_destination(&mut arguments);
-        out2.write_destination(&mut arguments);
-        arguments.predicate = predicate;
-
         Self {
             handler: monomorphize!(binop [Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
-            arguments,
+            arguments: Arguments::new(predicate)
+                .write_source(&src1)
+                .write_source(&src2)
+                .write_destination(&out)
+                .write_destination(&out2),
         }
     }
 }

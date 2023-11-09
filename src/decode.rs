@@ -1,8 +1,8 @@
 use crate::{
     addressing_modes::{
-        AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, CodePage, Immediate1,
-        Immediate2, Register, Register1, Register2, RegisterAndImmediate, RelativeStack, Source,
-        SourceWriter,
+        AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
+        Immediate1, Immediate2, Register, Register1, Register2, RegisterAndImmediate,
+        RelativeStack, Source, SourceWriter,
     },
     end_execution,
     instruction_handlers::{
@@ -11,7 +11,7 @@ use crate::{
     },
     jump_to_beginning,
     state::{ExecutionResult, Panic},
-    Instruction, State,
+    Instruction, Predicate, State,
 };
 use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
@@ -35,7 +35,7 @@ pub fn decode_program(raw: &[u64]) -> Vec<Instruction> {
 }
 
 fn unimplemented_instruction(variant: Opcode) -> Instruction {
-    let mut arguments = Default::default();
+    let mut arguments = Arguments::new(Predicate::Always);
     let variant_as_number: u16 = unsafe { std::mem::transmute(variant) };
     Immediate1(variant_as_number).write_source(&mut arguments);
     Instruction {
@@ -147,22 +147,22 @@ fn decode(raw: u64) -> Instruction {
         zkevm_opcode_defs::Opcode::Jump(_) => Instruction::from_jump(src1, predicate),
         zkevm_opcode_defs::Opcode::Context(x) => match x {
             zkevm_opcode_defs::ContextOpcode::This => {
-                Instruction::from_this(out.try_into().unwrap())
+                Instruction::from_this(out.try_into().unwrap(), predicate)
             }
             zkevm_opcode_defs::ContextOpcode::Caller => {
-                Instruction::from_caller(out.try_into().unwrap())
+                Instruction::from_caller(out.try_into().unwrap(), predicate)
             }
             zkevm_opcode_defs::ContextOpcode::CodeAddress => {
-                Instruction::from_code_address(out.try_into().unwrap())
+                Instruction::from_code_address(out.try_into().unwrap(), predicate)
             }
             zkevm_opcode_defs::ContextOpcode::ErgsLeft => {
-                Instruction::from_ergs_left(out.try_into().unwrap())
+                Instruction::from_ergs_left(out.try_into().unwrap(), predicate)
             }
             zkevm_opcode_defs::ContextOpcode::GetContextU128 => {
-                Instruction::from_context_u128(out.try_into().unwrap())
+                Instruction::from_context_u128(out.try_into().unwrap(), predicate)
             }
             zkevm_opcode_defs::ContextOpcode::SetContextU128 => {
-                Instruction::from_set_context_u128(src1.try_into().unwrap())
+                Instruction::from_set_context_u128(src1.try_into().unwrap(), predicate)
             }
             /*zkevm_opcode_defs::ContextOpcode::Meta => ,
             zkevm_opcode_defs::ContextOpcode::Sp => ,
@@ -195,7 +195,9 @@ fn decode(raw: u64) -> Instruction {
             //zkevm_opcode_defs::FarCallOpcode::Mimic => todo!(),
         },
         zkevm_opcode_defs::Opcode::Ret(kind) => match kind {
-            zkevm_opcode_defs::RetOpcode::Ok => Instruction::from_ret(src1.try_into().unwrap()),
+            zkevm_opcode_defs::RetOpcode::Ok => {
+                Instruction::from_ret(src1.try_into().unwrap(), predicate)
+            }
             /*zkevm_opcode_defs::RetOpcode::Revert => ,
             zkevm_opcode_defs::RetOpcode::Panic => ,*/
             x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Ret(x)),
@@ -206,7 +208,7 @@ fn decode(raw: u64) -> Instruction {
             zkevm_opcode_defs::LogOpcode::ToL1Message => ,
             zkevm_opcode_defs::LogOpcode::Event => ,*/
             zkevm_opcode_defs::LogOpcode::PrecompileCall => {
-                Instruction::from_precompile_call(src1.try_into().unwrap(), src2)
+                Instruction::from_precompile_call(src1.try_into().unwrap(), src2, predicate)
             }
             x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Log(x)),
         },
@@ -262,6 +264,7 @@ fn decode(raw: u64) -> Instruction {
                 } else {
                     no_sp_movement
                 },
+                predicate,
             )
         }
 

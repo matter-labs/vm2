@@ -1,9 +1,9 @@
 use super::call::get_far_call_arguments;
 use crate::{
-    addressing_modes::{Arguments, Register1, SourceWriter},
+    addressing_modes::{Arguments, Register1},
     predication::Flags,
     state::ExecutionResult,
-    Instruction, State,
+    Instruction, Predicate, State,
 };
 use u256::U256;
 
@@ -37,12 +37,10 @@ fn ret(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
 }
 
 impl Instruction {
-    pub fn from_ret(src1: Register1) -> Self {
-        let mut args = Arguments::default();
-        src1.write_source(&mut args);
+    pub fn from_ret(src1: Register1, predicate: Predicate) -> Self {
         Self {
             handler: ret,
-            arguments: args,
+            arguments: Arguments::new(predicate).write_source(&src1),
         }
     }
 }

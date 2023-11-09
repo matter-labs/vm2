@@ -1,8 +1,8 @@
 use crate::{
-    addressing_modes::{Arguments, Register1, Register2, Source, SourceWriter},
+    addressing_modes::{Arguments, Register1, Register2, Source},
     keccak,
     state::ExecutionResult,
-    Instruction, State,
+    Instruction, Predicate, State,
 };
 use zkevm_opcode_defs::{
     system_params::KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS, PrecompileCallABI,
@@ -43,12 +43,11 @@ fn precompile_call(state: &mut State, instruction: *const Instruction) -> Execut
 }
 
 impl Instruction {
-    pub fn from_precompile_call(abi: Register1, burn: Register2) -> Self {
-        let mut arguments = Arguments::default();
-        abi.write_source(&mut arguments);
-        burn.write_source(&mut arguments);
+    pub fn from_precompile_call(abi: Register1, burn: Register2, predicate: Predicate) -> Self {
         Self {
-            arguments,
+            arguments: Arguments::new(predicate)
+                .write_source(&abi)
+                .write_source(&burn),
             handler: precompile_call,
         }
     }

@@ -1,11 +1,8 @@
 use super::common::instruction_boilerplate;
 use crate::{
-    addressing_modes::{
-        destination_stack_address, AdvanceStackPointer, Arguments, DestinationWriter, Source,
-        SourceWriter,
-    },
+    addressing_modes::{destination_stack_address, AdvanceStackPointer, Arguments, Source},
     state::ExecutionResult,
-    Instruction, State,
+    Instruction, Predicate, State,
 };
 
 fn nop(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
@@ -20,14 +17,16 @@ fn nop(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
 }
 
 impl Instruction {
-    pub fn from_nop(pop: AdvanceStackPointer, push: AdvanceStackPointer) -> Self {
-        let mut arguments = Arguments::default();
-        pop.write_source(&mut arguments);
-        push.write_destination(&mut arguments);
-
+    pub fn from_nop(
+        pop: AdvanceStackPointer,
+        push: AdvanceStackPointer,
+        predicate: Predicate,
+    ) -> Self {
         Self {
             handler: nop,
-            arguments,
+            arguments: Arguments::new(predicate)
+                .write_source(&pop)
+                .write_destination(&push),
         }
     }
 }

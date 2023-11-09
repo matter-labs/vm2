@@ -5,7 +5,7 @@ use crate::{
     fat_pointer::FatPointer,
     modified_world::ModifiedWorld,
     predication::Flags,
-    World,
+    Predicate, World,
 };
 use arbitrary::{Arbitrary, Unstructured};
 use std::sync::Arc;
@@ -249,7 +249,7 @@ impl State {
 pub fn end_execution() -> Instruction {
     Instruction {
         handler: end_execution_handler,
-        arguments: Arguments::default(),
+        arguments: Arguments::new(Predicate::Always),
     }
 }
 fn end_execution_handler(_state: &mut State, _: *const Instruction) -> ExecutionResult {
@@ -259,7 +259,7 @@ fn end_execution_handler(_state: &mut State, _: *const Instruction) -> Execution
 pub fn jump_to_beginning() -> Instruction {
     Instruction {
         handler: jump_to_beginning_handler,
-        arguments: Arguments::default(),
+        arguments: Arguments::new(Predicate::Always),
     }
 }
 fn jump_to_beginning_handler(state: &mut State, _: *const Instruction) -> ExecutionResult {

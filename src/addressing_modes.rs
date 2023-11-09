@@ -38,13 +38,34 @@ pub trait DestinationWriter {
     fn write_destination(&self, args: &mut Arguments);
 }
 
-#[derive(Default)]
 pub struct Arguments {
     source_registers: PackedRegisters,
     destination_registers: PackedRegisters,
     immediate1: u16,
     immediate2: u16,
     pub predicate: Predicate,
+}
+
+impl Arguments {
+    pub fn new(predicate: Predicate) -> Self {
+        Self {
+            source_registers: Default::default(),
+            destination_registers: Default::default(),
+            immediate1: 0,
+            immediate2: 0,
+            predicate,
+        }
+    }
+
+    pub(crate) fn write_source(mut self, sw: &impl SourceWriter) -> Self {
+        sw.write_source(&mut self);
+        self
+    }
+
+    pub(crate) fn write_destination(mut self, sw: &impl DestinationWriter) -> Self {
+        sw.write_destination(&mut self);
+        self
+    }
 }
 
 /// This one should only be used when [Register2] is used as well.

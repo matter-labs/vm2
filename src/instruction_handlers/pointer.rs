@@ -2,8 +2,7 @@ use super::common::run_next_instruction;
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
-        Destination, DestinationWriter, Immediate1, Register1, Register2, RelativeStack, Source,
-        SourceWriter,
+        Destination, Immediate1, Register1, Register2, RelativeStack, Source,
     },
     fat_pointer::FatPointer,
     state::{ExecutionResult, Panic},
@@ -99,15 +98,12 @@ impl Instruction {
         predicate: Predicate,
         swap: bool,
     ) -> Self {
-        let mut arguments = Arguments::default();
-        src1.write_source(&mut arguments);
-        src2.write_source(&mut arguments);
-        out.write_destination(&mut arguments);
-        arguments.predicate = predicate;
-
         Self {
             handler: monomorphize!(ptr [Op] match_source src1 match_destination out match_boolean swap),
-            arguments,
+            arguments: Arguments::new(predicate)
+                .write_source(&src1)
+                .write_source(&src2)
+                .write_destination(&out),
         }
     }
 }

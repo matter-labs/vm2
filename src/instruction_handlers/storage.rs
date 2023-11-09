@@ -1,8 +1,6 @@
 use super::common::{instruction_boilerplate, run_next_instruction};
 use crate::{
-    addressing_modes::{
-        Arguments, Destination, DestinationWriter, Register1, Register2, Source, SourceWriter,
-    },
+    addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     state::ExecutionResult,
     Instruction, Predicate, State, World,
 };
@@ -33,14 +31,11 @@ fn sload(state: &mut State, instruction: *const Instruction) -> ExecutionResult 
 impl Instruction {
     #[inline(always)]
     pub fn from_sstore(src1: Register1, src2: Register2, predicate: Predicate) -> Self {
-        let mut arguments = Arguments::default();
-        src1.write_source(&mut arguments);
-        src2.write_source(&mut arguments);
-        arguments.predicate = predicate;
-
         Self {
             handler: sstore,
-            arguments,
+            arguments: Arguments::new(predicate)
+                .write_source(&src1)
+                .write_source(&src2),
         }
     }
 }
@@ -48,14 +43,11 @@ impl Instruction {
 impl Instruction {
     #[inline(always)]
     pub fn from_sload(src: Register1, dst: Register1, predicate: Predicate) -> Self {
-        let mut arguments = Arguments::default();
-        src.write_source(&mut arguments);
-        dst.write_destination(&mut arguments);
-        arguments.predicate = predicate;
-
         Self {
             handler: sload,
-            arguments,
+            arguments: Arguments::new(predicate)
+                .write_source(&src)
+                .write_destination(&dst),
         }
     }
 }

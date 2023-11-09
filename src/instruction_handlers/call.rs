@@ -1,7 +1,5 @@
 use crate::{
-    addressing_modes::{
-        Arguments, Immediate1, Immediate2, Register1, Register2, Source, SourceWriter,
-    },
+    addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Register2, Source},
     decommit::{decommit, u256_into_address},
     fat_pointer::FatPointer,
     predication::Flags,
@@ -167,15 +165,12 @@ impl Instruction {
         is_static: bool,
         predicate: Predicate,
     ) -> Self {
-        let mut args = Arguments::default();
-        src1.write_source(&mut args);
-        src2.write_source(&mut args);
-        error_handler.write_source(&mut args);
-        args.predicate = predicate;
-
         Self {
             handler: monomorphize!(far_call match_boolean is_static),
-            arguments: args,
+            arguments: Arguments::new(predicate)
+                .write_source(&src1)
+                .write_source(&src2)
+                .write_source(&error_handler),
         }
     }
 }
@@ -187,15 +182,12 @@ impl Instruction {
         error_handler: Immediate2,
         predicate: Predicate,
     ) -> Self {
-        let mut args = Arguments::default();
-        gas.write_source(&mut args);
-        destination.write_source(&mut args);
-        error_handler.write_source(&mut args);
-        args.predicate = predicate;
-
         Self {
             handler: near_call,
-            arguments: args,
+            arguments: Arguments::new(predicate)
+                .write_source(&gas)
+                .write_source(&destination)
+                .write_source(&error_handler),
         }
     }
 }
