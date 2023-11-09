@@ -10,17 +10,15 @@ use u256::U256;
 fn ret(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
     let args = unsafe { &(*instruction).arguments };
 
-    let return_value = get_far_call_arguments(args, state)?.pointer;
-
-    // TODO check that the return value resides in this or a newer frame's memory
-
-    // TODO return from a near call instead if a near call frame exists
-
     let gas_left = state.current_frame.gas;
 
     let pc = if let Some(pc) = state.current_frame.pop_near_call() {
         pc
     } else {
+        let return_value = get_far_call_arguments(args, state)?.pointer;
+
+        // TODO check that the return value resides in this or a newer frame's memory
+
         let pc = state.pop_frame();
         state.set_context_u128(0);
 
