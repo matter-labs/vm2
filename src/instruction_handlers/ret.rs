@@ -19,7 +19,10 @@ fn ret(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
 
         // TODO check that the return value resides in this or a newer frame's memory
 
-        let pc = state.pop_frame();
+        let Some(pc) = state.pop_frame() else {
+            return Ok(state.heaps[return_value.memory_page as usize][return_value.start as usize..(return_value.start + return_value.length) as usize].to_vec());
+        };
+
         state.set_context_u128(0);
 
         state.registers = [U256::zero(); 16];

@@ -126,7 +126,7 @@ pub struct Instruction {
 }
 
 pub(crate) type Handler = fn(&mut State, *const Instruction) -> ExecutionResult;
-pub type ExecutionResult = Result<(), Panic>;
+pub type ExecutionResult = Result<Vec<u8>, Panic>;
 
 #[derive(Debug)]
 pub enum Panic {
@@ -214,10 +214,11 @@ impl State {
         self.previous_frames.push((instruction_pointer, new_frame));
     }
 
-    pub(crate) fn pop_frame(&mut self) -> *const Instruction {
-        let (pc, frame) = self.previous_frames.pop().unwrap();
-        self.current_frame = frame;
-        pc
+    pub(crate) fn pop_frame(&mut self) -> Option<*const Instruction> {
+        self.previous_frames.pop().map(|(pc, frame)| {
+            self.current_frame = frame;
+            pc
+        })
     }
 
     pub(crate) fn set_context_u128(&mut self, value: u128) {
@@ -268,7 +269,7 @@ pub fn end_execution() -> Instruction {
     }
 }
 fn end_execution_handler(_state: &mut State, _: *const Instruction) -> ExecutionResult {
-    Ok(())
+    Ok(vec![])
 }
 
 pub fn jump_to_beginning() -> Instruction {
