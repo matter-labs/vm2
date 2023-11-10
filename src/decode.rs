@@ -219,8 +219,10 @@ fn decode(raw: u64) -> Instruction {
             zkevm_opcode_defs::LogOpcode::StorageWrite => {
                 Instruction::from_sstore(src1.try_into().unwrap(), src2, predicate)
             }
-            /*zkevm_opcode_defs::LogOpcode::ToL1Message => ,
-            zkevm_opcode_defs::LogOpcode::Event => ,*/
+            //zkevm_opcode_defs::LogOpcode::ToL1Message => ,
+            zkevm_opcode_defs::LogOpcode::Event => {
+                Instruction::from_event(src1.try_into().unwrap(), src2, predicate)
+            }
             zkevm_opcode_defs::LogOpcode::PrecompileCall => {
                 Instruction::from_precompile_call(src1.try_into().unwrap(), src2, predicate)
             }

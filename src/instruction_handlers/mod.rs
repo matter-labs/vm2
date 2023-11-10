@@ -9,6 +9,7 @@ mod binop;
 mod call;
 mod common;
 mod context;
+mod event;
 mod heap_access;
 mod jump;
 mod monomorphization;
