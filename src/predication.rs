@@ -15,7 +15,7 @@ impl Flags {
 }
 
 /// Predicate encoded so that comparing it to flags is efficient
-#[derive(Arbitrary, Copy, Clone)]
+#[derive(Arbitrary, Copy, Clone, Debug)]
 #[repr(u8)]
 pub enum Predicate {
     Always = ALWAYS_BIT,

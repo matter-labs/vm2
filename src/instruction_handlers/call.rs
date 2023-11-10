@@ -49,7 +49,17 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
 
     state.flags = Flags::new(false, false, false);
 
-    state.registers = [U256::zero(); 16];
+    if abi.is_system_call {
+        state.registers[14] = U256::zero();
+        state.registers[15] = U256::zero();
+        state.registers[2] = 2.into();
+    } else if abi.is_constructor_call {
+        // TODO not sure what exactly should be done in this case
+        state.registers = [U256::zero(); 16];
+        state.registers[2] = 1.into();
+    } else {
+        state.registers = [U256::zero(); 16];
+    }
     state.registers[1] = abi.pointer.into_u256();
     state.register_pointer_flags = 2;
 
@@ -60,8 +70,8 @@ pub(crate) struct FarCallABI {
     pub pointer: FatPointer,
     pub gas_to_pass: u32,
     pub shard_id: u8,
-    pub constructor_call: bool,
-    pub system_call: bool,
+    pub is_constructor_call: bool,
+    pub is_system_call: bool,
 }
 
 pub(crate) fn get_far_call_arguments(
@@ -100,8 +110,8 @@ pub(crate) fn get_far_call_arguments(
         pointer,
         gas_to_pass,
         shard_id,
-        constructor_call: constructor_call_byte != 0,
-        system_call: system_call_byte != 0,
+        is_constructor_call: constructor_call_byte != 0,
+        is_system_call: system_call_byte != 0,
     })
 }
 
