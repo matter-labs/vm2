@@ -70,7 +70,7 @@ pub fn execute_precompile(params: PrecompileCallABI, memory: &mut [Vec<u8>]) {
         let is_last = round == num_rounds - 1;
         let paddings_round = needs_extra_padding_round && is_last;
 
-        let mut bytes32_buffer: &[u8] = &[0u8; 32];
+        let mut bytes32_buffer = [0u8; 32];
         for _ in 0..MEMORY_READS_PER_CYCLE {
             let (memory_index, unalignment) = (input_byte_offset / 32, input_byte_offset % 32);
             let at_most_meaningful_bytes_in_query = 32 - unalignment;
@@ -93,11 +93,16 @@ pub fn execute_precompile(params: PrecompileCallABI, memory: &mut [Vec<u8>]) {
                 input_byte_offset += meaningful_bytes_in_query;
                 bytes_left -= meaningful_bytes_in_query;
 
-                bytes32_buffer =
-                    &memory[source_memory_page as usize][memory_index..memory_index + 32];
+                bytes32_buffer = [0u8; 32];
+                let page = &memory[source_memory_page as usize];
+                for i in 32 * memory_index..32 * (memory_index + 1) {
+                    if i < page.len() {
+                        bytes32_buffer[i - 32 * memory_index] = page[i];
+                    }
+                }
             }
 
-            input_buffer.fill_with_bytes(bytes32_buffer, unalignment, bytes_to_fill)
+            input_buffer.fill_with_bytes(&bytes32_buffer, unalignment, bytes_to_fill)
         }
 
         // buffer is always large enough for us to have data
