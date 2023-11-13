@@ -66,4 +66,8 @@ impl ModifiedWorld {
         self.storage_changes
             .insert((contract, key), value, self.snapshots.is_empty())
     }
+
+    pub fn get_storage_changes(&self) -> impl Iterator<Item = ((H160, U256), U256)> + '_ {
+        self.storage_changes.as_ref().iter().map(|(k, v)| (*k, *v))
+    }
 }
