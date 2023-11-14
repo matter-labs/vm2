@@ -45,8 +45,6 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         new_frame_gas,
     );
 
-    // TODO clear context register
-
     state.flags = Flags::new(false, false, false);
 
     if abi.is_system_call {
