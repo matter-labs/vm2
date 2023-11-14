@@ -1,4 +1,4 @@
-use super::common::{instruction_boilerplate, run_next_instruction};
+use super::common::{instruction_boilerplate, instruction_boilerplate_with_panic};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     state::ExecutionResult,
@@ -6,18 +6,20 @@ use crate::{
 };
 
 fn sstore(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
-    let args = unsafe { &(*instruction).arguments };
+    instruction_boilerplate_with_panic(state, instruction, |state, args| {
+        let args = unsafe { &(*instruction).arguments };
 
-    let key = Register1::get(args, state);
-    let value = Register2::get(args, state);
+        let key = Register1::get(args, state);
+        let value = Register2::get(args, state);
 
-    state.use_gas(1)?;
+        state.use_gas(1)?;
 
-    state
-        .world
-        .write_storage(state.current_frame.address, key, value);
+        state
+            .world
+            .write_storage(state.current_frame.address, key, value);
 
-    run_next_instruction(state, instruction)
+        Ok(())
+    })
 }
 
 fn sload(state: &mut State, instruction: *const Instruction) -> ExecutionResult {

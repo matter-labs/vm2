@@ -1,4 +1,3 @@
-use super::common::run_next_instruction;
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
@@ -14,26 +13,26 @@ fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     state: &mut State,
     instruction: *const Instruction,
 ) -> ExecutionResult {
-    let args = unsafe { &(*instruction).arguments };
+    instruction_boilerplate_with_panic(state, instruction, |state, args| {
+        let a = (In1::get(args, state), In1::is_fat_pointer(args, state));
+        let b = (
+            Register2::get(args, state),
+            Register2::is_fat_pointer(args, state),
+        );
+        let (a, b) = if SWAP { (b, a) } else { (a, b) };
+        let (a, a_is_pointer) = a;
+        let (b, b_is_pointer) = b;
 
-    let a = (In1::get(args, state), In1::is_fat_pointer(args, state));
-    let b = (
-        Register2::get(args, state),
-        Register2::is_fat_pointer(args, state),
-    );
-    let (a, b) = if SWAP { (b, a) } else { (a, b) };
-    let (a, a_is_pointer) = a;
-    let (b, b_is_pointer) = b;
+        if !a_is_pointer || b_is_pointer {
+            return Err(Panic::IncorrectPointerTags);
+        }
 
-    if !a_is_pointer || b_is_pointer {
-        return Err(Panic::IncorrectPointerTags);
-    }
+        let result = Op::perform(a, b)?;
 
-    let result = Op::perform(a, b)?;
+        Out::set_fat_ptr(args, state, result);
 
-    Out::set_fat_ptr(args, state, result);
-
-    run_next_instruction(state, instruction)
+        Ok(())
+    })
 }
 
 pub trait PtrOp {
@@ -87,7 +86,7 @@ impl PtrOp for PtrShrink {
     }
 }
 
-use super::monomorphization::*;
+use super::{common::instruction_boilerplate_with_panic, monomorphization::*};
 
 impl Instruction {
     #[inline(always)]
