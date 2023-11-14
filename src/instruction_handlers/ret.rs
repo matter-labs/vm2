@@ -2,12 +2,12 @@ use super::call::get_far_call_arguments;
 use crate::{
     addressing_modes::{Arguments, Register1},
     predication::Flags,
-    state::ExecutionResult,
+    state::{ExecutionEnd, InstructionResult},
     Instruction, Predicate, State,
 };
 use u256::U256;
 
-fn ret(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
+fn ret(state: &mut State, instruction: *const Instruction) -> InstructionResult {
     let args = unsafe { &(*instruction).arguments };
 
     let gas_left = state.current_frame.gas;
@@ -20,7 +20,7 @@ fn ret(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
         // TODO check that the return value resides in this or a newer frame's memory
 
         let Some(pc) = state.pop_frame() else {
-            return Ok(state.heaps[return_value.memory_page as usize][return_value.start as usize..(return_value.start + return_value.length) as usize].to_vec());
+            return Err(ExecutionEnd::ProgramFinished(state.heaps[return_value.memory_page as usize][return_value.start as usize..(return_value.start + return_value.length) as usize].to_vec()));
         };
 
         state.set_context_u128(0);
@@ -34,7 +34,7 @@ fn ret(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
     state.flags = Flags::new(false, false, false);
     state.current_frame.gas += gas_left;
 
-    state.run_starting_from(unsafe { pc.add(1) })
+    Ok(unsafe { pc.add(1) })
 }
 
 impl Instruction {

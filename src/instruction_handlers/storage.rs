@@ -1,11 +1,11 @@
 use super::common::{instruction_boilerplate, instruction_boilerplate_with_panic};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
-    state::ExecutionResult,
+    state::InstructionResult,
     Instruction, Predicate, State, World,
 };
 
-fn sstore(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
+fn sstore(state: &mut State, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate_with_panic(state, instruction, |state, args| {
         let args = unsafe { &(*instruction).arguments };
 
@@ -22,7 +22,7 @@ fn sstore(state: &mut State, instruction: *const Instruction) -> ExecutionResult
     })
 }
 
-fn sload(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
+fn sload(state: &mut State, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate(state, instruction, |state, args| {
         let key = Register1::get(args, state);
         let value = state.world.read_storage(state.current_frame.address, key);

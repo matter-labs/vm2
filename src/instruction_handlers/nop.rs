@@ -1,11 +1,11 @@
 use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{destination_stack_address, AdvanceStackPointer, Arguments, Source},
-    state::ExecutionResult,
+    state::InstructionResult,
     Instruction, Predicate, State,
 };
 
-fn nop(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
+fn nop(state: &mut State, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate(state, instruction, |state, args| {
         // nop's addressing modes can move the stack pointer!
         AdvanceStackPointer::get(args, state);

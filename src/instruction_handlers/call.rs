@@ -3,7 +3,7 @@ use crate::{
     decommit::{decommit, u256_into_address},
     fat_pointer::FatPointer,
     predication::Flags,
-    state::{ExecutionResult, Panic},
+    state::{ExecutionEnd, InstructionResult},
     Instruction, Predicate, State,
 };
 use u256::U256;
@@ -18,7 +18,7 @@ pub enum CallingMode {
 fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     state: &mut State,
     instruction: *const Instruction,
-) -> ExecutionResult {
+) -> InstructionResult {
     let args = unsafe { &(*instruction).arguments };
 
     let address_mask: U256 = U256::MAX >> (256 - 160);
@@ -61,7 +61,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     state.registers[1] = abi.pointer.into_u256();
     state.register_pointer_flags = 2;
 
-    state.run()
+    Ok(&state.current_frame.program[0])
 }
 
 pub(crate) struct FarCallABI {
@@ -75,7 +75,7 @@ pub(crate) struct FarCallABI {
 pub(crate) fn get_far_call_arguments(
     args: &Arguments,
     state: &mut State,
-) -> Result<FarCallABI, Panic> {
+) -> Result<FarCallABI, ExecutionEnd> {
     let abi = Register1::get(args, state);
     let gas_to_pass = abi.0[3] as u32;
     let settings = (abi.0[3] >> 32) as u32;
@@ -87,7 +87,7 @@ pub(crate) fn get_far_call_arguments(
     match FatPointerSource::from_abi(pointer_source) {
         FatPointerSource::ForwardFatPointer => {
             if !Register1::is_fat_pointer(args, state) {
-                return Err(Panic::IncorrectPointerTags);
+                return Err(ExecutionEnd::IncorrectPointerTags);
             }
 
             // TODO check validity
@@ -138,7 +138,7 @@ impl FatPointer {
     }
 }
 
-fn near_call(state: &mut State, mut instruction: *const Instruction) -> ExecutionResult {
+fn near_call(state: &mut State, mut instruction: *const Instruction) -> InstructionResult {
     let args = unsafe { &(*instruction).arguments };
 
     let gas_to_pass = Register1::get(args, state).0[0] as u32;
@@ -156,18 +156,7 @@ fn near_call(state: &mut State, mut instruction: *const Instruction) -> Executio
 
     state.flags = Flags::new(false, false, false);
 
-    // Jump!
-    unsafe {
-        instruction = &state.current_frame.program[destination.low_u32() as usize];
-        state.use_gas(1)?;
-
-        while !(*instruction).arguments.predicate.satisfied(&state.flags) {
-            instruction = instruction.add(1);
-            state.use_gas(1)?;
-        }
-
-        ((*instruction).handler)(state, instruction)
-    }
+    Ok(&state.current_frame.program[destination.low_u32() as usize])
 }
 
 use super::{heap_access::grow_heap, monomorphization::*, AuxHeap, Heap};

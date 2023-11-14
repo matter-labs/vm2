@@ -6,14 +6,14 @@ use crate::{
         Source,
     },
     predication::{Flags, Predicate},
-    state::{ExecutionResult, Instruction, State},
+    state::{Instruction, InstructionResult, State},
 };
 use u256::U256;
 
 fn binop<Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SET_FLAGS: bool>(
     state: &mut State,
     instruction: *const Instruction,
-) -> ExecutionResult {
+) -> InstructionResult {
     instruction_boilerplate(state, instruction, |state, args| {
         let a = In1::get(args, state);
         let b = Register2::get(args, state);

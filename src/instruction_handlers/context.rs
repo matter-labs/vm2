@@ -2,12 +2,12 @@ use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Source},
     decommit::address_into_u256,
-    state::ExecutionResult,
+    state::InstructionResult,
     Instruction, Predicate, State,
 };
 use u256::U256;
 
-fn context<Op: ContextOp>(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
+fn context<Op: ContextOp>(state: &mut State, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate(state, instruction, |state, args| {
         Register1::set(args, state, Op::get(state))
     })
@@ -52,7 +52,7 @@ impl ContextOp for U128 {
     }
 }
 
-fn set_context_u128(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
+fn set_context_u128(state: &mut State, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate(state, instruction, |state, args| {
         let value = Register1::get(args, state).low_u128();
         state.set_context_u128(value)

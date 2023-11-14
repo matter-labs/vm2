@@ -1,7 +1,7 @@
 use crate::{
     addressing_modes::{Arguments, Register1, Register2, Source},
     keccak,
-    state::ExecutionResult,
+    state::InstructionResult,
     Instruction, Predicate, State,
 };
 use zkevm_opcode_defs::{
@@ -10,7 +10,7 @@ use zkevm_opcode_defs::{
 
 use super::common::instruction_boilerplate_with_panic;
 
-fn precompile_call(state: &mut State, instruction: *const Instruction) -> ExecutionResult {
+fn precompile_call(state: &mut State, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate_with_panic(state, instruction, |state, args| {
         // TODO check that we're in a system call
 

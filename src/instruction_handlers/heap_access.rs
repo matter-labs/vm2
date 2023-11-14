@@ -4,7 +4,7 @@ use crate::{
         RegisterOrImmediate, Source,
     },
     fat_pointer::FatPointer,
-    state::{ExecutionResult, Panic},
+    state::{ExecutionEnd, InstructionResult},
     Instruction, Predicate, State,
 };
 use u256::U256;
@@ -30,7 +30,7 @@ impl HeapFromState for AuxHeap {
 fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
     state: &mut State,
     instruction: *const Instruction,
-) -> ExecutionResult {
+) -> InstructionResult {
     instruction_boilerplate_with_panic(state, instruction, |state, args| {
         let pointer = In::get(args, state);
         let address = pointer.low_u32();
@@ -56,7 +56,7 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
 fn store<H: HeapFromState, In1: Source, const INCREMENT: bool>(
     state: &mut State,
     instruction: *const Instruction,
-) -> ExecutionResult {
+) -> InstructionResult {
     instruction_boilerplate_with_panic(state, instruction, |state, args| {
         let pointer = In1::get(args, state);
         let value = Register2::get(args, state);
@@ -79,7 +79,7 @@ fn store<H: HeapFromState, In1: Source, const INCREMENT: bool>(
     })
 }
 
-pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<(), Panic> {
+pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<(), ExecutionEnd> {
     if let Some(growth) = new_bound.checked_sub(H::get_heap(state).len() as u32) {
         // TODO use the proper formula instead
         state.use_gas(growth)?;
@@ -93,10 +93,10 @@ pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<
 fn load_pointer<const INCREMENT: bool>(
     state: &mut State,
     instruction: *const Instruction,
-) -> ExecutionResult {
+) -> InstructionResult {
     instruction_boilerplate_with_panic(state, instruction, |state, args| {
         if !Register1::is_fat_pointer(args, state) {
-            return Err(Panic::IncorrectPointerTags);
+            return Err(ExecutionEnd::IncorrectPointerTags);
         }
         let input = Register1::get(args, state);
         let pointer = FatPointer::from(input);

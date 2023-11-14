@@ -4,26 +4,19 @@ use crate::{
         RelativeStack, Source,
     },
     predication::Predicate,
-    state::{ExecutionResult, Instruction, Panic, State},
+    state::{ExecutionEnd, Instruction, InstructionResult, State},
 };
 
-fn jump<In: Source>(state: &mut State, mut instruction: *const Instruction) -> ExecutionResult {
+fn jump<In: Source>(state: &mut State, mut instruction: *const Instruction) -> InstructionResult {
     unsafe {
         let target = In::get(&(*instruction).arguments, state).low_u32() as u16 as usize;
         if let Some(i) = state.current_frame.program.get(target) {
             instruction = i;
         } else {
-            return Err(Panic::JumpingOutOfProgram);
+            return Err(ExecutionEnd::JumpingOutOfProgram);
         }
 
-        state.use_gas(1)?;
-
-        while !(*instruction).arguments.predicate.satisfied(&state.flags) {
-            instruction = instruction.add(1);
-            state.use_gas(1)?;
-        }
-
-        ((*instruction).handler)(state, instruction)
+        Ok(instruction)
     }
 }
 

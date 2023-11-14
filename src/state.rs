@@ -125,16 +125,18 @@ pub struct Instruction {
     pub(crate) arguments: Arguments,
 }
 
-pub(crate) type Handler = fn(&mut State, *const Instruction) -> ExecutionResult;
-pub type ExecutionResult = Result<Vec<u8>, Panic>;
+pub(crate) type Handler = fn(&mut State, *const Instruction) -> InstructionResult;
+pub(crate) type InstructionResult = Result<*const Instruction, ExecutionEnd>;
 
 #[derive(Debug)]
-pub enum Panic {
+pub enum ExecutionEnd {
+    ProgramFinished(Vec<u8>),
     OutOfGas,
     IncorrectPointerTags,
     PointerOffsetTooLarge,
     PtrPackLowBitsNotZero,
     JumpingOutOfProgram,
+    InvalidInstruction,
 }
 
 impl State {
@@ -229,35 +231,34 @@ impl State {
         self.current_frame.context_u128
     }
 
-    pub fn run(&mut self) -> ExecutionResult {
-        let instruction: *const Instruction = &self.current_frame.program[0];
-        self.run_starting_from(instruction)
-    }
+    pub fn run(&mut self) -> ExecutionEnd {
+        let mut instruction: *const Instruction = &self.current_frame.program[0];
 
-    pub(crate) fn run_starting_from(
-        &mut self,
-        mut instruction: *const Instruction,
-    ) -> ExecutionResult {
-        self.use_gas(1)?;
-
-        // Instructions check predication for the *next* instruction, not the current one.
-        // Thus, we can't just blindly run the first instruction.
         unsafe {
-            while !(*instruction).arguments.predicate.satisfied(&self.flags) {
-                instruction = instruction.add(1);
-                self.use_gas(1)?;
+            loop {
+                let Ok(_) = self.use_gas(1) else {
+                    return ExecutionEnd::OutOfGas;
+                };
+
+                if (*instruction).arguments.predicate.satisfied(&self.flags) {
+                    instruction = match ((*instruction).handler)(self, instruction) {
+                        Ok(n) => n,
+                        Err(e) => return e,
+                    };
+                } else {
+                    instruction = instruction.add(1);
+                }
             }
-            ((*instruction).handler)(self, instruction)
         }
     }
 
     #[inline(always)]
-    pub(crate) fn use_gas(&mut self, amount: u32) -> Result<(), Panic> {
+    pub(crate) fn use_gas(&mut self, amount: u32) -> Result<(), ExecutionEnd> {
         if self.current_frame.gas >= amount {
             self.current_frame.gas -= amount;
             Ok(())
         } else {
-            Err(Panic::OutOfGas)
+            Err(ExecutionEnd::OutOfGas)
         }
     }
 }
@@ -268,8 +269,8 @@ pub fn end_execution() -> Instruction {
         arguments: Arguments::new(Predicate::Always),
     }
 }
-fn end_execution_handler(_state: &mut State, _: *const Instruction) -> ExecutionResult {
-    Ok(vec![])
+fn end_execution_handler(_state: &mut State, _: *const Instruction) -> InstructionResult {
+    Err(ExecutionEnd::InvalidInstruction)
 }
 
 pub fn jump_to_beginning() -> Instruction {
@@ -278,13 +279,12 @@ pub fn jump_to_beginning() -> Instruction {
         arguments: Arguments::new(Predicate::Always),
     }
 }
-fn jump_to_beginning_handler(state: &mut State, _: *const Instruction) -> ExecutionResult {
+fn jump_to_beginning_handler(state: &mut State, _: *const Instruction) -> InstructionResult {
     let first_instruction = &state.current_frame.program[0];
-    let first_handler = first_instruction.handler;
-    first_handler(state, first_instruction)
+    Ok(first_instruction)
 }
 
-pub fn run_arbitrary_program(input: &[u8]) -> ExecutionResult {
+pub fn run_arbitrary_program(input: &[u8]) -> ExecutionEnd {
     let mut u = Unstructured::new(input);
     let mut program: Vec<Instruction> = Arbitrary::arbitrary(&mut u).unwrap();
 
