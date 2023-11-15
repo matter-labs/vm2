@@ -206,8 +206,10 @@ fn decode(raw: u64) -> Instruction {
             zkevm_opcode_defs::RetOpcode::Ok => {
                 Instruction::from_ret(src1.try_into().unwrap(), predicate)
             }
-            /*zkevm_opcode_defs::RetOpcode::Revert => ,
-            zkevm_opcode_defs::RetOpcode::Panic => ,*/
+            zkevm_opcode_defs::RetOpcode::Revert => {
+                Instruction::from_revert(src1.try_into().unwrap(), predicate)
+            }
+            //zkevm_opcode_defs::RetOpcode::Panic => ,
             x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Ret(x)),
         },
         zkevm_opcode_defs::Opcode::Log(x) => match x {
