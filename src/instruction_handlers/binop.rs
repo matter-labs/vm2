@@ -189,7 +189,7 @@ impl Binop for Div {
             (
                 quotient,
                 remainder,
-                Flags::new(false, !quotient.is_zero(), !remainder.is_zero()),
+                Flags::new(false, quotient.is_zero(), remainder.is_zero()),
             )
         } else {
             (U256::zero(), U256::zero(), Flags::new(true, false, false)) // TODO check
