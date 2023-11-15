@@ -4,7 +4,7 @@ use crate::{
         RegisterOrImmediate, Source,
     },
     fat_pointer::FatPointer,
-    state::{ExecutionEnd, InstructionResult},
+    state::{InstructionResult, Panic},
     Instruction, Predicate, State,
 };
 use u256::U256;
@@ -82,7 +82,7 @@ fn store<H: HeapFromState, In1: Source, const INCREMENT: bool>(
     })
 }
 
-pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<(), ExecutionEnd> {
+pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<(), Panic> {
     if let Some(growth) = new_bound.checked_sub(H::get_heap(state).len() as u32) {
         // TODO use the proper formula instead
         state.use_gas(growth)?;
@@ -99,7 +99,7 @@ fn load_pointer<const INCREMENT: bool>(
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(state, instruction, |state, args| {
         if !Register1::is_fat_pointer(args, state) {
-            return Err(ExecutionEnd::IncorrectPointerTags);
+            return Err(Panic::IncorrectPointerTags);
         }
         let input = Register1::get(args, state);
         let pointer = FatPointer::from(input);

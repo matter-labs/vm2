@@ -1,9 +1,10 @@
+use super::{heap_access::grow_heap, ret_panic, AuxHeap, Heap};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Register2, Source},
     decommit::{decommit, u256_into_address},
     fat_pointer::FatPointer,
     predication::Flags,
-    state::{ExecutionEnd, InstructionResult},
+    state::{InstructionResult, Panic},
     Instruction, Predicate, State,
 };
 use u256::U256;
@@ -23,7 +24,10 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
 
     let address_mask: U256 = U256::MAX >> (256 - 160);
 
-    let abi = get_far_call_arguments(args, state)?;
+    let abi = match get_far_call_arguments(args, state) {
+        Ok(abi) => abi,
+        Err(panic) => return ret_panic(state, panic),
+    };
     let destination_address = Register2::get(args, state) & address_mask;
     let error_handler = Immediate1::get(args, state);
 
@@ -44,6 +48,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         program,
         code_page,
         new_frame_gas,
+        error_handler.low_u32(),
     );
 
     state.flags = Flags::new(false, false, false);
@@ -76,7 +81,7 @@ pub(crate) struct FarCallABI {
 pub(crate) fn get_far_call_arguments(
     args: &Arguments,
     state: &mut State,
-) -> Result<FarCallABI, ExecutionEnd> {
+) -> Result<FarCallABI, Panic> {
     let abi = Register1::get(args, state);
     let gas_to_pass = abi.0[3] as u32;
     let settings = (abi.0[3] >> 32) as u32;
@@ -88,7 +93,7 @@ pub(crate) fn get_far_call_arguments(
     match FatPointerSource::from_abi(pointer_source) {
         FatPointerSource::ForwardFatPointer => {
             if !Register1::is_fat_pointer(args, state) {
-                return Err(ExecutionEnd::IncorrectPointerTags);
+                return Err(Panic::IncorrectPointerTags);
             }
 
             // TODO check validity
@@ -153,14 +158,14 @@ fn near_call(state: &mut State, mut instruction: *const Instruction) -> Instruct
     };
     state
         .current_frame
-        .push_near_call(new_frame_gas, instruction);
+        .push_near_call(new_frame_gas, instruction, error_handler.low_u32());
 
     state.flags = Flags::new(false, false, false);
 
     Ok(&state.current_frame.program[destination.low_u32() as usize])
 }
 
-use super::{heap_access::grow_heap, monomorphization::*, AuxHeap, Heap};
+use super::monomorphization::*;
 
 impl Instruction {
     pub fn from_far_call<const MODE: u8>(

@@ -3,7 +3,7 @@ use crate::{
     bitset::Bitset,
     decommit::{address_into_u256, decommit, u256_into_address},
     fat_pointer::FatPointer,
-    instruction_handlers::CallingMode,
+    instruction_handlers::{ret_panic, CallingMode},
     modified_world::ModifiedWorld,
     predication::Flags,
     Predicate, World,
@@ -37,6 +37,7 @@ pub struct Callframe {
     pub caller: H160,
     pub program: Arc<[Instruction]>,
     pub code_page: Arc<[U256]>,
+    exception_handler: u32,
     context_u128: u128,
 
     // TODO: joint allocate these.
@@ -49,7 +50,14 @@ pub struct Callframe {
     pub sp: u16,
     pub gas: u32,
 
-    near_calls: Vec<(*const Instruction, u16, u32)>,
+    near_calls: Vec<NearCallFrame>,
+}
+
+struct NearCallFrame {
+    call_instruction: *const Instruction,
+    exception_handler: u32,
+    previous_frame_sp: u16,
+    previous_frame_gas: u32,
 }
 
 impl Addressable for State {
@@ -83,6 +91,7 @@ impl Callframe {
         heap: u32,
         aux_heap: u32,
         gas: u32,
+        exception_handler: u32,
         context_u128: u128,
     ) -> Self {
         Self {
@@ -101,21 +110,31 @@ impl Callframe {
             aux_heap,
             sp: 1024,
             gas,
+            exception_handler,
             near_calls: vec![],
         }
     }
 
-    pub(crate) fn push_near_call(&mut self, gas_to_call: u32, old_pc: *const Instruction) {
-        self.near_calls
-            .push((old_pc, self.sp, self.gas - gas_to_call));
+    pub(crate) fn push_near_call(
+        &mut self,
+        gas_to_call: u32,
+        old_pc: *const Instruction,
+        exception_handler: u32,
+    ) {
+        self.near_calls.push(NearCallFrame {
+            call_instruction: old_pc,
+            exception_handler,
+            previous_frame_sp: self.sp,
+            previous_frame_gas: self.gas - gas_to_call,
+        });
         self.gas = gas_to_call;
     }
 
-    pub(crate) fn pop_near_call(&mut self) -> Option<*const Instruction> {
-        self.near_calls.pop().map(|(pc, sp, gas)| {
-            self.sp = sp;
-            self.gas = gas;
-            pc
+    pub(crate) fn pop_near_call(&mut self) -> Option<(*const Instruction, u32)> {
+        self.near_calls.pop().map(|f| {
+            self.sp = f.previous_frame_sp;
+            self.gas = f.previous_frame_gas;
+            (f.call_instruction, f.exception_handler)
         })
     }
 }
@@ -131,11 +150,16 @@ pub(crate) type InstructionResult = Result<*const Instruction, ExecutionEnd>;
 #[derive(Debug)]
 pub enum ExecutionEnd {
     ProgramFinished(Vec<u8>),
+    Reverted(Vec<u8>),
+    Panicked(Panic),
+}
+
+#[derive(Debug)]
+pub enum Panic {
     OutOfGas,
     IncorrectPointerTags,
     PointerOffsetTooLarge,
     PtrPackLowBitsNotZero,
-    JumpingOutOfProgram,
     InvalidInstruction,
 }
 
@@ -165,6 +189,7 @@ impl State {
                 3,
                 u32::MAX,
                 0,
+                0,
             ),
             previous_frames: vec![],
 
@@ -182,6 +207,7 @@ impl State {
         program: Arc<[Instruction]>,
         code_page: Arc<[U256]>,
         gas: u32,
+        exception_handler: u32,
     ) {
         let new_heap = self.heaps.len() as u32;
         self.heaps.extend([vec![], vec![]]);
@@ -204,6 +230,7 @@ impl State {
             new_heap,
             new_heap + 1,
             gas,
+            exception_handler,
             if CALLING_MODE == CallingMode::Delegate as u8 {
                 self.current_frame.context_u128
             } else {
@@ -216,10 +243,11 @@ impl State {
         self.previous_frames.push((instruction_pointer, new_frame));
     }
 
-    pub(crate) fn pop_frame(&mut self) -> Option<*const Instruction> {
+    pub(crate) fn pop_frame(&mut self) -> Option<(*const Instruction, u32)> {
+        let eh = self.current_frame.exception_handler;
         self.previous_frames.pop().map(|(pc, frame)| {
             self.current_frame = frame;
-            pc
+            (pc, eh)
         })
     }
 
@@ -238,7 +266,11 @@ impl State {
             loop {
                 let args = &(*instruction).arguments;
                 let Ok(_) = self.use_gas(args.get_static_gas_cost()) else {
-                    return ExecutionEnd::OutOfGas;
+                    instruction = match ret_panic(self, Panic::OutOfGas) {
+                        Ok(i) => i,
+                        Err(e) => return e,
+                    };
+                    continue;
                 };
 
                 if args.predicate.satisfied(&self.flags) {
@@ -254,12 +286,12 @@ impl State {
     }
 
     #[inline(always)]
-    pub(crate) fn use_gas(&mut self, amount: u32) -> Result<(), ExecutionEnd> {
+    pub(crate) fn use_gas(&mut self, amount: u32) -> Result<(), Panic> {
         if self.current_frame.gas >= amount {
             self.current_frame.gas -= amount;
             Ok(())
         } else {
-            Err(ExecutionEnd::OutOfGas)
+            Err(Panic::OutOfGas)
         }
     }
 }
@@ -270,8 +302,8 @@ pub fn end_execution() -> Instruction {
         arguments: Arguments::new(Predicate::Always, 0),
     }
 }
-fn end_execution_handler(_state: &mut State, _: *const Instruction) -> InstructionResult {
-    Err(ExecutionEnd::InvalidInstruction)
+fn end_execution_handler(state: &mut State, _: *const Instruction) -> InstructionResult {
+    ret_panic(state, Panic::InvalidInstruction)
 }
 
 pub fn jump_to_beginning() -> Instruction {

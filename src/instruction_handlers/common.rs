@@ -1,6 +1,7 @@
+use super::ret_panic;
 use crate::{
     addressing_modes::Arguments,
-    state::{ExecutionEnd, InstructionResult},
+    state::{InstructionResult, Panic},
     Instruction, State,
 };
 
@@ -20,10 +21,12 @@ pub(crate) fn instruction_boilerplate(
 pub(crate) fn instruction_boilerplate_with_panic(
     state: &mut State,
     instruction: *const Instruction,
-    business_logic: impl FnOnce(&mut State, &Arguments) -> Result<(), ExecutionEnd>,
+    business_logic: impl FnOnce(&mut State, &Arguments) -> Result<(), Panic>,
 ) -> InstructionResult {
     unsafe {
-        business_logic(state, &(*instruction).arguments)?;
-        Ok(instruction.add(1))
+        match business_logic(state, &(*instruction).arguments) {
+            Ok(_) => Ok(instruction.add(1)),
+            Err(p) => ret_panic(state, p),
+        }
     }
 }

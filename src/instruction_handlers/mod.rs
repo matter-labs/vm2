@@ -4,6 +4,7 @@ pub use binop::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, Shif
 pub use call::CallingMode;
 pub use heap_access::{AuxHeap, Heap};
 pub use pointer::{PtrAdd, PtrPack, PtrShrink, PtrSub};
+pub(crate) use ret::ret_panic;
 
 mod binop;
 mod call;

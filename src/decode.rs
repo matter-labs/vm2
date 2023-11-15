@@ -10,7 +10,7 @@ use crate::{
         RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
     },
     jump_to_beginning,
-    state::{ExecutionEnd, InstructionResult},
+    state::{ExecutionEnd, InstructionResult, Panic},
     Instruction, Predicate, State,
 };
 use zkevm_opcode_defs::{
@@ -48,7 +48,7 @@ fn unimplemented_handler(state: &mut State, instruction: *const Instruction) -> 
         std::mem::transmute(Immediate1::get(&(*instruction).arguments, state).low_u32() as u16)
     };
     eprintln!("Unimplemented instruction: {:?}!", variant);
-    Err(ExecutionEnd::JumpingOutOfProgram)
+    Err(ExecutionEnd::Panicked(Panic::InvalidInstruction))
 }
 
 fn decode(raw: u64) -> Instruction {

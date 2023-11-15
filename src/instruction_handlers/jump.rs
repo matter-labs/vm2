@@ -1,10 +1,11 @@
+use super::ret_panic;
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Immediate1, Register1,
         RelativeStack, Source,
     },
     predication::Predicate,
-    state::{ExecutionEnd, Instruction, InstructionResult, State},
+    state::{Instruction, InstructionResult, Panic, State},
 };
 
 fn jump<In: Source>(state: &mut State, mut instruction: *const Instruction) -> InstructionResult {
@@ -13,7 +14,7 @@ fn jump<In: Source>(state: &mut State, mut instruction: *const Instruction) -> I
         if let Some(i) = state.current_frame.program.get(target) {
             instruction = i;
         } else {
-            return Err(ExecutionEnd::JumpingOutOfProgram);
+            return ret_panic(state, Panic::InvalidInstruction);
         }
 
         Ok(instruction)

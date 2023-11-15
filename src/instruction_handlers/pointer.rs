@@ -4,7 +4,8 @@ use crate::{
         Destination, Immediate1, Register1, Register2, RelativeStack, Source,
     },
     fat_pointer::FatPointer,
-    state::{ExecutionEnd, InstructionResult},
+    instruction_handlers::common::instruction_boilerplate_with_panic,
+    state::{InstructionResult, Panic},
     Instruction, Predicate, State,
 };
 use u256::U256;
@@ -24,7 +25,7 @@ fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
         let (b, b_is_pointer) = b;
 
         if !a_is_pointer || b_is_pointer {
-            return Err(ExecutionEnd::IncorrectPointerTags);
+            return Err(Panic::IncorrectPointerTags);
         }
 
         let result = Op::perform(a, b)?;
@@ -36,7 +37,7 @@ fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
 }
 
 pub trait PtrOp {
-    fn perform(in1: U256, in2: U256) -> Result<U256, ExecutionEnd>;
+    fn perform(in1: U256, in2: U256) -> Result<U256, Panic>;
 }
 
 pub struct PtrAddSub<const IS_ADD: bool>;
@@ -44,9 +45,9 @@ pub type PtrAdd = PtrAddSub<true>;
 pub type PtrSub = PtrAddSub<false>;
 
 impl<const IS_ADD: bool> PtrOp for PtrAddSub<IS_ADD> {
-    fn perform(mut in1: U256, in2: U256) -> Result<U256, ExecutionEnd> {
+    fn perform(mut in1: U256, in2: U256) -> Result<U256, Panic> {
         if in2 > u32::MAX.into() {
-            return Err(ExecutionEnd::PointerOffsetTooLarge);
+            return Err(Panic::PointerOffsetTooLarge);
         }
         let pointer: &mut FatPointer = (&mut in1).into();
 
@@ -55,7 +56,7 @@ impl<const IS_ADD: bool> PtrOp for PtrAddSub<IS_ADD> {
         } else {
             pointer.offset.checked_sub(in2.low_u32())
         }
-        .ok_or(ExecutionEnd::PointerOffsetTooLarge)?;
+        .ok_or(Panic::PointerOffsetTooLarge)?;
 
         pointer.offset = new_offset;
 
@@ -65,9 +66,9 @@ impl<const IS_ADD: bool> PtrOp for PtrAddSub<IS_ADD> {
 
 pub struct PtrPack;
 impl PtrOp for PtrPack {
-    fn perform(in1: U256, in2: U256) -> Result<U256, ExecutionEnd> {
+    fn perform(in1: U256, in2: U256) -> Result<U256, Panic> {
         if in2.low_u128() != 0 {
-            Err(ExecutionEnd::PtrPackLowBitsNotZero)
+            Err(Panic::PtrPackLowBitsNotZero)
         } else {
             Ok(U256([in1.0[0], in1.0[1], in2.0[2], in2.0[3]]))
         }
@@ -76,17 +77,17 @@ impl PtrOp for PtrPack {
 
 pub struct PtrShrink;
 impl PtrOp for PtrShrink {
-    fn perform(mut in1: U256, in2: U256) -> Result<U256, ExecutionEnd> {
+    fn perform(mut in1: U256, in2: U256) -> Result<U256, Panic> {
         let pointer: &mut FatPointer = (&mut in1).into();
         pointer.length = pointer
             .length
             .checked_sub(in2.low_u32())
-            .ok_or(ExecutionEnd::PointerOffsetTooLarge)?;
+            .ok_or(Panic::PointerOffsetTooLarge)?;
         Ok(in1)
     }
 }
 
-use super::{common::instruction_boilerplate_with_panic, monomorphization::*};
+use super::monomorphization::*;
 
 impl Instruction {
     #[inline(always)]
