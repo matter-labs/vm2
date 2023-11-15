@@ -52,6 +52,13 @@ impl ContextOp for U128 {
     }
 }
 
+struct SP;
+impl ContextOp for SP {
+    fn get(state: &State) -> U256 {
+        state.current_frame.sp.into()
+    }
+}
+
 fn set_context_u128(state: &mut State, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate(state, instruction, |state, args| {
         let value = Register1::get(args, state).low_u128();
@@ -81,6 +88,9 @@ impl Instruction {
     }
     pub fn from_context_u128(out: Register1, predicate: Predicate) -> Self {
         Self::from_context::<U128>(out, predicate)
+    }
+    pub fn from_context_sp(out: Register1, predicate: Predicate) -> Self {
+        Self::from_context::<SP>(out, predicate)
     }
     pub fn from_set_context_u128(src: Register1, predicate: Predicate) -> Self {
         Self {
