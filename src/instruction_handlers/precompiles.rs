@@ -5,7 +5,11 @@ use crate::{
     Instruction, Predicate, State,
 };
 use zkevm_opcode_defs::{
-    system_params::KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS, PrecompileCallABI,
+    system_params::{
+        ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS, KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
+        SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
+    },
+    PrecompileCallABI,
 };
 
 use super::common::instruction_boilerplate_with_panic;
@@ -32,6 +36,12 @@ fn precompile_call(state: &mut State, instruction: *const Instruction) -> Instru
         match address_low {
             KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
                 keccak::execute_precompile(abi, &mut state.heaps);
+            }
+            SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
+                todo!()
+            }
+            ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS => {
+                todo!()
             }
             _ => {
                 // A precompile call may be used just to burn gas
