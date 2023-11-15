@@ -24,7 +24,7 @@ impl Instruction {
     ) -> Self {
         Self {
             handler: nop,
-            arguments: Arguments::new(predicate)
+            arguments: Arguments::new(predicate, 6)
                 .write_source(&pop)
                 .write_destination(&push),
         }

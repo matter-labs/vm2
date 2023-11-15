@@ -136,7 +136,7 @@ impl Instruction {
         incremented_out: Option<Register2>,
         predicate: Predicate,
     ) -> Self {
-        let mut arguments = Arguments::new(predicate)
+        let mut arguments = Arguments::new(predicate, 7)
             .write_source(&src)
             .write_destination(&out);
 
@@ -158,7 +158,7 @@ impl Instruction {
         incremented_out: Option<Register1>,
         predicate: Predicate,
     ) -> Self {
-        let mut arguments = Arguments::new(predicate)
+        let mut arguments = Arguments::new(predicate, 13)
             .write_source(&src1)
             .write_source(&src2);
 
@@ -181,7 +181,7 @@ impl Instruction {
         incremented_out: Option<Register2>,
         predicate: Predicate,
     ) -> Self {
-        let mut arguments = Arguments::new(predicate)
+        let mut arguments = Arguments::new(predicate, 7)
             .write_source(&src)
             .write_destination(&out);
 

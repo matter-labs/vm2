@@ -171,7 +171,7 @@ impl Instruction {
     ) -> Self {
         Self {
             handler: monomorphize!(far_call [MODE] match_boolean is_static),
-            arguments: Arguments::new(predicate)
+            arguments: Arguments::new(predicate, 182)
                 .write_source(&src1)
                 .write_source(&src2)
                 .write_source(&error_handler),
@@ -188,7 +188,7 @@ impl Instruction {
     ) -> Self {
         Self {
             handler: near_call,
-            arguments: Arguments::new(predicate)
+            arguments: Arguments::new(predicate, 25)
                 .write_source(&gas)
                 .write_source(&destination)
                 .write_source(&error_handler),

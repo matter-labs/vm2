@@ -1,6 +1,6 @@
 use super::common::{instruction_boilerplate, instruction_boilerplate_with_panic};
 use crate::{
-    addressing_modes::{Arguments, Destination, Register1, Register2, Source},
+    addressing_modes::{Arguments, Destination, Register1, Register2, Source, SSTORE_COST},
     state::InstructionResult,
     Instruction, Predicate, State, World,
 };
@@ -35,7 +35,7 @@ impl Instruction {
     pub fn from_sstore(src1: Register1, src2: Register2, predicate: Predicate) -> Self {
         Self {
             handler: sstore,
-            arguments: Arguments::new(predicate)
+            arguments: Arguments::new(predicate, SSTORE_COST)
                 .write_source(&src1)
                 .write_source(&src2),
         }
@@ -47,7 +47,7 @@ impl Instruction {
     pub fn from_sload(src: Register1, dst: Register1, predicate: Predicate) -> Self {
         Self {
             handler: sload,
-            arguments: Arguments::new(predicate)
+            arguments: Arguments::new(predicate, 158)
                 .write_source(&src)
                 .write_destination(&dst),
         }

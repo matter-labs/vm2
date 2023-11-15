@@ -41,7 +41,7 @@ impl Instruction {
     pub fn from_ret(src1: Register1, predicate: Predicate) -> Self {
         Self {
             handler: ret,
-            arguments: Arguments::new(predicate).write_source(&src1),
+            arguments: Arguments::new(predicate, 5).write_source(&src1),
         }
     }
 }

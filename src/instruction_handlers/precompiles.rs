@@ -45,7 +45,7 @@ fn precompile_call(state: &mut State, instruction: *const Instruction) -> Instru
 impl Instruction {
     pub fn from_precompile_call(abi: Register1, burn: Register2, predicate: Predicate) -> Self {
         Self {
-            arguments: Arguments::new(predicate)
+            arguments: Arguments::new(predicate, 6)
                 .write_source(&abi)
                 .write_source(&burn),
             handler: precompile_call,

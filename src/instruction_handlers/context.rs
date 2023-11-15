@@ -63,7 +63,7 @@ impl Instruction {
     fn from_context<Op: ContextOp>(out: Register1, predicate: Predicate) -> Self {
         Self {
             handler: context::<Op>,
-            arguments: Arguments::new(predicate).write_destination(&out),
+            arguments: Arguments::new(predicate, 5).write_destination(&out),
         }
     }
 
@@ -85,7 +85,7 @@ impl Instruction {
     pub fn from_set_context_u128(src: Register1, predicate: Predicate) -> Self {
         Self {
             handler: set_context_u128,
-            arguments: Arguments::new(predicate).write_source(&src),
+            arguments: Arguments::new(predicate, 5).write_source(&src),
         }
     }
 }

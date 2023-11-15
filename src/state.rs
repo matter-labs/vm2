@@ -236,11 +236,12 @@ impl State {
 
         unsafe {
             loop {
-                let Ok(_) = self.use_gas(1) else {
+                let args = &(*instruction).arguments;
+                let Ok(_) = self.use_gas(args.get_static_gas_cost()) else {
                     return ExecutionEnd::OutOfGas;
                 };
 
-                if (*instruction).arguments.predicate.satisfied(&self.flags) {
+                if args.predicate.satisfied(&self.flags) {
                     instruction = match ((*instruction).handler)(self, instruction) {
                         Ok(n) => n,
                         Err(e) => return e,
@@ -266,7 +267,7 @@ impl State {
 pub fn end_execution() -> Instruction {
     Instruction {
         handler: end_execution_handler,
-        arguments: Arguments::new(Predicate::Always),
+        arguments: Arguments::new(Predicate::Always, 0),
     }
 }
 fn end_execution_handler(_state: &mut State, _: *const Instruction) -> InstructionResult {
@@ -276,7 +277,7 @@ fn end_execution_handler(_state: &mut State, _: *const Instruction) -> Instructi
 pub fn jump_to_beginning() -> Instruction {
     Instruction {
         handler: jump_to_beginning_handler,
-        arguments: Arguments::new(Predicate::Always),
+        arguments: Arguments::new(Predicate::Always, 0),
     }
 }
 fn jump_to_beginning_handler(state: &mut State, _: *const Instruction) -> InstructionResult {

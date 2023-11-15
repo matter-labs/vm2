@@ -99,7 +99,7 @@ impl Instruction {
     ) -> Self {
         Self {
             handler: monomorphize!(ptr [Op] match_source src1 match_destination out match_boolean swap),
-            arguments: Arguments::new(predicate)
+            arguments: Arguments::new(predicate, 6)
                 .write_source(&src1)
                 .write_source(&src2)
                 .write_destination(&out),

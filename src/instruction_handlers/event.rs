@@ -18,7 +18,7 @@ impl Instruction {
     pub fn from_event(key: Register1, value: Register2, predicate: Predicate) -> Self {
         Self {
             handler: event,
-            arguments: Arguments::new(predicate)
+            arguments: Arguments::new(predicate, 38)
                 .write_source(&key)
                 .write_source(&value),
         }

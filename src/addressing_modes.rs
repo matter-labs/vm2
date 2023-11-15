@@ -44,16 +44,38 @@ pub struct Arguments {
     immediate1: u16,
     immediate2: u16,
     pub predicate: Predicate,
+    static_gas_cost: u8,
 }
 
+pub(crate) const L1_MESSAGE_COST: u32 = 156250;
+pub(crate) const SSTORE_COST: u32 = 3501;
+
 impl Arguments {
-    pub fn new(predicate: Predicate) -> Self {
+    pub fn new(predicate: Predicate, gas_cost: u32) -> Self {
         Self {
             source_registers: Default::default(),
             destination_registers: Default::default(),
             immediate1: 0,
             immediate2: 0,
             predicate,
+            static_gas_cost: Self::encode_static_gas_cost(gas_cost),
+        }
+    }
+
+    fn encode_static_gas_cost(x: u32) -> u8 {
+        match x {
+            L1_MESSAGE_COST => 1,
+            SSTORE_COST => 2,
+            1 | 2 => panic!("Reserved gas cost values overlap with actual gas costs"),
+            x => x.try_into().expect("Gas cost doesn't fit into 8 bits"),
+        }
+    }
+
+    pub(crate) fn get_static_gas_cost(&self) -> u32 {
+        match self.static_gas_cost {
+            1 => L1_MESSAGE_COST,
+            2 => SSTORE_COST,
+            x => x.into(),
         }
     }
 

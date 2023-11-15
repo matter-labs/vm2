@@ -213,7 +213,7 @@ impl Instruction {
     ) -> Self {
         Self {
             handler: monomorphize!(binop [Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
-            arguments: Arguments::new(predicate)
+            arguments: Arguments::new(predicate, 6)
                 .write_source(&src1)
                 .write_source(&src2)
                 .write_destination(&out)

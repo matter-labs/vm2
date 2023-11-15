@@ -35,7 +35,7 @@ pub fn decode_program(raw: &[u64]) -> Vec<Instruction> {
 }
 
 fn unimplemented_instruction(variant: Opcode) -> Instruction {
-    let mut arguments = Arguments::new(Predicate::Always);
+    let mut arguments = Arguments::new(Predicate::Always, 0);
     let variant_as_number: u16 = unsafe { std::mem::transmute(variant) };
     Immediate1(variant_as_number).write_source(&mut arguments);
     Instruction {

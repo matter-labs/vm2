@@ -26,7 +26,7 @@ impl Instruction {
     pub fn from_jump(source: AnySource, predicate: Predicate) -> Self {
         Self {
             handler: monomorphize!(jump match_source source),
-            arguments: Arguments::new(predicate).write_source(&source),
+            arguments: Arguments::new(predicate, 6).write_source(&source),
         }
     }
 }
