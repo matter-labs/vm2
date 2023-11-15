@@ -33,6 +33,7 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(state, instruction, |state, args| {
         let pointer = In::get(args, state);
+        // TODO according to spec should panic here if given pointer tagged input
         let address = pointer.low_u32();
 
         // Saturating add is fine since nobody has enough gas to allocate all memory
@@ -46,6 +47,7 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
 
         if INCREMENT {
             // TODO zk_evm preserves pointerness here. Should we?
+            // TODO overflow here should panic
             Register2::set(args, state, pointer + 32)
         }
 
@@ -73,6 +75,7 @@ fn store<H: HeapFromState, In1: Source, const INCREMENT: bool>(
 
         if INCREMENT {
             // TODO zk_evm preserves pointerness here. Should we?
+            // TODO overflow here should panic
             Register1::set(args, state, pointer + 32)
         }
         Ok(())
@@ -119,6 +122,7 @@ fn load_pointer<const INCREMENT: bool>(
         Register1::set(args, state, value);
 
         if INCREMENT {
+            // TODO Overflow here should panic
             Register2::set_fat_ptr(args, state, input + 32)
         }
 

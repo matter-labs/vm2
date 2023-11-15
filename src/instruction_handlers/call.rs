@@ -27,6 +27,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     let destination_address = Register2::get(args, state) & address_mask;
     let error_handler = Immediate1::get(args, state);
 
+    // TODO should panic on calling contract that is not fully deployed yet
     let (program, code_page) = decommit(&mut state.world, destination_address);
 
     let maximum_gas = (state.current_frame.gas as u64 * 63 / 64) as u32;
