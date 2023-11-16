@@ -33,9 +33,25 @@ pub(crate) trait SourceWriter {
     fn write_source(&self, args: &mut Arguments);
 }
 
+impl<T: SourceWriter> SourceWriter for Option<T> {
+    fn write_source(&self, args: &mut Arguments) {
+        if let Some(x) = self {
+            x.write_source(args)
+        }
+    }
+}
+
 #[enum_dispatch]
 pub trait DestinationWriter {
     fn write_destination(&self, args: &mut Arguments);
+}
+
+impl<T: DestinationWriter> DestinationWriter for Option<T> {
+    fn write_destination(&self, args: &mut Arguments) {
+        if let Some(x) = self {
+            x.write_destination(args)
+        }
+    }
 }
 
 pub struct Arguments {

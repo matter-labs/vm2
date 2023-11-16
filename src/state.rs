@@ -166,6 +166,7 @@ pub enum ExecutionEnd {
 
 #[derive(Debug)]
 pub enum Panic {
+    ExplicitPanic,
     OutOfGas,
     IncorrectPointerTags,
     PointerOffsetTooLarge,

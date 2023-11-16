@@ -17,8 +17,7 @@ fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
 
     let pc = if let Some((pc, eh)) = state.current_frame.pop_near_call() {
         if TO_LABEL {
-            let label = Immediate1::get(args, state).low_u32();
-            label
+            Immediate1::get(args, state).low_u32()
         } else if IS_REVERT {
             eh
         } else {
@@ -63,10 +62,31 @@ fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
     }
 }
 
-pub(crate) fn ret_panic(state: &mut State, mut panic: Panic) -> InstructionResult {
+pub(crate) fn ret_panic(state: &mut State, panic: Panic) -> InstructionResult {
+    panic_impl(state, panic, None)
+}
+
+fn explicit_panic<const TO_LABEL: bool>(
+    state: &mut State,
+    instruction: *const Instruction,
+) -> InstructionResult {
+    let label = if TO_LABEL {
+        unsafe { Some(Immediate1::get(&(*instruction).arguments, state).low_u32()) }
+    } else {
+        None
+    };
+    panic_impl(state, Panic::ExplicitPanic, label)
+}
+
+#[inline(always)]
+fn panic_impl(state: &mut State, mut panic: Panic, maybe_label: Option<u32>) -> InstructionResult {
     loop {
         let eh = if let Some((_, eh)) = state.current_frame.pop_near_call() {
-            eh
+            if let Some(label) = maybe_label {
+                label
+            } else {
+                eh
+            }
         } else {
             let Some((_, eh)) = state.pop_frame() else {
                 return Err(ExecutionEnd::Panicked(panic));
@@ -89,16 +109,29 @@ pub(crate) fn ret_panic(state: &mut State, mut panic: Panic) -> InstructionResul
 use super::monomorphization::*;
 
 impl Instruction {
-    pub fn from_ret(src1: Register1, to_label: bool, predicate: Predicate) -> Self {
+    pub fn from_ret(src1: Register1, label: Option<Immediate1>, predicate: Predicate) -> Self {
+        let to_label = label.is_some();
         Self {
             handler: monomorphize!(ret [false] match_boolean to_label),
-            arguments: Arguments::new(predicate, 5).write_source(&src1),
+            arguments: Arguments::new(predicate, 5)
+                .write_source(&src1)
+                .write_source(&label),
         }
     }
-    pub fn from_revert(src1: Register1, to_label: bool, predicate: Predicate) -> Self {
+    pub fn from_revert(src1: Register1, label: Option<Immediate1>, predicate: Predicate) -> Self {
+        let to_label = label.is_some();
         Self {
             handler: monomorphize!(ret [true] match_boolean to_label),
-            arguments: Arguments::new(predicate, 5).write_source(&src1),
+            arguments: Arguments::new(predicate, 5)
+                .write_source(&src1)
+                .write_source(&label),
+        }
+    }
+    pub fn from_panic(label: Option<Immediate1>, predicate: Predicate) -> Self {
+        let to_label = label.is_some();
+        Self {
+            handler: monomorphize!(explicit_panic match_boolean to_label),
+            arguments: Arguments::new(predicate, 5).write_source(&label),
         }
     }
 }

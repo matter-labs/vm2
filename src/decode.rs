@@ -207,17 +207,19 @@ fn decode(raw: u64) -> Instruction {
         }
         zkevm_opcode_defs::Opcode::Ret(kind) => {
             let to_label = parsed.variant.flags[RET_TO_LABEL_BIT_IDX];
+            let label = if to_label {
+                Some(Immediate1(parsed.imm_0))
+            } else {
+                None
+            };
             match kind {
                 zkevm_opcode_defs::RetOpcode::Ok => {
-                    Instruction::from_ret(src1.try_into().unwrap(), to_label, predicate)
+                    Instruction::from_ret(src1.try_into().unwrap(), label, predicate)
                 }
                 zkevm_opcode_defs::RetOpcode::Revert => {
-                    Instruction::from_revert(src1.try_into().unwrap(), to_label, predicate)
+                    Instruction::from_revert(src1.try_into().unwrap(), label, predicate)
                 }
-                /*zkevm_opcode_defs::RetOpcode::Panic => {
-                    Instruction::from_panic(src1.try_into().unwrap(), to_label, predicate)
-                }*/
-                x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Ret(x)),
+                zkevm_opcode_defs::RetOpcode::Panic => Instruction::from_panic(label, predicate),
             }
         }
         zkevm_opcode_defs::Opcode::Log(x) => match x {
