@@ -1,13 +1,13 @@
 use super::call::get_far_call_arguments;
 use crate::{
-    addressing_modes::{Arguments, Register1},
+    addressing_modes::{Arguments, Immediate1, Register1, Source},
     predication::Flags,
     state::{ExecutionEnd, InstructionResult, Panic},
     Instruction, Predicate, State,
 };
 use u256::U256;
 
-fn ret<const IS_REVERT: bool>(
+fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
     state: &mut State,
     instruction: *const Instruction,
 ) -> InstructionResult {
@@ -15,8 +15,15 @@ fn ret<const IS_REVERT: bool>(
 
     let gas_left = state.current_frame.gas;
 
-    let (pc, eh) = if let Some(pc_eh) = state.current_frame.pop_near_call() {
-        pc_eh
+    let pc = if let Some((pc, eh)) = state.current_frame.pop_near_call() {
+        if TO_LABEL {
+            let label = Immediate1::get(args, state).low_u32();
+            label
+        } else if IS_REVERT {
+            eh
+        } else {
+            pc + 1
+        }
     } else {
         let return_value = match get_far_call_arguments(args, state) {
             Ok(abi) => abi.pointer,
@@ -25,7 +32,7 @@ fn ret<const IS_REVERT: bool>(
 
         // TODO check that the return value resides in this or a newer frame's memory
 
-        let Some(pc_eh) = state.pop_frame() else {
+        let Some((pc, eh)) = state.pop_frame() else {
             let output = state.heaps[return_value.memory_page as usize][return_value.start as usize..(return_value.start + return_value.length) as usize].to_vec();
             return if IS_REVERT{
                 Err(ExecutionEnd::Reverted(output))
@@ -39,19 +46,20 @@ fn ret<const IS_REVERT: bool>(
         state.registers = [U256::zero(); 16];
         state.registers[1] = return_value.into_u256();
         state.register_pointer_flags = 2;
-        pc_eh
+
+        if IS_REVERT {
+            eh
+        } else {
+            pc + 1
+        }
     };
 
     state.flags = Flags::new(false, false, false);
     state.current_frame.gas += gas_left;
 
-    if IS_REVERT {
-        match state.current_frame.program.get(eh as usize) {
-            Some(i) => Ok(i),
-            None => ret_panic(state, Panic::InvalidInstruction),
-        }
-    } else {
-        Ok(unsafe { pc.add(1) })
+    match state.current_frame.pc_from_u32(pc) {
+        Some(i) => Ok(i),
+        None => ret_panic(state, Panic::InvalidInstruction),
     }
 }
 
@@ -78,16 +86,18 @@ pub(crate) fn ret_panic(state: &mut State, mut panic: Panic) -> InstructionResul
     }
 }
 
+use super::monomorphization::*;
+
 impl Instruction {
-    pub fn from_ret(src1: Register1, predicate: Predicate) -> Self {
+    pub fn from_ret(src1: Register1, to_label: bool, predicate: Predicate) -> Self {
         Self {
-            handler: ret::<false>,
+            handler: monomorphize!(ret [false] match_boolean to_label),
             arguments: Arguments::new(predicate, 5).write_source(&src1),
         }
     }
-    pub fn from_revert(src1: Register1, predicate: Predicate) -> Self {
+    pub fn from_revert(src1: Register1, to_label: bool, predicate: Predicate) -> Self {
         Self {
-            handler: ret::<true>,
+            handler: monomorphize!(ret [true] match_boolean to_label),
             arguments: Arguments::new(predicate, 5).write_source(&src1),
         }
     }

@@ -22,9 +22,9 @@ pub struct State {
 
     pub current_frame: Callframe,
 
-    /// Contains pointers to the far call instructions currently being executed.
+    /// Contains indices to the far call instructions currently being executed.
     /// They are needed to continue execution from the correct spot upon return.
-    previous_frames: Vec<(*const Instruction, Callframe)>,
+    previous_frames: Vec<(u32, Callframe)>,
 
     pub(crate) heaps: Vec<Vec<u8>>,
 
@@ -54,7 +54,7 @@ pub struct Callframe {
 }
 
 struct NearCallFrame {
-    call_instruction: *const Instruction,
+    call_instruction: u32,
     exception_handler: u32,
     previous_frame_sp: u16,
     previous_frame_gas: u32,
@@ -122,7 +122,7 @@ impl Callframe {
         exception_handler: u32,
     ) {
         self.near_calls.push(NearCallFrame {
-            call_instruction: old_pc,
+            call_instruction: self.pc_to_u32(old_pc),
             exception_handler,
             previous_frame_sp: self.sp,
             previous_frame_gas: self.gas - gas_to_call,
@@ -130,12 +130,22 @@ impl Callframe {
         self.gas = gas_to_call;
     }
 
-    pub(crate) fn pop_near_call(&mut self) -> Option<(*const Instruction, u32)> {
+    pub(crate) fn pop_near_call(&mut self) -> Option<(u32, u32)> {
         self.near_calls.pop().map(|f| {
             self.sp = f.previous_frame_sp;
             self.gas = f.previous_frame_gas;
             (f.call_instruction, f.exception_handler)
         })
+    }
+
+    fn pc_to_u32(&self, pc: *const Instruction) -> u32 {
+        unsafe { pc.offset_from(&self.program[0]) as u32 }
+    }
+
+    pub(crate) fn pc_from_u32(&self, index: u32) -> Option<*const Instruction> {
+        self.program
+            .get(index as usize)
+            .map(|p| p as *const Instruction)
     }
 }
 
@@ -242,11 +252,12 @@ impl State {
         );
         self.context_u128 = 0;
 
+        let old_pc = self.current_frame.pc_to_u32(instruction_pointer);
         std::mem::swap(&mut new_frame, &mut self.current_frame);
-        self.previous_frames.push((instruction_pointer, new_frame));
+        self.previous_frames.push((old_pc, new_frame));
     }
 
-    pub(crate) fn pop_frame(&mut self) -> Option<(*const Instruction, u32)> {
+    pub(crate) fn pop_frame(&mut self) -> Option<(u32, u32)> {
         let eh = self.current_frame.exception_handler;
         self.previous_frames.pop().map(|(pc, frame)| {
             self.current_frame = frame;

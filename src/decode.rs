@@ -17,8 +17,9 @@ use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
     ImmMemHandlerFlags, Opcode,
     Operand::*,
-    RegOrImmFlags, SET_FLAGS_FLAG_IDX, SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES,
-    SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
+    RegOrImmFlags, RET_TO_LABEL_BIT_IDX, SET_FLAGS_FLAG_IDX,
+    SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES, SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE,
+    UMA_INCREMENT_FLAG_IDX,
 };
 
 pub fn decode_program(raw: &[u64]) -> Vec<Instruction> {
@@ -204,16 +205,21 @@ fn decode(raw: u64) -> Instruction {
                 predicate,
             )
         }
-        zkevm_opcode_defs::Opcode::Ret(kind) => match kind {
-            zkevm_opcode_defs::RetOpcode::Ok => {
-                Instruction::from_ret(src1.try_into().unwrap(), predicate)
+        zkevm_opcode_defs::Opcode::Ret(kind) => {
+            let to_label = parsed.variant.flags[RET_TO_LABEL_BIT_IDX];
+            match kind {
+                zkevm_opcode_defs::RetOpcode::Ok => {
+                    Instruction::from_ret(src1.try_into().unwrap(), to_label, predicate)
+                }
+                zkevm_opcode_defs::RetOpcode::Revert => {
+                    Instruction::from_revert(src1.try_into().unwrap(), to_label, predicate)
+                }
+                /*zkevm_opcode_defs::RetOpcode::Panic => {
+                    Instruction::from_panic(src1.try_into().unwrap(), to_label, predicate)
+                }*/
+                x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Ret(x)),
             }
-            zkevm_opcode_defs::RetOpcode::Revert => {
-                Instruction::from_revert(src1.try_into().unwrap(), predicate)
-            }
-            //zkevm_opcode_defs::RetOpcode::Panic => ,
-            x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Ret(x)),
-        },
+        }
         zkevm_opcode_defs::Opcode::Log(x) => match x {
             zkevm_opcode_defs::LogOpcode::StorageRead => Instruction::from_sload(
                 src1.try_into().unwrap(),
