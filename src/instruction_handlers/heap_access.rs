@@ -163,19 +163,13 @@ impl Instruction {
         incremented_out: Option<Register1>,
         predicate: Predicate,
     ) -> Self {
-        let mut arguments = Arguments::new(predicate, 13)
-            .write_source(&src1)
-            .write_source(&src2);
-
         let increment = incremented_out.is_some();
-        if let Some(out) = incremented_out {
-            out.write_destination(&mut arguments);
-        }
-        arguments.predicate = predicate;
-
         Self {
             handler: monomorphize!(store [H] match_reg_imm src1 match_boolean increment),
-            arguments,
+            arguments: Arguments::new(predicate, 13)
+                .write_source(&src1)
+                .write_source(&src2)
+                .write_destination(&incremented_out),
         }
     }
 
@@ -186,19 +180,13 @@ impl Instruction {
         incremented_out: Option<Register2>,
         predicate: Predicate,
     ) -> Self {
-        let mut arguments = Arguments::new(predicate, 7)
-            .write_source(&src)
-            .write_destination(&out);
-
         let increment = incremented_out.is_some();
-        if let Some(out2) = incremented_out {
-            out2.write_destination(&mut arguments);
-        }
-        arguments.predicate = predicate;
-
         Self {
             handler: monomorphize!(load_pointer match_boolean increment),
-            arguments,
+            arguments: Arguments::new(predicate, 7)
+                .write_source(&src)
+                .write_destination(&out)
+                .write_destination(&incremented_out),
         }
     }
 }
