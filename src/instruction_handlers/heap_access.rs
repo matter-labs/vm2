@@ -108,7 +108,8 @@ fn load_pointer<const INCREMENT: bool>(
             let heap = &state.heaps[pointer.memory_page as usize];
             let address = (pointer.start + pointer.offset) as usize;
             let mut buffer = [0; 32];
-            for (i, byte) in heap[address..(address + 32).min(heap.len())]
+            for (i, byte) in heap
+                [address..(address + 32).min((pointer.start + pointer.length) as usize)]
                 .iter()
                 .enumerate()
             {

@@ -96,17 +96,30 @@ pub(crate) fn get_far_call_arguments(
                 return Err(Panic::IncorrectPointerTags);
             }
 
-            // TODO check validity
+            if pointer.offset > pointer.length {
+                return Err(Panic::PointerOffsetTooLarge);
+            }
 
             pointer.narrow();
         }
-        FatPointerSource::MakeNewPointerToHeap => {
-            grow_heap::<Heap>(state, pointer.start + pointer.length)?;
-            pointer.memory_page = state.current_frame.heap;
-        }
-        FatPointerSource::MakeNewPointerToAuxHeap => {
-            grow_heap::<AuxHeap>(state, pointer.start + pointer.length)?;
-            pointer.memory_page = state.current_frame.aux_heap;
+        FatPointerSource::MakeNewPointer(target) => {
+            let Some(bound) = pointer.start.checked_add(pointer.length) else {
+                return Err(Panic::PointerUpperBoundOverflows);
+            };
+            if pointer.offset != 0 {
+                return Err(Panic::PointerOffsetNotZeroAtCreation);
+            }
+
+            match target {
+                ToHeap => {
+                    grow_heap::<Heap>(state, bound)?;
+                    pointer.memory_page = state.current_frame.heap;
+                }
+                ToAuxHeap => {
+                    grow_heap::<AuxHeap>(state, pointer.start + pointer.length)?;
+                    pointer.memory_page = state.current_frame.aux_heap;
+                }
+            }
         }
     }
 
@@ -120,18 +133,22 @@ pub(crate) fn get_far_call_arguments(
 }
 
 enum FatPointerSource {
-    MakeNewPointerToHeap,
+    MakeNewPointer(FatPointerTarget),
     ForwardFatPointer,
-    MakeNewPointerToAuxHeap,
 }
+enum FatPointerTarget {
+    ToHeap,
+    ToAuxHeap,
+}
+use FatPointerTarget::*;
 
 impl FatPointerSource {
     pub const fn from_abi(value: u8) -> Self {
         match value {
-            0 => Self::MakeNewPointerToHeap,
+            0 => Self::MakeNewPointer(ToHeap),
             1 => Self::ForwardFatPointer,
-            2 => Self::MakeNewPointerToAuxHeap,
-            _ => Self::MakeNewPointerToHeap, // default
+            2 => Self::MakeNewPointer(ToAuxHeap),
+            _ => Self::MakeNewPointer(ToHeap), // default
         }
     }
 }

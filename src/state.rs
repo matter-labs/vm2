@@ -160,6 +160,8 @@ pub enum Panic {
     IncorrectPointerTags,
     PointerOffsetTooLarge,
     PtrPackLowBitsNotZero,
+    PointerUpperBoundOverflows,
+    PointerOffsetNotZeroAtCreation,
     InvalidInstruction,
 }
 
