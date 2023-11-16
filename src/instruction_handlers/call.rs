@@ -32,7 +32,10 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     let error_handler = Immediate1::get(args, state);
 
     // TODO should panic on calling contract that is not fully deployed yet
-    let (program, code_page) = decommit(&mut state.world, destination_address);
+    let (program, code_page) = match decommit(&mut state.world, destination_address) {
+        Ok(x) => x,
+        Err(panic) => return ret_panic(state, panic),
+    };
 
     let maximum_gas = (state.current_frame.gas as u64 * 63 / 64) as u32;
     let new_frame_gas = if abi.gas_to_pass == 0 {
