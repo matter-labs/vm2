@@ -237,7 +237,7 @@ impl State {
             } else if CALLING_MODE == CallingMode::Delegate as u8 {
                 self.current_frame.caller
             } else {
-                u256_into_address(self.registers[3])
+                u256_into_address(self.registers[15])
             },
             program,
             code_page,
