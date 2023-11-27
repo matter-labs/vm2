@@ -13,6 +13,7 @@ mod state;
 use std::sync::Arc;
 use u256::{H160, U256};
 
+pub use modified_world::Event;
 pub use predication::Predicate;
 pub use state::{
     end_execution, jump_to_beginning, run_arbitrary_program, ExecutionEnd, Instruction, State,

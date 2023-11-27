@@ -1,5 +1,5 @@
 use crate::{
-    rollback::{Rollback, RollbackableMap},
+    rollback::{Rollback, RollbackableLog, RollbackableMap},
     Instruction, World,
 };
 use std::sync::Arc;
@@ -11,10 +11,20 @@ pub struct ModifiedWorld {
     world: Box<dyn World>,
     storage_changes: RollbackableMap<(H160, U256), U256>,
     decommitted_hashes: RollbackableMap<U256, ()>,
+    events: RollbackableLog<Event>,
     snapshots: Vec<(
         <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
         <RollbackableMap<U256, ()> as Rollback>::Snapshot,
+        <RollbackableLog<Event> as Rollback>::Snapshot,
     )>,
+}
+
+pub struct Event {
+    pub key: U256,
+    pub value: U256,
+    pub is_first: bool,
+    pub shard_id: u8,
+    pub tx_number: u32,
 }
 
 impl World for ModifiedWorld {
@@ -39,6 +49,7 @@ impl ModifiedWorld {
             world,
             storage_changes: Default::default(),
             decommitted_hashes: Default::default(),
+            events: Default::default(),
             snapshots: vec![],
         }
     }
@@ -47,19 +58,22 @@ impl ModifiedWorld {
         self.snapshots.push((
             self.storage_changes.snapshot(),
             self.decommitted_hashes.snapshot(),
+            self.events.snapshot(),
         ))
     }
 
     pub fn rollback(&mut self) {
-        let (storage, decommit) = self.snapshots.pop().unwrap();
+        let (storage, decommit, events) = self.snapshots.pop().unwrap();
         self.storage_changes.rollback(storage);
         self.decommitted_hashes.rollback(decommit);
+        self.events.rollback(events);
     }
 
     pub fn forget_snapshot(&mut self) {
-        let (storage, decommit) = self.snapshots.pop().unwrap();
+        let (storage, decommit, events) = self.snapshots.pop().unwrap();
         self.storage_changes.forget(storage);
         self.decommitted_hashes.forget(decommit);
+        self.events.forget(events);
     }
 
     pub fn write_storage(&mut self, contract: H160, key: U256, value: U256) {
@@ -69,5 +83,13 @@ impl ModifiedWorld {
 
     pub fn get_storage_changes(&self) -> impl Iterator<Item = ((H160, U256), U256)> + '_ {
         self.storage_changes.as_ref().iter().map(|(k, v)| (*k, *v))
+    }
+
+    pub fn record_event(&mut self, event: Event) {
+        self.events.push(event);
+    }
+
+    pub fn events(&self) -> &[Event] {
+        self.events.as_ref()
     }
 }

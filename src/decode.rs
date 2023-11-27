@@ -17,7 +17,7 @@ use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
     ImmMemHandlerFlags, Opcode,
     Operand::*,
-    RegOrImmFlags, RET_TO_LABEL_BIT_IDX, SET_FLAGS_FLAG_IDX,
+    RegOrImmFlags, FIRST_MESSAGE_FLAG_IDX, RET_TO_LABEL_BIT_IDX, SET_FLAGS_FLAG_IDX,
     SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES, SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE,
     UMA_INCREMENT_FLAG_IDX,
 };
@@ -232,9 +232,12 @@ fn decode(raw: u64) -> Instruction {
                 Instruction::from_sstore(src1.try_into().unwrap(), src2, predicate)
             }
             //zkevm_opcode_defs::LogOpcode::ToL1Message => ,
-            zkevm_opcode_defs::LogOpcode::Event => {
-                Instruction::from_event(src1.try_into().unwrap(), src2, predicate)
-            }
+            zkevm_opcode_defs::LogOpcode::Event => Instruction::from_event(
+                src1.try_into().unwrap(),
+                src2,
+                parsed.variant.flags[FIRST_MESSAGE_FLAG_IDX],
+                predicate,
+            ),
             zkevm_opcode_defs::LogOpcode::PrecompileCall => {
                 Instruction::from_precompile_call(src1.try_into().unwrap(), src2, predicate)
             }

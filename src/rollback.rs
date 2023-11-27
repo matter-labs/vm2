@@ -52,3 +52,41 @@ impl<K: Ord, V> AsRef<BTreeMap<K, V>> for RollbackableMap<K, V> {
         &self.map
     }
 }
+
+pub struct RollbackableLog<T> {
+    entries: Vec<T>,
+}
+
+impl<T> Default for RollbackableLog<T> {
+    fn default() -> Self {
+        Self {
+            entries: Default::default(),
+        }
+    }
+}
+
+impl<T> Rollback for RollbackableLog<T> {
+    type Snapshot = usize;
+
+    fn snapshot(&self) -> Self::Snapshot {
+        self.entries.len()
+    }
+
+    fn rollback(&mut self, snapshot: Self::Snapshot) {
+        self.entries.truncate(snapshot)
+    }
+
+    fn forget(&mut self, _: Self::Snapshot) {}
+}
+
+impl<T> RollbackableLog<T> {
+    pub fn push(&mut self, entry: T) {
+        self.entries.push(entry)
+    }
+}
+
+impl<T> AsRef<[T]> for RollbackableLog<T> {
+    fn as_ref(&self) -> &[T] {
+        &self.entries
+    }
+}
