@@ -174,12 +174,13 @@ pub enum Panic {
     PointerUpperBoundOverflows,
     PointerOffsetNotZeroAtCreation,
     MalformedCodeInfo,
+    CallingCodeThatIsNotYetConstructed,
     InvalidInstruction,
 }
 
 impl State {
     pub fn new(mut world: Box<dyn World>, address: H160, caller: H160, calldata: Vec<u8>) -> Self {
-        let (program, code_page) = decommit(&mut *world, address_into_u256(address)).unwrap();
+        let (program, code_page, _) = decommit(&mut *world, address_into_u256(address)).unwrap();
         let mut registers: [U256; 16] = Default::default();
         registers[1] = FatPointer {
             memory_page: 1,

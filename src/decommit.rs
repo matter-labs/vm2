@@ -5,10 +5,15 @@ use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
 
+pub(crate) struct CodeInfo {
+    pub is_constructed: bool,
+    pub code_length_in_words: u16,
+}
+
 pub(crate) fn decommit(
     world: &mut dyn World,
     address: U256,
-) -> Result<(Arc<[Instruction]>, Arc<[U256]>), Panic> {
+) -> Result<(Arc<[Instruction]>, Arc<[U256]>, CodeInfo), Panic> {
     let deployer_system_contract_address =
         Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
 
@@ -22,13 +27,13 @@ pub(crate) fn decommit(
     if code_info_bytes[0] != 1 {
         return Err(Panic::MalformedCodeInfo);
     }
-    match code_info_bytes[1] {
-        0 => {} // At rest
-        1 => {} // constructed
+    let is_constructed = match code_info_bytes[1] {
+        0 => true,
+        1 => false,
         _ => {
             return Err(Panic::MalformedCodeInfo);
         }
-    }
+    };
     let code_length_in_words = u16::from_be_bytes([code_info_bytes[2], code_info_bytes[3]]);
 
     code_info_bytes[1] = 0;
@@ -36,7 +41,15 @@ pub(crate) fn decommit(
 
     // TODO pay based on program length
 
-    Ok(world.decommit(code_key))
+    let (program, code_page) = world.decommit(code_key);
+    Ok((
+        program,
+        code_page,
+        CodeInfo {
+            is_constructed,
+            code_length_in_words,
+        },
+    ))
 }
 
 pub(crate) fn address_into_u256(address: H160) -> U256 {
