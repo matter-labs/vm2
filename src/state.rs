@@ -173,8 +173,10 @@ pub enum Panic {
     PtrPackLowBitsNotZero,
     PointerUpperBoundOverflows,
     PointerOffsetNotZeroAtCreation,
+    PointerOffsetOverflows,
     MalformedCodeInfo,
     CallingCodeThatIsNotYetConstructed,
+    AccessingTooLargeHeapAddress,
     InvalidInstruction,
 }
 

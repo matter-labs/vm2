@@ -27,17 +27,26 @@ impl HeapFromState for AuxHeap {
     }
 }
 
+/// The last address to which 32 can be added without overflow.
+const LAST_ADDRESS: u32 = u32::MAX - 32;
+
 fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
     state: &mut State,
     instruction: *const Instruction,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(state, instruction, |state, args| {
         let pointer = In::get(args, state);
-        // TODO according to spec should panic here if given pointer tagged input
+        if In::is_fat_pointer(args, state) {
+            return Err(Panic::IncorrectPointerTags);
+        }
+        if pointer > LAST_ADDRESS.into() {
+            return Err(Panic::AccessingTooLargeHeapAddress);
+        }
+
         let address = pointer.low_u32();
 
-        // Saturating add is fine since nobody has enough gas to allocate all memory
-        let new_bound = address.saturating_add(32);
+        // The size check above ensures this never overflows
+        let new_bound = address + 32;
 
         grow_heap::<H>(state, new_bound)?;
 
@@ -46,8 +55,6 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
         Register1::set(args, state, value);
 
         if INCREMENT {
-            // TODO zk_evm preserves pointerness here. Should we?
-            // TODO overflow here should panic
             Register2::set(args, state, pointer + 32)
         }
 
@@ -55,18 +62,25 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
     })
 }
 
-fn store<H: HeapFromState, In1: Source, const INCREMENT: bool>(
+fn store<H: HeapFromState, In: Source, const INCREMENT: bool>(
     state: &mut State,
     instruction: *const Instruction,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(state, instruction, |state, args| {
-        let pointer = In1::get(args, state);
+        let pointer = In::get(args, state);
+        if In::is_fat_pointer(args, state) {
+            return Err(Panic::IncorrectPointerTags);
+        }
+        if pointer > LAST_ADDRESS.into() {
+            return Err(Panic::AccessingTooLargeHeapAddress);
+        }
+
         let value = Register2::get(args, state);
 
         let address = pointer.low_u32();
 
-        // Saturating add is fine since nobody has enough gas to allocate all memory
-        let new_bound = address.saturating_add(32);
+        // The size check above ensures this never overflows
+        let new_bound = address + 32;
 
         grow_heap::<H>(state, new_bound)?;
 
@@ -74,10 +88,9 @@ fn store<H: HeapFromState, In1: Source, const INCREMENT: bool>(
         value.to_big_endian(&mut heap[address as usize..new_bound as usize]);
 
         if INCREMENT {
-            // TODO zk_evm preserves pointerness here. Should we?
-            // TODO overflow here should panic
             Register1::set(args, state, pointer + 32)
         }
+
         Ok(())
     })
 }
@@ -108,8 +121,8 @@ fn load_pointer<const INCREMENT: bool>(
             let heap = &state.heaps[pointer.memory_page as usize];
             let address = (pointer.start + pointer.offset) as usize;
             let mut buffer = [0; 32];
-            for (i, byte) in heap
-                [address..(address + 32).min((pointer.start + pointer.length) as usize)]
+            for (i, byte) in heap[address
+                ..(address.saturating_add(32)).min((pointer.start + pointer.length) as usize)]
                 .iter()
                 .enumerate()
             {
@@ -123,7 +136,9 @@ fn load_pointer<const INCREMENT: bool>(
         Register1::set(args, state, value);
 
         if INCREMENT {
-            // TODO Overflow here should panic
+            if pointer.offset > LAST_ADDRESS {
+                return Err(Panic::PointerOffsetOverflows);
+            }
             Register2::set_fat_ptr(args, state, input + 32)
         }
 
