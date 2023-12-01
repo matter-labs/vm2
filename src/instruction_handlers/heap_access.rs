@@ -117,23 +117,20 @@ fn load_pointer<const INCREMENT: bool>(
         let input = Register1::get(args, state);
         let pointer = FatPointer::from(input);
 
-        let value = if pointer.offset < pointer.length {
-            let heap = &state.heaps[pointer.memory_page as usize];
-            let address = (pointer.start + pointer.offset) as usize;
-            let mut buffer = [0; 32];
-            for (i, byte) in heap[address
-                ..(address.saturating_add(32)).min((pointer.start + pointer.length) as usize)]
-                .iter()
-                .enumerate()
-            {
-                buffer[i] = *byte;
-            }
-            U256::from_big_endian(&buffer)
-        } else {
-            U256::zero()
-        };
+        let heap = &state.heaps[pointer.memory_page as usize];
 
-        Register1::set(args, state, value);
+        // start + offset could be past the end of the fat pointer
+        // any bytes past the end are read as zero
+        let address = pointer.start.saturating_add(pointer.offset) as usize;
+        let mut buffer = [0; 32];
+        for (i, addr) in (address
+            ..(address.saturating_add(32)).min((pointer.start + pointer.length) as usize))
+            .enumerate()
+        {
+            buffer[i] = heap[addr];
+        }
+
+        Register1::set(args, state, U256::from_big_endian(&buffer));
 
         if INCREMENT {
             if pointer.offset > LAST_ADDRESS {
