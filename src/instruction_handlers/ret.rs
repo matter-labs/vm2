@@ -103,6 +103,7 @@ fn panic_impl(state: &mut State, mut panic: Panic, maybe_label: Option<u32>) -> 
             return Ok(instruction);
         }
         panic = Panic::InvalidInstruction;
+        maybe_label = None;
     }
 }
 
