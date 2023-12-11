@@ -4,6 +4,7 @@ use crate::{
     decommit::{decommit, u256_into_address},
     fat_pointer::FatPointer,
     predication::Flags,
+    rollback::Rollback,
     state::{InstructionResult, Panic},
     Instruction, Predicate, State,
 };
@@ -178,9 +179,12 @@ fn near_call(state: &mut State, mut instruction: *const Instruction) -> Instruct
     } else {
         gas_to_pass.min(state.current_frame.gas)
     };
-    state
-        .current_frame
-        .push_near_call(new_frame_gas, instruction, error_handler.low_u32());
+    state.current_frame.push_near_call(
+        new_frame_gas,
+        instruction,
+        error_handler.low_u32(),
+        state.world.snapshot(),
+    );
 
     state.flags = Flags::new(false, false, false);
 

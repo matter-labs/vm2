@@ -6,6 +6,7 @@ use crate::{
     instruction_handlers::{ret_panic, CallingMode},
     modified_world::ModifiedWorld,
     predication::Flags,
+    rollback::Rollback,
     Predicate, World,
 };
 use arbitrary::{Arbitrary, Unstructured};
@@ -31,6 +32,7 @@ pub struct State {
     context_u128: u128,
 }
 
+type Snapshot = <ModifiedWorld as Rollback>::Snapshot;
 pub struct Callframe {
     pub address: H160,
     pub code_address: H160,
@@ -51,6 +53,8 @@ pub struct Callframe {
     pub gas: u32,
 
     near_calls: Vec<NearCallFrame>,
+
+    pub(crate) world_before_this_frame: Snapshot,
 }
 
 struct NearCallFrame {
@@ -58,6 +62,7 @@ struct NearCallFrame {
     exception_handler: u32,
     previous_frame_sp: u16,
     previous_frame_gas: u32,
+    world_before_this_frame: Snapshot,
 }
 
 impl Addressable for State {
@@ -93,6 +98,7 @@ impl Callframe {
         gas: u32,
         exception_handler: u32,
         context_u128: u128,
+        world_before_this_frame: Snapshot,
     ) -> Self {
         Self {
             address,
@@ -112,6 +118,7 @@ impl Callframe {
             gas,
             exception_handler,
             near_calls: vec![],
+            world_before_this_frame,
         }
     }
 
@@ -120,21 +127,27 @@ impl Callframe {
         gas_to_call: u32,
         old_pc: *const Instruction,
         exception_handler: u32,
+        world_before_this_frame: Snapshot,
     ) {
         self.near_calls.push(NearCallFrame {
             call_instruction: self.pc_to_u32(old_pc),
             exception_handler,
             previous_frame_sp: self.sp,
             previous_frame_gas: self.gas - gas_to_call,
+            world_before_this_frame,
         });
         self.gas = gas_to_call;
     }
 
-    pub(crate) fn pop_near_call(&mut self) -> Option<(u32, u32)> {
+    pub(crate) fn pop_near_call(&mut self) -> Option<(u32, u32, Snapshot)> {
         self.near_calls.pop().map(|f| {
             self.sp = f.previous_frame_sp;
             self.gas = f.previous_frame_gas;
-            (f.call_instruction, f.exception_handler)
+            (
+                f.call_instruction,
+                f.exception_handler,
+                f.world_before_this_frame,
+            )
         })
     }
 
@@ -191,8 +204,12 @@ impl State {
             length: calldata.len() as u32,
         }
         .into_u256();
+
+        let world = ModifiedWorld::new(world);
+        let world_before_this_frame = world.snapshot();
+
         Self {
-            world: ModifiedWorld::new(world),
+            world,
             registers,
             register_pointer_flags: 1 << 1, // calldata is a pointer
             flags: Flags::new(false, false, false),
@@ -207,6 +224,7 @@ impl State {
                 u32::MAX,
                 0,
                 0,
+                world_before_this_frame,
             ),
             previous_frames: vec![],
 
@@ -253,6 +271,7 @@ impl State {
             } else {
                 self.context_u128
             },
+            self.world.snapshot(),
         );
         self.context_u128 = 0;
 
@@ -261,11 +280,12 @@ impl State {
         self.previous_frames.push((old_pc, new_frame));
     }
 
-    pub(crate) fn pop_frame(&mut self) -> Option<(u32, u32)> {
-        let eh = self.current_frame.exception_handler;
+    pub(crate) fn pop_frame(&mut self) -> Option<(u32, u32, Snapshot)> {
         self.previous_frames.pop().map(|(pc, frame)| {
+            let eh = self.current_frame.exception_handler;
+            let snapshot = self.current_frame.world_before_this_frame;
             self.current_frame = frame;
-            (pc, eh)
+            (pc, eh, snapshot)
         })
     }
 

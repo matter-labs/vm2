@@ -2,6 +2,7 @@ use super::call::get_far_call_arguments;
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source},
     predication::Flags,
+    rollback::Rollback,
     state::{ExecutionEnd, InstructionResult, Panic},
     Instruction, Predicate, State,
 };
@@ -15,14 +16,17 @@ fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
 
     let gas_left = state.current_frame.gas;
 
-    let pc = if let Some((pc, eh)) = state.current_frame.pop_near_call() {
-        if TO_LABEL {
-            Immediate1::get(args, state).low_u32()
-        } else if IS_REVERT {
-            eh
-        } else {
-            pc + 1
-        }
+    let (pc, snapshot) = if let Some((pc, eh, snapshot)) = state.current_frame.pop_near_call() {
+        (
+            if TO_LABEL {
+                Immediate1::get(args, state).low_u32()
+            } else if IS_REVERT {
+                eh
+            } else {
+                pc + 1
+            },
+            snapshot,
+        )
     } else {
         let return_value = match get_far_call_arguments(args, state) {
             Ok(abi) => abi.pointer,
@@ -31,11 +35,13 @@ fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
 
         // TODO check that the return value resides in this or a newer frame's memory
 
-        let Some((pc, eh)) = state.pop_frame() else {
+        let Some((pc, eh, snapshot)) = state.pop_frame() else {
             let output = state.heaps[return_value.memory_page as usize][return_value.start as usize..(return_value.start + return_value.length) as usize].to_vec();
             return if IS_REVERT{
+                state.world.rollback(state.current_frame.world_before_this_frame);
                 Err(ExecutionEnd::Reverted(output))
             } else {
+                state.world.delete_history();
                 Err(ExecutionEnd::ProgramFinished(output))
             };
         };
@@ -46,12 +52,12 @@ fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
         state.registers[1] = return_value.into_u256();
         state.register_pointer_flags = 2;
 
-        if IS_REVERT {
-            eh
-        } else {
-            pc + 1
-        }
+        (if IS_REVERT { eh } else { pc + 1 }, snapshot)
     };
+
+    if IS_REVERT {
+        state.world.rollback(snapshot);
+    }
 
     state.flags = Flags::new(false, false, false);
     state.current_frame.gas += gas_left;
@@ -79,22 +85,32 @@ fn explicit_panic<const TO_LABEL: bool>(
 }
 
 #[inline(always)]
-fn panic_impl(state: &mut State, mut panic: Panic, maybe_label: Option<u32>) -> InstructionResult {
+fn panic_impl(
+    state: &mut State,
+    mut panic: Panic,
+    mut maybe_label: Option<u32>,
+) -> InstructionResult {
     loop {
-        let eh = if let Some((_, eh)) = state.current_frame.pop_near_call() {
-            if let Some(label) = maybe_label {
-                label
-            } else {
-                eh
-            }
+        let (eh, snapshot) = if let Some((_, eh, snapshot)) = state.current_frame.pop_near_call() {
+            (
+                if let Some(label) = maybe_label {
+                    label
+                } else {
+                    eh
+                },
+                snapshot,
+            )
         } else {
-            let Some((_, eh)) = state.pop_frame() else {
+            let Some((_, eh, snapshot)) = state.pop_frame() else {
+                state.world.rollback(state.current_frame.world_before_this_frame);
                 return Err(ExecutionEnd::Panicked(panic));
             };
             state.registers[1] = U256::zero();
             state.register_pointer_flags |= 1 << 1;
-            eh
+            (eh, snapshot)
         };
+
+        state.world.rollback(snapshot);
 
         state.flags = Flags::new(true, false, false);
         state.set_context_u128(0);

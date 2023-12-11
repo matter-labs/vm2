@@ -5,7 +5,7 @@ pub(crate) trait Rollback {
     type Snapshot;
     fn snapshot(&self) -> Self::Snapshot;
     fn rollback(&mut self, snapshot: Self::Snapshot);
-    fn forget(&mut self, snapshot: Self::Snapshot);
+    fn delete_history(&mut self);
 }
 
 #[derive(Default)]
@@ -15,13 +15,9 @@ pub struct RollbackableMap<K: Ord, V> {
 }
 
 impl<K: Ord + Clone, V> RollbackableMap<K, V> {
-    pub fn insert(&mut self, key: K, value: V, permanent_change: bool) {
-        if permanent_change {
-            self.map.insert(key, value);
-        } else {
-            self.old_entries
-                .push((key.clone(), self.map.insert(key, value)));
-        }
+    pub fn insert(&mut self, key: K, value: V) {
+        self.old_entries
+            .push((key.clone(), self.map.insert(key, value)));
     }
 }
 
@@ -42,8 +38,8 @@ impl<K: Ord, V> Rollback for RollbackableMap<K, V> {
         }
     }
 
-    fn forget(&mut self, snapshot: Self::Snapshot) {
-        self.old_entries.truncate(snapshot)
+    fn delete_history(&mut self) {
+        self.old_entries.clear();
     }
 }
 
@@ -76,7 +72,7 @@ impl<T> Rollback for RollbackableLog<T> {
         self.entries.truncate(snapshot)
     }
 
-    fn forget(&mut self, _: Self::Snapshot) {}
+    fn delete_history(&mut self) {}
 }
 
 impl<T> RollbackableLog<T> {

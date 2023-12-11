@@ -12,11 +12,6 @@ pub struct ModifiedWorld {
     storage_changes: RollbackableMap<(H160, U256), U256>,
     decommitted_hashes: RollbackableMap<U256, ()>,
     events: RollbackableLog<Event>,
-    snapshots: Vec<(
-        <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
-        <RollbackableMap<U256, ()> as Rollback>::Snapshot,
-        <RollbackableLog<Event> as Rollback>::Snapshot,
-    )>,
 }
 
 pub struct Event {
@@ -29,8 +24,7 @@ pub struct Event {
 
 impl World for ModifiedWorld {
     fn decommit(&mut self, hash: U256) -> (Arc<[Instruction]>, Arc<[U256]>) {
-        self.decommitted_hashes
-            .insert(hash, (), self.snapshots.is_empty());
+        self.decommitted_hashes.insert(hash, ());
         self.world.decommit(hash)
     }
 
@@ -43,6 +37,34 @@ impl World for ModifiedWorld {
     }
 }
 
+impl Rollback for ModifiedWorld {
+    type Snapshot = (
+        <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
+        <RollbackableMap<U256, ()> as Rollback>::Snapshot,
+        <RollbackableLog<Event> as Rollback>::Snapshot,
+    );
+
+    fn snapshot(&self) -> Self::Snapshot {
+        (
+            self.storage_changes.snapshot(),
+            self.decommitted_hashes.snapshot(),
+            self.events.snapshot(),
+        )
+    }
+
+    fn rollback(&mut self, (storage, decommit, events): Self::Snapshot) {
+        self.storage_changes.rollback(storage);
+        self.decommitted_hashes.rollback(decommit);
+        self.events.rollback(events);
+    }
+
+    fn delete_history(&mut self) {
+        self.storage_changes.delete_history();
+        self.decommitted_hashes.delete_history();
+        self.events.delete_history();
+    }
+}
+
 impl ModifiedWorld {
     pub fn new(world: Box<dyn World>) -> Self {
         Self {
@@ -50,35 +72,11 @@ impl ModifiedWorld {
             storage_changes: Default::default(),
             decommitted_hashes: Default::default(),
             events: Default::default(),
-            snapshots: vec![],
         }
     }
 
-    pub fn snapshot(&mut self) {
-        self.snapshots.push((
-            self.storage_changes.snapshot(),
-            self.decommitted_hashes.snapshot(),
-            self.events.snapshot(),
-        ))
-    }
-
-    pub fn rollback(&mut self) {
-        let (storage, decommit, events) = self.snapshots.pop().unwrap();
-        self.storage_changes.rollback(storage);
-        self.decommitted_hashes.rollback(decommit);
-        self.events.rollback(events);
-    }
-
-    pub fn forget_snapshot(&mut self) {
-        let (storage, decommit, events) = self.snapshots.pop().unwrap();
-        self.storage_changes.forget(storage);
-        self.decommitted_hashes.forget(decommit);
-        self.events.forget(events);
-    }
-
     pub fn write_storage(&mut self, contract: H160, key: U256, value: U256) {
-        self.storage_changes
-            .insert((contract, key), value, self.snapshots.is_empty())
+        self.storage_changes.insert((contract, key), value)
     }
 
     pub fn get_storage_changes(&self) -> impl Iterator<Item = ((H160, U256), U256)> + '_ {
