@@ -278,7 +278,7 @@ fn decode(raw: u64) -> Instruction {
                 ),
             }
         }
-        //zkevm_opcode_defs::Opcode::Invalid(_) => ,
+        zkevm_opcode_defs::Opcode::Invalid(_) => Instruction::from_invalid(),
         zkevm_opcode_defs::Opcode::Nop(_) => {
             let no_sp_movement = AdvanceStackPointer(RegisterAndImmediate {
                 immediate: 0,
@@ -298,7 +298,5 @@ fn decode(raw: u64) -> Instruction {
                 predicate,
             )
         }
-
-        x => unimplemented_instruction(x),
     }
 }

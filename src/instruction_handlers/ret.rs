@@ -84,6 +84,10 @@ fn explicit_panic<const TO_LABEL: bool>(
     panic_impl(state, Panic::ExplicitPanic, label)
 }
 
+fn invalid_instruction(state: &mut State, _: *const Instruction) -> InstructionResult {
+    panic_impl(state, Panic::InvalidInstruction, None)
+}
+
 #[inline(always)]
 fn panic_impl(
     state: &mut State,
@@ -149,6 +153,13 @@ impl Instruction {
         Self {
             handler: monomorphize!(explicit_panic match_boolean to_label),
             arguments: Arguments::new(predicate, 5).write_source(&label),
+        }
+    }
+
+    pub fn from_invalid() -> Self {
+        Self {
+            handler: invalid_instruction,
+            arguments: Arguments::new(Predicate::Always, 4294967295),
         }
     }
 }
