@@ -168,8 +168,10 @@ fn decode(raw: u64) -> Instruction {
             zkevm_opcode_defs::ContextOpcode::Sp => {
                 Instruction::from_context_sp(out.try_into().unwrap(), predicate)
             }
-            /*zkevm_opcode_defs::ContextOpcode::Meta => ,
-            zkevm_opcode_defs::ContextOpcode::SetErgsPerPubdataByte => ,
+            zkevm_opcode_defs::ContextOpcode::Meta => {
+                Instruction::from_context_meta(out.try_into().unwrap(), predicate)
+            }
+            /*zkevm_opcode_defs::ContextOpcode::SetErgsPerPubdataByte => ,
             zkevm_opcode_defs::ContextOpcode::IncrementTxNumber => ,*/
             x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Context(x)),
         },

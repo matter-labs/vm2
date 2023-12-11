@@ -6,6 +6,7 @@ use crate::{
     Instruction, Predicate, State,
 };
 use u256::U256;
+use zkevm_opcode_defs::VmMetaParameters;
 
 fn context<Op: ContextOp>(state: &mut State, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate(state, instruction, |state, args| {
@@ -59,6 +60,21 @@ impl ContextOp for SP {
     }
 }
 
+struct Meta;
+impl ContextOp for Meta {
+    fn get(state: &State) -> U256 {
+        VmMetaParameters {
+            ergs_per_pubdata_byte: 1,
+            heap_size: state.heaps[state.current_frame.heap as usize].len() as u32,
+            aux_heap_size: state.heaps[state.current_frame.aux_heap as usize].len() as u32,
+            this_shard_id: 0, // TODO properly implement shards
+            caller_shard_id: 0,
+            code_shard_id: 0,
+        }
+        .to_u256()
+    }
+}
+
 fn set_context_u128(state: &mut State, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate(state, instruction, |state, args| {
         let value = Register1::get(args, state).low_u128();
@@ -91,6 +107,9 @@ impl Instruction {
     }
     pub fn from_context_sp(out: Register1, predicate: Predicate) -> Self {
         Self::from_context::<SP>(out, predicate)
+    }
+    pub fn from_context_meta(out: Register1, predicate: Predicate) -> Self {
+        Self::from_context::<Meta>(out, predicate)
     }
     pub fn from_set_context_u128(src: Register1, predicate: Predicate) -> Self {
         Self {
