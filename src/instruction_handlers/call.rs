@@ -167,7 +167,7 @@ impl FatPointer {
     }
 }
 
-fn near_call(state: &mut State, mut instruction: *const Instruction) -> InstructionResult {
+fn near_call(state: &mut State, instruction: *const Instruction) -> InstructionResult {
     let args = unsafe { &(*instruction).arguments };
 
     let gas_to_pass = Register1::get(args, state).0[0] as u32;

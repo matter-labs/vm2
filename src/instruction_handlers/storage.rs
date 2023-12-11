@@ -7,8 +7,6 @@ use crate::{
 
 fn sstore(state: &mut State, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate_with_panic(state, instruction, |state, args| {
-        let args = unsafe { &(*instruction).arguments };
-
         let key = Register1::get(args, state);
         let value = Register2::get(args, state);
 
