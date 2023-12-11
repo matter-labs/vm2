@@ -65,6 +65,7 @@ pub struct Arguments {
 
 pub(crate) const L1_MESSAGE_COST: u32 = 156250;
 pub(crate) const SSTORE_COST: u32 = 3501;
+pub(crate) const INVALID_INSTRUCTION_COST: u32 = 4294967295;
 
 impl Arguments {
     pub fn new(predicate: Predicate, gas_cost: u32) -> Self {
@@ -82,7 +83,8 @@ impl Arguments {
         match x {
             L1_MESSAGE_COST => 1,
             SSTORE_COST => 2,
-            1 | 2 => panic!("Reserved gas cost values overlap with actual gas costs"),
+            INVALID_INSTRUCTION_COST => 3,
+            1 | 2 | 3 => panic!("Reserved gas cost values overlap with actual gas costs"),
             x => x.try_into().expect("Gas cost doesn't fit into 8 bits"),
         }
     }

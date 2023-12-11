@@ -1,6 +1,6 @@
 use super::call::get_far_call_arguments;
 use crate::{
-    addressing_modes::{Arguments, Immediate1, Register1, Source},
+    addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     predication::Flags,
     rollback::Rollback,
     state::{ExecutionEnd, InstructionResult, Panic},
@@ -159,7 +159,7 @@ impl Instruction {
     pub fn from_invalid() -> Self {
         Self {
             handler: invalid_instruction,
-            arguments: Arguments::new(Predicate::Always, 4294967295),
+            arguments: Arguments::new(Predicate::Always, INVALID_INSTRUCTION_COST),
         }
     }
 }
