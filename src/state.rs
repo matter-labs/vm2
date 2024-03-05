@@ -335,6 +335,7 @@ impl State {
             self.current_frame.gas -= amount;
             Ok(())
         } else {
+            self.current_frame.gas = 0;
             Err(Panic::OutOfGas)
         }
     }
