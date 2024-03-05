@@ -13,6 +13,7 @@ mod state;
 use std::sync::Arc;
 use u256::{H160, U256};
 
+pub use decommit::address_into_u256;
 pub use modified_world::Event;
 pub use predication::Predicate;
 pub use state::{

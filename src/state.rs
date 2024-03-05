@@ -194,7 +194,13 @@ pub enum Panic {
 }
 
 impl State {
-    pub fn new(mut world: Box<dyn World>, address: H160, caller: H160, calldata: Vec<u8>) -> Self {
+    pub fn new(
+        mut world: Box<dyn World>,
+        address: H160,
+        caller: H160,
+        calldata: Vec<u8>,
+        gas: u32,
+    ) -> Self {
         let (program, code_page, _) = decommit(&mut *world, address_into_u256(address)).unwrap();
         let mut registers: [U256; 16] = Default::default();
         registers[1] = FatPointer {
@@ -221,7 +227,7 @@ impl State {
                 code_page,
                 2,
                 3,
-                u32::MAX,
+                gas,
                 0,
                 0,
                 world_before_this_frame,
@@ -378,6 +384,12 @@ pub fn run_arbitrary_program(input: &[u8]) -> ExecutionEnd {
         }
     }
 
-    let mut state = State::new(Box::new(FakeWorld), H160::zero(), H160::zero(), vec![]);
+    let mut state = State::new(
+        Box::new(FakeWorld),
+        H160::zero(),
+        H160::zero(),
+        vec![],
+        u32::MAX,
+    );
     state.run()
 }
