@@ -309,6 +309,16 @@ impl State {
 
         unsafe {
             loop {
+                #[cfg(trace)]
+                {
+                    print!(
+                        "{:?}: ",
+                        instruction.offset_from(&self.current_frame.program[0])
+                    );
+                    self.registers[1..].iter().for_each(|x| print!("{x:?} "));
+                    println!();
+                }
+
                 let args = &(*instruction).arguments;
                 let Ok(_) = self.use_gas(args.get_static_gas_cost()) else {
                     instruction = match ret_panic(self, Panic::OutOfGas) {
