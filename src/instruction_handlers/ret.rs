@@ -1,4 +1,4 @@
-use super::call::get_far_call_arguments;
+use super::call::get_far_call_calldata;
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     predication::Flags,
@@ -28,17 +28,25 @@ fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
             snapshot,
         )
     } else {
-        let return_value = match get_far_call_arguments(args, state) {
-            Ok(abi) => abi.pointer,
+        let return_value = match get_far_call_calldata(
+            Register1::get(args, state),
+            Register1::is_fat_pointer(args, state),
+            state,
+        ) {
+            Ok(pointer) => pointer,
             Err(panic) => return ret_panic(state, panic),
         };
 
         // TODO check that the return value resides in this or a newer frame's memory
 
         let Some((pc, eh, snapshot)) = state.pop_frame() else {
-            let output = state.heaps[return_value.memory_page as usize][return_value.start as usize..(return_value.start + return_value.length) as usize].to_vec();
-            return if IS_REVERT{
-                state.world.rollback(state.current_frame.world_before_this_frame);
+            let output = state.heaps[return_value.memory_page as usize]
+                [return_value.start as usize..(return_value.start + return_value.length) as usize]
+                .to_vec();
+            return if IS_REVERT {
+                state
+                    .world
+                    .rollback(state.current_frame.world_before_this_frame);
                 Err(ExecutionEnd::Reverted(output))
             } else {
                 state.world.delete_history();
@@ -106,7 +114,9 @@ fn panic_impl(
             )
         } else {
             let Some((_, eh, snapshot)) = state.pop_frame() else {
-                state.world.rollback(state.current_frame.world_before_this_frame);
+                state
+                    .world
+                    .rollback(state.current_frame.world_before_this_frame);
                 return Err(ExecutionEnd::Panicked(panic));
             };
             state.registers[1] = U256::zero();

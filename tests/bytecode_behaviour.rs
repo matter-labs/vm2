@@ -69,7 +69,7 @@ fn call_to_invalid_address() {
         Address::from_low_u64_be(0x1234567890abcdef),
         Address::zero(),
         vec![],
-        1000,
+        10000,
     );
     assert!(matches!(vm.run(), ExecutionEnd::Panicked(_)));
     assert_eq!(vm.current_frame.gas, 0);

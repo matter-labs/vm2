@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::{heap_access::grow_heap, ret_panic, AuxHeap, Heap};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Register2, Source},
@@ -25,20 +27,34 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
 
     let address_mask: U256 = U256::MAX >> (256 - 160);
 
-    let abi = match get_far_call_arguments(args, state) {
-        Ok(abi) => abi,
-        Err(panic) => return ret_panic(state, panic),
-    };
+    let raw_abi = Register1::get(args, state);
     let destination_address = Register2::get(args, state) & address_mask;
     let error_handler = Immediate1::get(args, state);
 
-    let (program, code_page, code_info) = match decommit(&mut state.world, destination_address) {
-        Ok(x) => x,
-        Err(panic) => return ret_panic(state, panic),
+    let abi = get_far_call_arguments(raw_abi);
+
+    let mut encountered_panic = None;
+    let (program, code_page) = match decommit(&mut state.world, destination_address) {
+        Ok((p, cp, code_info)) => {
+            if code_info.is_constructed == abi.is_constructor_call {
+                encountered_panic = Some(Panic::ConstructorCallAndCodeStatusMismatch);
+            }
+            (p, cp)
+        }
+        Err(panic) => {
+            encountered_panic = Some(panic);
+            let substitute: (Arc<[Instruction]>, Arc<[U256]>) = (Arc::new([]), Arc::new([]));
+            substitute
+        }
     };
-    if code_info.is_constructed == abi.is_constructor_call {
-        return ret_panic(state, Panic::ConstructorCallAndCodeStatusMismatch);
-    }
+    let calldata =
+        match get_far_call_calldata(raw_abi, Register1::is_fat_pointer(args, state), state) {
+            Ok(pointer) => pointer.into_u256(),
+            Err(panic) => {
+                encountered_panic = Some(panic);
+                U256::zero()
+            }
+        };
 
     let maximum_gas = (state.current_frame.gas as u64 * 63 / 64) as u32;
     let new_frame_gas = if abi.gas_to_pass == 0 {
@@ -57,6 +73,10 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         error_handler.low_u32(),
     );
 
+    if let Some(panic) = encountered_panic {
+        return ret_panic(state, panic);
+    }
+
     state.flags = Flags::new(false, false, false);
 
     if abi.is_system_call {
@@ -69,35 +89,43 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     } else {
         state.registers = [U256::zero(); 16];
     }
-    state.registers[1] = abi.pointer.into_u256();
+
+    state.registers[1] = calldata;
     state.register_pointer_flags = 2;
 
     Ok(&state.current_frame.program[0])
 }
 
 pub(crate) struct FarCallABI {
-    pub pointer: FatPointer,
     pub gas_to_pass: u32,
     pub shard_id: u8,
     pub is_constructor_call: bool,
     pub is_system_call: bool,
 }
 
-pub(crate) fn get_far_call_arguments(
-    args: &Arguments,
-    state: &mut State,
-) -> Result<FarCallABI, Panic> {
-    let abi = Register1::get(args, state);
+pub(crate) fn get_far_call_arguments(abi: U256) -> FarCallABI {
     let gas_to_pass = abi.0[3] as u32;
     let settings = (abi.0[3] >> 32) as u32;
-    let [pointer_source, shard_id, constructor_call_byte, system_call_byte] =
-        settings.to_le_bytes();
+    let [_, shard_id, constructor_call_byte, system_call_byte] = settings.to_le_bytes();
 
-    let mut pointer = FatPointer::from(abi);
+    FarCallABI {
+        gas_to_pass,
+        shard_id,
+        is_constructor_call: constructor_call_byte != 0,
+        is_system_call: system_call_byte != 0,
+    }
+}
 
-    match FatPointerSource::from_abi(pointer_source) {
+pub(crate) fn get_far_call_calldata(
+    raw_abi: U256,
+    is_pointer: bool,
+    state: &mut State,
+) -> Result<FatPointer, Panic> {
+    let mut pointer = FatPointer::from(raw_abi);
+
+    match FatPointerSource::from_abi((raw_abi.0[3] >> 32) as u8) {
         FatPointerSource::ForwardFatPointer => {
-            if !Register1::is_fat_pointer(args, state) {
+            if !is_pointer {
                 return Err(Panic::IncorrectPointerTags);
             }
 
@@ -108,7 +136,7 @@ pub(crate) fn get_far_call_arguments(
             pointer.narrow();
         }
         FatPointerSource::MakeNewPointer(target) => {
-            if Register1::is_fat_pointer(args, state) {
+            if is_pointer {
                 return Err(Panic::IncorrectPointerTags);
             }
             let Some(bound) = pointer.start.checked_add(pointer.length) else {
@@ -131,13 +159,7 @@ pub(crate) fn get_far_call_arguments(
         }
     }
 
-    Ok(FarCallABI {
-        pointer,
-        gas_to_pass,
-        shard_id,
-        is_constructor_call: constructor_call_byte != 0,
-        is_system_call: system_call_byte != 0,
-    })
+    Ok(pointer)
 }
 
 enum FatPointerSource {
