@@ -25,6 +25,6 @@ pub trait World {
     /// the world implementor's job.
     fn decommit(&mut self, hash: U256) -> (Arc<[Instruction]>, Arc<[U256]>);
 
-    /// There is no write_storage; the caller must ask for all storage changes when done.
+    /// There is no write_storage; [ModifiedWorld::get_storage_changes] gives a list of all storage changes.
     fn read_storage(&mut self, contract: H160, key: U256) -> U256;
 }

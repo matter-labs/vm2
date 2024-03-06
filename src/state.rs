@@ -264,6 +264,7 @@ impl State {
             } else if CALLING_MODE == CallingMode::Delegate as u8 {
                 self.current_frame.caller
             } else {
+                // Mimic call
                 u256_into_address(self.registers[15])
             },
             program,
