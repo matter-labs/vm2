@@ -109,6 +109,9 @@ pub(crate) fn get_far_call_arguments(
             pointer.narrow();
         }
         FatPointerSource::MakeNewPointer(target) => {
+            if Register1::is_fat_pointer(args, state) {
+                return Err(Panic::IncorrectPointerTags);
+            }
             let Some(bound) = pointer.start.checked_add(pointer.length) else {
                 return Err(Panic::PointerUpperBoundOverflows);
             };
