@@ -188,7 +188,7 @@ pub enum Panic {
     PointerOffsetNotZeroAtCreation,
     PointerOffsetOverflows,
     MalformedCodeInfo,
-    CallingCodeThatIsNotYetConstructed,
+    ConstructorCallAndCodeStatusMismatch,
     AccessingTooLargeHeapAddress,
     InvalidInstruction,
 }

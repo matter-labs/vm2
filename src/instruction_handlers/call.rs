@@ -36,8 +36,8 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         Ok(x) => x,
         Err(panic) => return ret_panic(state, panic),
     };
-    if !code_info.is_constructed && !abi.is_constructor_call {
-        return ret_panic(state, Panic::CallingCodeThatIsNotYetConstructed);
+    if code_info.is_constructed == abi.is_constructor_call {
+        return ret_panic(state, Panic::ConstructorCallAndCodeStatusMismatch);
     }
 
     let maximum_gas = (state.current_frame.gas as u64 * 63 / 64) as u32;
@@ -64,7 +64,6 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         state.registers[15] = U256::zero();
         state.registers[2] = 2.into();
     } else if abi.is_constructor_call {
-        // TODO not sure what exactly should be done in this case
         state.registers = [U256::zero(); 16];
         state.registers[2] = 1.into();
     } else {
