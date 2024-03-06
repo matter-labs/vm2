@@ -76,10 +76,6 @@ fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
     }
 }
 
-pub(crate) fn ret_panic(state: &mut State, panic: Panic) -> InstructionResult {
-    panic_impl(state, panic, None)
-}
-
 fn explicit_panic<const TO_LABEL: bool>(
     state: &mut State,
     instruction: *const Instruction,
@@ -94,6 +90,21 @@ fn explicit_panic<const TO_LABEL: bool>(
 
 fn invalid_instruction(state: &mut State, _: *const Instruction) -> InstructionResult {
     panic_impl(state, Panic::InvalidInstruction, None)
+}
+
+/// To be used for panics resulting from static calls attempting mutation and
+/// trying to do system-only operations while not in a system call.
+pub(crate) fn free_panic(state: &mut State, panic: Panic) -> InstructionResult {
+    panic_impl(state, panic, None)
+}
+
+const RETURN_COST: u32 = 5;
+
+pub(crate) fn ret_panic(state: &mut State, mut panic: Panic) -> InstructionResult {
+    if let Err(p) = state.use_gas(RETURN_COST) {
+        panic = p;
+    }
+    panic_impl(state, panic, None)
 }
 
 #[inline(always)]
@@ -134,6 +145,10 @@ fn panic_impl(
         }
         panic = Panic::InvalidInstruction;
         maybe_label = None;
+
+        if let Err(p) = state.use_gas(RETURN_COST) {
+            panic = p;
+        }
     }
 }
 
@@ -144,7 +159,7 @@ impl Instruction {
         let to_label = label.is_some();
         Self {
             handler: monomorphize!(ret [false] match_boolean to_label),
-            arguments: Arguments::new(predicate, 5)
+            arguments: Arguments::new(predicate, RETURN_COST)
                 .write_source(&src1)
                 .write_source(&label),
         }
@@ -153,7 +168,7 @@ impl Instruction {
         let to_label = label.is_some();
         Self {
             handler: monomorphize!(ret [true] match_boolean to_label),
-            arguments: Arguments::new(predicate, 5)
+            arguments: Arguments::new(predicate, RETURN_COST)
                 .write_source(&src1)
                 .write_source(&label),
         }
@@ -162,7 +177,7 @@ impl Instruction {
         let to_label = label.is_some();
         Self {
             handler: monomorphize!(explicit_panic match_boolean to_label),
-            arguments: Arguments::new(predicate, 5).write_source(&label),
+            arguments: Arguments::new(predicate, RETURN_COST).write_source(&label),
         }
     }
 
