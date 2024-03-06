@@ -97,7 +97,6 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool>(
 
 pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<(), Panic> {
     if let Some(growth) = new_bound.checked_sub(H::get_heap(state).len() as u32) {
-        // TODO use the proper formula instead
         state.use_gas(growth)?;
 
         // This will not cause frequent reallocations; it allocates in a geometric series like push.
