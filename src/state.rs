@@ -10,7 +10,10 @@ use crate::{
     Predicate, World,
 };
 use arbitrary::{Arbitrary, Unstructured};
-use std::sync::Arc;
+use std::{
+    ops::{Index, IndexMut},
+    sync::Arc,
+};
 use u256::{H160, U256};
 
 pub struct State {
@@ -27,9 +30,26 @@ pub struct State {
     /// They are needed to continue execution from the correct spot upon return.
     previous_frames: Vec<(u32, Callframe)>,
 
-    pub(crate) heaps: Vec<Vec<u8>>,
+    pub(crate) heaps: Heaps,
 
     context_u128: u128,
+}
+
+#[derive(Debug)]
+pub(crate) struct Heaps(Vec<Vec<u8>>);
+
+impl Index<usize> for Heaps {
+    type Output = Vec<u8>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index as usize]
+    }
+}
+
+impl IndexMut<usize> for Heaps {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.0[index as usize]
+    }
 }
 
 type Snapshot = <ModifiedWorld as Rollback>::Snapshot;
@@ -236,7 +256,7 @@ impl State {
 
             // The first heap can never be used because heap zero
             // means the current heap in precompile calls
-            heaps: vec![vec![], calldata, vec![], vec![]],
+            heaps: Heaps(vec![vec![], calldata, vec![], vec![]]),
             context_u128: 0,
         }
     }
@@ -250,8 +270,8 @@ impl State {
         gas: u32,
         exception_handler: u32,
     ) {
-        let new_heap = self.heaps.len() as u32;
-        self.heaps.extend([vec![], vec![]]);
+        let new_heap = self.heaps.0.len() as u32;
+        self.heaps.0.extend([vec![], vec![]]);
         let mut new_frame = Callframe::new(
             if CALLING_MODE == CallingMode::Delegate as u8 {
                 self.current_frame.address

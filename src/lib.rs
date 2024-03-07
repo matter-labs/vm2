@@ -4,7 +4,6 @@ pub mod decode;
 mod decommit;
 mod fat_pointer;
 pub mod instruction_handlers;
-mod keccak;
 mod modified_world;
 mod predication;
 mod rollback;
