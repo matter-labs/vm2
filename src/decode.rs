@@ -278,6 +278,12 @@ fn decode(raw: u64) -> Instruction {
                     increment.then_some(out2),
                     predicate,
                 ),
+                zkevm_opcode_defs::UMAOpcode::StaticMemoryRead => unimplemented_instruction(
+                    zkevm_opcode_defs::Opcode::UMA(zkevm_opcode_defs::UMAOpcode::StaticMemoryRead),
+                ),
+                zkevm_opcode_defs::UMAOpcode::StaticMemoryWrite => unimplemented_instruction(
+                    zkevm_opcode_defs::Opcode::UMA(zkevm_opcode_defs::UMAOpcode::StaticMemoryWrite),
+                ),
             }
         }
         zkevm_opcode_defs::Opcode::Invalid(_) => Instruction::from_invalid(),
