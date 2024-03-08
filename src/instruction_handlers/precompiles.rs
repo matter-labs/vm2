@@ -5,7 +5,12 @@ use crate::{
 };
 use u256::U256;
 use zk_evm_abstractions::{
-    aux::Timestamp, precompiles::keccak256::keccak256_rounds_function, queries::LogQuery,
+    aux::Timestamp,
+    precompiles::{
+        ecrecover::ecrecover_function, keccak256::keccak256_rounds_function,
+        sha256::sha256_rounds_function,
+    },
+    queries::LogQuery,
     vm::Memory,
 };
 use zkevm_opcode_defs::{
@@ -56,10 +61,10 @@ fn precompile_call(state: &mut State, instruction: *const Instruction) -> Instru
                 keccak256_rounds_function::<_, false>(0, query, &mut state.heaps);
             }
             SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
-                todo!()
+                sha256_rounds_function::<_, false>(0, query, &mut state.heaps);
             }
             ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS => {
-                todo!()
+                ecrecover_function::<_, false>(0, query, &mut state.heaps);
             }
             _ => {
                 // A precompile call may be used just to burn gas
