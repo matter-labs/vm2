@@ -240,9 +240,12 @@ fn decode(raw: u64) -> Instruction {
                 parsed.variant.flags[FIRST_MESSAGE_FLAG_IDX],
                 predicate,
             ),
-            zkevm_opcode_defs::LogOpcode::PrecompileCall => {
-                Instruction::from_precompile_call(src1.try_into().unwrap(), src2, predicate)
-            }
+            zkevm_opcode_defs::LogOpcode::PrecompileCall => Instruction::from_precompile_call(
+                src1.try_into().unwrap(),
+                src2,
+                out.try_into().unwrap(),
+                predicate,
+            ),
             x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Log(x)),
         },
         zkevm_opcode_defs::Opcode::UMA(x) => {

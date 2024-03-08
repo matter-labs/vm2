@@ -1,5 +1,5 @@
 use crate::{
-    addressing_modes::{Arguments, Register1, Register2, Source},
+    addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     state::{Heaps, InstructionResult},
     Instruction, Predicate, State,
 };
@@ -18,7 +18,7 @@ use zkevm_opcode_defs::{
         ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS, KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
         SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
     },
-    PrecompileCallABI,
+    PrecompileAuxData, PrecompileCallABI,
 };
 
 use super::common::instruction_boilerplate_with_panic;
@@ -29,8 +29,10 @@ fn precompile_call(state: &mut State, instruction: *const Instruction) -> Instru
 
         // The user gets to decide how much gas to burn
         // This is safe because system contracts are trusted
-        let gas_to_burn = Register2::get(args, state);
-        state.use_gas(gas_to_burn.low_u32())?;
+        let aux_data = PrecompileAuxData::from_u256(Register2::get(args, state));
+        state.use_gas(aux_data.extra_ergs_cost)?;
+
+        // TODO record extra pubdata cost
 
         let mut abi = PrecompileCallABI::from_u256(Register1::get(args, state));
         if abi.memory_page_to_read == 0 {
@@ -70,6 +72,8 @@ fn precompile_call(state: &mut State, instruction: *const Instruction) -> Instru
                 // A precompile call may be used just to burn gas
             }
         }
+
+        Register1::set(args, state, 1.into());
 
         Ok(())
     })
@@ -120,11 +124,17 @@ impl Memory for Heaps {
 }
 
 impl Instruction {
-    pub fn from_precompile_call(abi: Register1, burn: Register2, predicate: Predicate) -> Self {
+    pub fn from_precompile_call(
+        abi: Register1,
+        burn: Register2,
+        out: Register1,
+        predicate: Predicate,
+    ) -> Self {
         Self {
             arguments: Arguments::new(predicate, 6)
                 .write_source(&abi)
-                .write_source(&burn),
+                .write_source(&burn)
+                .write_destination(&out),
             handler: precompile_call,
         }
     }
