@@ -8,7 +8,7 @@ use zk_evm_abstractions::{
     aux::Timestamp,
     precompiles::{
         ecrecover::ecrecover_function, keccak256::keccak256_rounds_function,
-        sha256::sha256_rounds_function,
+        secp256r1_verify::secp256r1_verify_function, sha256::sha256_rounds_function,
     },
     queries::LogQuery,
     vm::Memory,
@@ -16,7 +16,7 @@ use zk_evm_abstractions::{
 use zkevm_opcode_defs::{
     system_params::{
         ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS, KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
-        SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
+        SECP256R1_VERIFY_PRECOMPILE_ADDRESS, SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
     },
     PrecompileAuxData, PrecompileCallABI,
 };
@@ -67,6 +67,9 @@ fn precompile_call(state: &mut State, instruction: *const Instruction) -> Instru
             }
             ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS => {
                 ecrecover_function::<_, false>(0, query, &mut state.heaps);
+            }
+            SECP256R1_VERIFY_PRECOMPILE_ADDRESS => {
+                secp256r1_verify_function::<_, false>(0, query, &mut state.heaps);
             }
             _ => {
                 // A precompile call may be used just to burn gas
