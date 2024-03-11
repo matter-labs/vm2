@@ -70,6 +70,7 @@ fn call_to_invalid_address() {
         Address::zero(),
         vec![],
         10000,
+        U256::zero(),
     );
     assert!(matches!(vm.run(), ExecutionEnd::Panicked(_)));
     assert_eq!(vm.current_frame.gas, 0);

@@ -13,13 +13,22 @@ pub(crate) struct CodeInfo {
 pub(crate) fn decommit(
     world: &mut dyn World,
     address: U256,
+    default_aa_code_hash: U256,
 ) -> Result<(Arc<[Instruction]>, Arc<[U256]>, CodeInfo), Panic> {
     let deployer_system_contract_address =
         Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
 
-    let code_info = world.read_storage(deployer_system_contract_address, address);
-
-    // TODO default address aliasing
+    let code_info = {
+        let code_info = world.read_storage(deployer_system_contract_address, address);
+        // The Ethereum-like behavior of calls to EOAs returning successfully is implemented
+        // by the default address aliasing contract.
+        // That contract also implements AA but only when called from the bootloader.
+        if code_info == U256::zero() && address >= (1 << 16).into() {
+            default_aa_code_hash
+        } else {
+            code_info
+        }
+    };
 
     let mut code_info_bytes = [0; 32];
     code_info.to_big_endian(&mut code_info_bytes);

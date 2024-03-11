@@ -33,6 +33,8 @@ pub struct State {
     pub(crate) heaps: Heaps,
 
     context_u128: u128,
+
+    pub(crate) default_aa_code_hash: U256,
 }
 
 #[derive(Debug)]
@@ -220,8 +222,14 @@ impl State {
         caller: H160,
         calldata: Vec<u8>,
         gas: u32,
+        default_aa_code_hash: U256,
     ) -> Self {
-        let (program, code_page, _) = decommit(&mut *world, address_into_u256(address)).unwrap();
+        let (program, code_page, _) = decommit(
+            &mut *world,
+            address_into_u256(address),
+            default_aa_code_hash,
+        )
+        .unwrap();
         let mut registers: [U256; 16] = Default::default();
         registers[1] = FatPointer {
             memory_page: 1,
@@ -258,6 +266,7 @@ impl State {
             // means the current heap in precompile calls
             heaps: Heaps(vec![vec![], calldata, vec![], vec![]]),
             context_u128: 0,
+            default_aa_code_hash,
         }
     }
 
@@ -422,6 +431,7 @@ pub fn run_arbitrary_program(input: &[u8]) -> ExecutionEnd {
         H160::zero(),
         vec![],
         u32::MAX,
+        U256::zero(),
     );
     state.run()
 }

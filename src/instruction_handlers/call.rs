@@ -34,7 +34,11 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     let abi = get_far_call_arguments(raw_abi);
 
     let mut encountered_panic = None;
-    let (program, code_page) = match decommit(&mut state.world, destination_address) {
+    let (program, code_page) = match decommit(
+        &mut state.world,
+        destination_address,
+        state.default_aa_code_hash,
+    ) {
         Ok((p, cp, code_info)) => {
             if code_info.is_constructed == abi.is_constructor_call {
                 encountered_panic = Some(Panic::ConstructorCallAndCodeStatusMismatch);
