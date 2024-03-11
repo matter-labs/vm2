@@ -63,6 +63,7 @@ pub struct Callframe {
     pub code_page: Arc<[U256]>,
     exception_handler: u32,
     context_u128: u128,
+    pub(crate) is_static: bool,
 
     // TODO: joint allocate these.
     pub stack: Box<[U256; 1 << 16]>,
@@ -120,6 +121,7 @@ impl Callframe {
         gas: u32,
         exception_handler: u32,
         context_u128: u128,
+        is_static: bool,
         world_before_this_frame: Snapshot,
     ) -> Self {
         Self {
@@ -128,6 +130,7 @@ impl Callframe {
             caller,
             program,
             context_u128,
+            is_static,
             stack: vec![U256::zero(); 1 << 16]
                 .into_boxed_slice()
                 .try_into()
@@ -212,6 +215,7 @@ pub enum Panic {
     MalformedCodeInfo,
     ConstructorCallAndCodeStatusMismatch,
     AccessingTooLargeHeapAddress,
+    WriteInStaticCall,
     InvalidInstruction,
 }
 
@@ -258,6 +262,7 @@ impl State {
                 gas,
                 0,
                 0,
+                false,
                 world_before_this_frame,
             ),
             previous_frames: vec![],
@@ -278,6 +283,7 @@ impl State {
         code_page: Arc<[U256]>,
         gas: u32,
         exception_handler: u32,
+        is_static: bool,
     ) {
         let new_heap = self.heaps.0.len() as u32;
         self.heaps.0.extend([vec![], vec![]]);
@@ -307,6 +313,7 @@ impl State {
             } else {
                 self.context_u128
             },
+            is_static || self.current_frame.is_static,
             self.world.snapshot(),
         );
         self.context_u128 = 0;
@@ -325,8 +332,12 @@ impl State {
         })
     }
 
-    pub(crate) fn set_context_u128(&mut self, value: u128) {
+    pub(crate) fn set_context_u128(&mut self, value: u128) -> Result<(), Panic> {
+        if self.current_frame.is_static {
+            return Err(Panic::WriteInStaticCall);
+        }
         self.context_u128 = value;
+        Ok(())
     }
 
     pub(crate) fn get_context_u128(&self) -> u128 {

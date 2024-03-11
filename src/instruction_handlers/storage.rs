@@ -1,7 +1,7 @@
 use super::common::{instruction_boilerplate, instruction_boilerplate_with_panic};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source, SSTORE_COST},
-    state::InstructionResult,
+    state::{InstructionResult, Panic},
     Instruction, Predicate, State, World,
 };
 
@@ -10,7 +10,11 @@ fn sstore(state: &mut State, instruction: *const Instruction) -> InstructionResu
         let key = Register1::get(args, state);
         let value = Register2::get(args, state);
 
-        state.use_gas(1)?;
+        // TODO: pubdata cost
+
+        if state.current_frame.is_static {
+            return Err(Panic::WriteInStaticCall);
+        }
 
         state
             .world

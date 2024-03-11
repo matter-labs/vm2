@@ -75,6 +75,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         code_page,
         new_frame_gas,
         error_handler.low_u32(),
+        IS_STATIC,
     );
 
     if let Some(panic) = encountered_panic {

@@ -17,9 +17,9 @@ use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
     ImmMemHandlerFlags, Opcode,
     Operand::*,
-    RegOrImmFlags, FIRST_MESSAGE_FLAG_IDX, RET_TO_LABEL_BIT_IDX, SET_FLAGS_FLAG_IDX,
-    SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES, SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE,
-    UMA_INCREMENT_FLAG_IDX,
+    RegOrImmFlags, FAR_CALL_STATIC_FLAG_IDX, FIRST_MESSAGE_FLAG_IDX, RET_TO_LABEL_BIT_IDX,
+    SET_FLAGS_FLAG_IDX, SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES,
+    SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
 };
 
 pub fn decode_program(raw: &[u64]) -> Vec<Instruction> {
@@ -203,7 +203,7 @@ fn decode(raw: u64) -> Instruction {
                 src1.try_into().unwrap(),
                 src2,
                 Immediate1(parsed.imm_0),
-                false,
+                parsed.variant.flags[FAR_CALL_STATIC_FLAG_IDX],
                 predicate,
             )
         }

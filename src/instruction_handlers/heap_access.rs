@@ -120,13 +120,13 @@ fn load_pointer<const INCREMENT: bool>(
 
         // start + offset could be past the end of the fat pointer
         // any bytes past the end are read as zero
-        let address = pointer.start.saturating_add(pointer.offset) as usize;
+        let start = pointer.start.saturating_add(pointer.offset);
+        let Some(end) = start.checked_add(32) else {
+            return Err(Panic::PointerOffsetTooLarge);
+        };
         let mut buffer = [0; 32];
-        for (i, addr) in (address
-            ..(address.saturating_add(32)).min((pointer.start + pointer.length) as usize))
-            .enumerate()
-        {
-            buffer[i] = heap[addr];
+        for (i, addr) in (start..end.min(pointer.start + pointer.length)).enumerate() {
+            buffer[i] = heap[addr as usize];
         }
 
         Register1::set(args, state, U256::from_big_endian(&buffer));

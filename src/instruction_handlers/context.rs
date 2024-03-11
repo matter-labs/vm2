@@ -1,4 +1,4 @@
-use super::common::instruction_boilerplate;
+use super::common::{instruction_boilerplate, instruction_boilerplate_with_panic};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Source},
     decommit::address_into_u256,
@@ -76,7 +76,7 @@ impl ContextOp for Meta {
 }
 
 fn set_context_u128(state: &mut State, instruction: *const Instruction) -> InstructionResult {
-    instruction_boilerplate(state, instruction, |state, args| {
+    instruction_boilerplate_with_panic(state, instruction, |state, args| {
         let value = Register1::get(args, state).low_u128();
         state.set_context_u128(value)
     })
