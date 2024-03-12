@@ -93,6 +93,7 @@ impl Arguments {
         match self.static_gas_cost {
             1 => L1_MESSAGE_COST,
             2 => SSTORE_COST,
+            3 => INVALID_INSTRUCTION_COST,
             x => x.into(),
         }
     }
