@@ -1,4 +1,4 @@
-use crate::{state::Instruction, Predicate};
+use crate::{instruction::Instruction, Predicate};
 use arbitrary::Arbitrary;
 pub use binop::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor};
 pub use call::CallingMode;

@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use u256::U256;
-use vm2::{address_into_u256, decode::decode_program, ExecutionEnd, Instruction, State, World};
+use vm2::{
+    address_into_u256, decode::decode_program, ExecutionEnd, Instruction, VirtualMachine, World,
+};
 use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
@@ -64,7 +66,7 @@ fn call_to_invalid_address() {
         }
     }
 
-    let mut vm = State::new(
+    let mut vm = VirtualMachine::new(
         Box::new(TestWorld),
         Address::from_low_u64_be(0x1234567890abcdef),
         Address::zero(),

@@ -1,18 +1,18 @@
 use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{destination_stack_address, AdvanceStackPointer, Arguments, Source},
-    state::InstructionResult,
-    Instruction, Predicate, State,
+    instruction::InstructionResult,
+    Instruction, Predicate, VirtualMachine,
 };
 
-fn nop(state: &mut State, instruction: *const Instruction) -> InstructionResult {
-    instruction_boilerplate(state, instruction, |state, args| {
+fn nop(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
+    instruction_boilerplate(vm, instruction, |vm, args| {
         // nop's addressing modes can move the stack pointer!
-        AdvanceStackPointer::get(args, state);
-        state.current_frame.sp = state
+        AdvanceStackPointer::get(args, vm);
+        vm.current_frame.sp = vm
             .current_frame
             .sp
-            .wrapping_add(destination_stack_address(args, state));
+            .wrapping_add(destination_stack_address(args, vm));
     })
 }
 

@@ -4,21 +4,21 @@ use crate::{
         Destination, Immediate1, Register1, Register2, RelativeStack, Source,
     },
     fat_pointer::FatPointer,
+    instruction::{InstructionResult, Panic},
     instruction_handlers::common::instruction_boilerplate_with_panic,
-    state::{InstructionResult, Panic},
-    Instruction, Predicate, State,
+    Instruction, Predicate, VirtualMachine,
 };
 use u256::U256;
 
 fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
-    state: &mut State,
+    vm: &mut VirtualMachine,
     instruction: *const Instruction,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(state, instruction, |state, args| {
-        let a = (In1::get(args, state), In1::is_fat_pointer(args, state));
+    instruction_boilerplate_with_panic(vm, instruction, |vm, args| {
+        let a = (In1::get(args, vm), In1::is_fat_pointer(args, vm));
         let b = (
-            Register2::get(args, state),
-            Register2::is_fat_pointer(args, state),
+            Register2::get(args, vm),
+            Register2::is_fat_pointer(args, vm),
         );
         let (a, b) = if SWAP { (b, a) } else { (a, b) };
         let (a, a_is_pointer) = a;
@@ -30,7 +30,7 @@ fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
 
         let result = Op::perform(a, b)?;
 
-        Out::set_fat_ptr(args, state, result);
+        Out::set_fat_ptr(args, vm, result);
 
         Ok(())
     })

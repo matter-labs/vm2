@@ -1,22 +1,23 @@
 use crate::{
-    addressing_modes::{Addressable, Arguments},
+    addressing_modes::Addressable,
     bitset::Bitset,
+    callframe::{Callframe, Snapshot},
     decommit::{address_into_u256, decommit, u256_into_address},
     fat_pointer::FatPointer,
+    instruction::Panic,
     instruction_handlers::{ret_panic, CallingMode},
     modified_world::ModifiedWorld,
     predication::Flags,
     rollback::Rollback,
-    Predicate, World,
+    ExecutionEnd, Instruction, World,
 };
-use arbitrary::{Arbitrary, Unstructured};
 use std::{
     ops::{Index, IndexMut},
     sync::Arc,
 };
 use u256::{H160, U256};
 
-pub struct State {
+pub struct VirtualMachine {
     pub world: ModifiedWorld,
 
     pub registers: [U256; 16],
@@ -54,41 +55,7 @@ impl IndexMut<usize> for Heaps {
     }
 }
 
-type Snapshot = <ModifiedWorld as Rollback>::Snapshot;
-pub struct Callframe {
-    pub address: H160,
-    pub code_address: H160,
-    pub caller: H160,
-    pub program: Arc<[Instruction]>,
-    pub code_page: Arc<[U256]>,
-    exception_handler: u32,
-    context_u128: u128,
-    pub(crate) is_static: bool,
-
-    // TODO: joint allocate these.
-    pub stack: Box<[U256; 1 << 16]>,
-    pub stack_pointer_flags: Box<Bitset>,
-
-    pub heap: u32,
-    pub aux_heap: u32,
-
-    pub sp: u16,
-    pub gas: u32,
-
-    near_calls: Vec<NearCallFrame>,
-
-    pub(crate) world_before_this_frame: Snapshot,
-}
-
-struct NearCallFrame {
-    call_instruction: u32,
-    exception_handler: u32,
-    previous_frame_sp: u16,
-    previous_frame_gas: u32,
-    world_before_this_frame: Snapshot,
-}
-
-impl Addressable for State {
+impl Addressable for VirtualMachine {
     fn registers(&mut self) -> &mut [U256; 16] {
         &mut self.registers
     }
@@ -109,117 +76,7 @@ impl Addressable for State {
     }
 }
 
-impl Callframe {
-    fn new(
-        address: H160,
-        code_address: H160,
-        caller: H160,
-        program: Arc<[Instruction]>,
-        code_page: Arc<[U256]>,
-        heap: u32,
-        aux_heap: u32,
-        gas: u32,
-        exception_handler: u32,
-        context_u128: u128,
-        is_static: bool,
-        world_before_this_frame: Snapshot,
-    ) -> Self {
-        Self {
-            address,
-            code_address,
-            caller,
-            program,
-            context_u128,
-            is_static,
-            stack: vec![U256::zero(); 1 << 16]
-                .into_boxed_slice()
-                .try_into()
-                .unwrap(),
-            stack_pointer_flags: Default::default(),
-            code_page,
-            heap,
-            aux_heap,
-            sp: 1024,
-            gas,
-            exception_handler,
-            near_calls: vec![],
-            world_before_this_frame,
-        }
-    }
-
-    pub(crate) fn push_near_call(
-        &mut self,
-        gas_to_call: u32,
-        old_pc: *const Instruction,
-        exception_handler: u32,
-        world_before_this_frame: Snapshot,
-    ) {
-        self.near_calls.push(NearCallFrame {
-            call_instruction: self.pc_to_u32(old_pc),
-            exception_handler,
-            previous_frame_sp: self.sp,
-            previous_frame_gas: self.gas - gas_to_call,
-            world_before_this_frame,
-        });
-        self.gas = gas_to_call;
-    }
-
-    pub(crate) fn pop_near_call(&mut self) -> Option<(u32, u32, Snapshot)> {
-        self.near_calls.pop().map(|f| {
-            self.sp = f.previous_frame_sp;
-            self.gas = f.previous_frame_gas;
-            (
-                f.call_instruction,
-                f.exception_handler,
-                f.world_before_this_frame,
-            )
-        })
-    }
-
-    fn pc_to_u32(&self, pc: *const Instruction) -> u32 {
-        unsafe { pc.offset_from(&self.program[0]) as u32 }
-    }
-
-    pub(crate) fn pc_from_u32(&self, index: u32) -> Option<*const Instruction> {
-        self.program
-            .get(index as usize)
-            .map(|p| p as *const Instruction)
-    }
-}
-
-pub struct Instruction {
-    pub(crate) handler: Handler,
-    pub(crate) arguments: Arguments,
-}
-
-pub(crate) type Handler = fn(&mut State, *const Instruction) -> InstructionResult;
-pub(crate) type InstructionResult = Result<*const Instruction, ExecutionEnd>;
-
-#[derive(Debug)]
-pub enum ExecutionEnd {
-    ProgramFinished(Vec<u8>),
-    Reverted(Vec<u8>),
-    Panicked(Panic),
-}
-
-#[derive(Debug)]
-pub enum Panic {
-    ExplicitPanic,
-    OutOfGas,
-    IncorrectPointerTags,
-    PointerOffsetTooLarge,
-    PtrPackLowBitsNotZero,
-    PointerUpperBoundOverflows,
-    PointerOffsetNotZeroAtCreation,
-    PointerOffsetOverflows,
-    MalformedCodeInfo,
-    ConstructorCallAndCodeStatusMismatch,
-    AccessingTooLargeHeapAddress,
-    WriteInStaticCall,
-    InvalidInstruction,
-}
-
-impl State {
+impl VirtualMachine {
     pub fn new(
         mut world: Box<dyn World>,
         address: H160,
@@ -390,59 +247,4 @@ impl State {
             Err(Panic::OutOfGas)
         }
     }
-}
-
-pub fn end_execution() -> Instruction {
-    Instruction {
-        handler: end_execution_handler,
-        arguments: Arguments::new(Predicate::Always, 0),
-    }
-}
-fn end_execution_handler(state: &mut State, _: *const Instruction) -> InstructionResult {
-    ret_panic(state, Panic::InvalidInstruction)
-}
-
-pub fn jump_to_beginning() -> Instruction {
-    Instruction {
-        handler: jump_to_beginning_handler,
-        arguments: Arguments::new(Predicate::Always, 0),
-    }
-}
-fn jump_to_beginning_handler(state: &mut State, _: *const Instruction) -> InstructionResult {
-    let first_instruction = &state.current_frame.program[0];
-    Ok(first_instruction)
-}
-
-pub fn run_arbitrary_program(input: &[u8]) -> ExecutionEnd {
-    let mut u = Unstructured::new(input);
-    let mut program: Vec<Instruction> = Arbitrary::arbitrary(&mut u).unwrap();
-
-    if program.len() >= 1 << 16 {
-        program.truncate(1 << 16);
-        program.push(jump_to_beginning());
-    } else {
-        // TODO execute invalid instruction or something instead
-        program.push(end_execution());
-    }
-
-    struct FakeWorld;
-    impl World for FakeWorld {
-        fn decommit(&mut self, hash: U256) -> (Arc<[Instruction]>, Arc<[U256]>) {
-            todo!()
-        }
-
-        fn read_storage(&mut self, _: H160, _: U256) -> U256 {
-            U256::zero()
-        }
-    }
-
-    let mut state = State::new(
-        Box::new(FakeWorld),
-        H160::zero(),
-        H160::zero(),
-        vec![],
-        u32::MAX,
-        U256::zero(),
-    );
-    state.run()
 }

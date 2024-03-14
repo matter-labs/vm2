@@ -4,17 +4,21 @@ use crate::{
         AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Immediate1, Register1,
         RelativeStack, Source,
     },
+    instruction::{Instruction, InstructionResult, Panic},
     predication::Predicate,
-    state::{Instruction, InstructionResult, Panic, State},
+    VirtualMachine,
 };
 
-fn jump<In: Source>(state: &mut State, mut instruction: *const Instruction) -> InstructionResult {
+fn jump<In: Source>(
+    vm: &mut VirtualMachine,
+    mut instruction: *const Instruction,
+) -> InstructionResult {
     unsafe {
-        let target = In::get(&(*instruction).arguments, state).low_u32() as u16 as usize;
-        if let Some(i) = state.current_frame.program.get(target) {
+        let target = In::get(&(*instruction).arguments, vm).low_u32() as u16 as usize;
+        if let Some(i) = vm.current_frame.program.get(target) {
             instruction = i;
         } else {
-            return ret_panic(state, Panic::InvalidInstruction);
+            return ret_panic(vm, Panic::InvalidInstruction);
         }
 
         Ok(instruction)

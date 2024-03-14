@@ -5,13 +5,12 @@ use crate::{
         RelativeStack, Source, SourceWriter,
     },
     end_execution,
+    instruction::{ExecutionEnd, InstructionResult, Panic},
     instruction_handlers::{
         Add, And, AuxHeap, CallingMode, Div, Heap, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub,
         RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
     },
-    jump_to_beginning,
-    state::{ExecutionEnd, InstructionResult, Panic},
-    Instruction, Predicate, State,
+    jump_to_beginning, Instruction, Predicate, VirtualMachine,
 };
 use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
@@ -44,9 +43,12 @@ fn unimplemented_instruction(variant: Opcode) -> Instruction {
         arguments,
     }
 }
-fn unimplemented_handler(state: &mut State, instruction: *const Instruction) -> InstructionResult {
+fn unimplemented_handler(
+    vm: &mut VirtualMachine,
+    instruction: *const Instruction,
+) -> InstructionResult {
     let variant: Opcode = unsafe {
-        std::mem::transmute(Immediate1::get(&(*instruction).arguments, state).low_u32() as u16)
+        std::mem::transmute(Immediate1::get(&(*instruction).arguments, vm).low_u32() as u16)
     };
     eprintln!("Unimplemented instruction: {:?}!", variant);
     Err(ExecutionEnd::Panicked(Panic::InvalidInstruction))

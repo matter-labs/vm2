@@ -5,25 +5,26 @@ use crate::{
         CodePage, Destination, DestinationWriter, Immediate1, Register1, Register2, RelativeStack,
         Source,
     },
+    instruction::{Instruction, InstructionResult},
     predication::{Flags, Predicate},
-    state::{Instruction, InstructionResult, State},
+    VirtualMachine,
 };
 use u256::U256;
 
 fn binop<Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SET_FLAGS: bool>(
-    state: &mut State,
+    vm: &mut VirtualMachine,
     instruction: *const Instruction,
 ) -> InstructionResult {
-    instruction_boilerplate(state, instruction, |state, args| {
-        let a = In1::get(args, state);
-        let b = Register2::get(args, state);
+    instruction_boilerplate(vm, instruction, |vm, args| {
+        let a = In1::get(args, vm);
+        let b = Register2::get(args, vm);
         let (a, b) = if SWAP { (b, a) } else { (a, b) };
 
         let (result, out2, flags) = Op::perform(&a, &b);
-        Out::set(args, state, result);
-        out2.write(args, state);
+        Out::set(args, vm, result);
+        out2.write(args, vm);
         if SET_FLAGS {
-            state.flags = flags;
+            vm.flags = flags;
         }
     })
 }

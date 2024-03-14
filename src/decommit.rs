@@ -1,4 +1,4 @@
-use crate::{state::Panic, Instruction, World};
+use crate::{instruction::Panic, Instruction, World};
 use std::sync::Arc;
 use u256::{H160, U256};
 use zkevm_opcode_defs::{

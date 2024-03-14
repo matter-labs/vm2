@@ -5,10 +5,10 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Register2, Source},
     decommit::{decommit, u256_into_address},
     fat_pointer::FatPointer,
+    instruction::{InstructionResult, Panic},
     predication::Flags,
     rollback::Rollback,
-    state::{InstructionResult, Panic},
-    Instruction, Predicate, State,
+    Instruction, Predicate, VirtualMachine,
 };
 use u256::U256;
 
@@ -20,55 +20,51 @@ pub enum CallingMode {
 }
 
 fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
-    state: &mut State,
+    vm: &mut VirtualMachine,
     instruction: *const Instruction,
 ) -> InstructionResult {
     let args = unsafe { &(*instruction).arguments };
 
     let address_mask: U256 = U256::MAX >> (256 - 160);
 
-    let raw_abi = Register1::get(args, state);
-    let destination_address = Register2::get(args, state) & address_mask;
-    let error_handler = Immediate1::get(args, state);
+    let raw_abi = Register1::get(args, vm);
+    let destination_address = Register2::get(args, vm) & address_mask;
+    let error_handler = Immediate1::get(args, vm);
 
     let abi = get_far_call_arguments(raw_abi);
 
     let mut encountered_panic = None;
-    let (program, code_page) = match decommit(
-        &mut state.world,
-        destination_address,
-        state.default_aa_code_hash,
-    ) {
-        Ok((p, cp, code_info)) => {
-            if code_info.is_constructed == abi.is_constructor_call {
-                encountered_panic = Some(Panic::ConstructorCallAndCodeStatusMismatch);
+    let (program, code_page) =
+        match decommit(&mut vm.world, destination_address, vm.default_aa_code_hash) {
+            Ok((p, cp, code_info)) => {
+                if code_info.is_constructed == abi.is_constructor_call {
+                    encountered_panic = Some(Panic::ConstructorCallAndCodeStatusMismatch);
+                }
+                (p, cp)
             }
-            (p, cp)
-        }
-        Err(panic) => {
-            encountered_panic = Some(panic);
-            let substitute: (Arc<[Instruction]>, Arc<[U256]>) = (Arc::new([]), Arc::new([]));
-            substitute
-        }
-    };
-    let calldata =
-        match get_far_call_calldata(raw_abi, Register1::is_fat_pointer(args, state), state) {
-            Ok(pointer) => pointer.into_u256(),
             Err(panic) => {
                 encountered_panic = Some(panic);
-                U256::zero()
+                let substitute: (Arc<[Instruction]>, Arc<[U256]>) = (Arc::new([]), Arc::new([]));
+                substitute
             }
         };
+    let calldata = match get_far_call_calldata(raw_abi, Register1::is_fat_pointer(args, vm), vm) {
+        Ok(pointer) => pointer.into_u256(),
+        Err(panic) => {
+            encountered_panic = Some(panic);
+            U256::zero()
+        }
+    };
 
-    let maximum_gas = (state.current_frame.gas as u64 * 63 / 64) as u32;
+    let maximum_gas = (vm.current_frame.gas as u64 * 63 / 64) as u32;
     let new_frame_gas = if abi.gas_to_pass == 0 {
         maximum_gas
     } else {
         abi.gas_to_pass.min(maximum_gas)
     };
 
-    state.current_frame.gas -= new_frame_gas;
-    state.push_frame::<CALLING_MODE>(
+    vm.current_frame.gas -= new_frame_gas;
+    vm.push_frame::<CALLING_MODE>(
         instruction,
         u256_into_address(destination_address),
         program,
@@ -79,26 +75,26 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     );
 
     if let Some(panic) = encountered_panic {
-        return ret_panic(state, panic);
+        return ret_panic(vm, panic);
     }
 
-    state.flags = Flags::new(false, false, false);
+    vm.flags = Flags::new(false, false, false);
 
     if abi.is_system_call {
-        state.registers[14] = U256::zero();
-        state.registers[15] = U256::zero();
-        state.registers[2] = 2.into();
+        vm.registers[14] = U256::zero();
+        vm.registers[15] = U256::zero();
+        vm.registers[2] = 2.into();
     } else if abi.is_constructor_call {
-        state.registers = [U256::zero(); 16];
-        state.registers[2] = 1.into();
+        vm.registers = [U256::zero(); 16];
+        vm.registers[2] = 1.into();
     } else {
-        state.registers = [U256::zero(); 16];
+        vm.registers = [U256::zero(); 16];
     }
 
-    state.registers[1] = calldata;
-    state.register_pointer_flags = 2;
+    vm.registers[1] = calldata;
+    vm.register_pointer_flags = 2;
 
-    Ok(&state.current_frame.program[0])
+    Ok(&vm.current_frame.program[0])
 }
 
 pub(crate) struct FarCallABI {
@@ -124,7 +120,7 @@ pub(crate) fn get_far_call_arguments(abi: U256) -> FarCallABI {
 pub(crate) fn get_far_call_calldata(
     raw_abi: U256,
     is_pointer: bool,
-    state: &mut State,
+    vm: &mut VirtualMachine,
 ) -> Result<FatPointer, Panic> {
     let mut pointer = FatPointer::from(raw_abi);
 
@@ -153,12 +149,12 @@ pub(crate) fn get_far_call_calldata(
 
             match target {
                 ToHeap => {
-                    grow_heap::<Heap>(state, bound)?;
-                    pointer.memory_page = state.current_frame.heap;
+                    grow_heap::<Heap>(vm, bound)?;
+                    pointer.memory_page = vm.current_frame.heap;
                 }
                 ToAuxHeap => {
-                    grow_heap::<AuxHeap>(state, pointer.start + pointer.length)?;
-                    pointer.memory_page = state.current_frame.aux_heap;
+                    grow_heap::<AuxHeap>(vm, pointer.start + pointer.length)?;
+                    pointer.memory_page = vm.current_frame.aux_heap;
                 }
             }
         }
@@ -196,28 +192,28 @@ impl FatPointer {
     }
 }
 
-fn near_call(state: &mut State, instruction: *const Instruction) -> InstructionResult {
+fn near_call(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
     let args = unsafe { &(*instruction).arguments };
 
-    let gas_to_pass = Register1::get(args, state).0[0] as u32;
-    let destination = Immediate1::get(args, state);
-    let error_handler = Immediate2::get(args, state);
+    let gas_to_pass = Register1::get(args, vm).0[0] as u32;
+    let destination = Immediate1::get(args, vm);
+    let error_handler = Immediate2::get(args, vm);
 
     let new_frame_gas = if gas_to_pass == 0 {
-        state.current_frame.gas
+        vm.current_frame.gas
     } else {
-        gas_to_pass.min(state.current_frame.gas)
+        gas_to_pass.min(vm.current_frame.gas)
     };
-    state.current_frame.push_near_call(
+    vm.current_frame.push_near_call(
         new_frame_gas,
         instruction,
         error_handler.low_u32(),
-        state.world.snapshot(),
+        vm.world.snapshot(),
     );
 
-    state.flags = Flags::new(false, false, false);
+    vm.flags = Flags::new(false, false, false);
 
-    Ok(&state.current_frame.program[destination.low_u32() as usize])
+    Ok(&vm.current_frame.program[destination.low_u32() as usize])
 }
 
 use super::monomorphization::*;

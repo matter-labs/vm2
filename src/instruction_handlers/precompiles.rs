@@ -1,7 +1,8 @@
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
-    state::{Heaps, InstructionResult},
-    Instruction, Predicate, State,
+    instruction::InstructionResult,
+    vm::Heaps,
+    Instruction, Predicate, VirtualMachine,
 };
 use u256::U256;
 use zk_evm_abstractions::{
@@ -23,23 +24,23 @@ use zkevm_opcode_defs::{
 
 use super::common::instruction_boilerplate_with_panic;
 
-fn precompile_call(state: &mut State, instruction: *const Instruction) -> InstructionResult {
-    instruction_boilerplate_with_panic(state, instruction, |state, args| {
+fn precompile_call(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
+    instruction_boilerplate_with_panic(vm, instruction, |vm, args| {
         // TODO check that we're in a system call
 
         // The user gets to decide how much gas to burn
         // This is safe because system contracts are trusted
-        let aux_data = PrecompileAuxData::from_u256(Register2::get(args, state));
-        state.use_gas(aux_data.extra_ergs_cost)?;
+        let aux_data = PrecompileAuxData::from_u256(Register2::get(args, vm));
+        vm.use_gas(aux_data.extra_ergs_cost)?;
 
         // TODO record extra pubdata cost
 
-        let mut abi = PrecompileCallABI::from_u256(Register1::get(args, state));
+        let mut abi = PrecompileCallABI::from_u256(Register1::get(args, vm));
         if abi.memory_page_to_read == 0 {
-            abi.memory_page_to_read = state.current_frame.heap;
+            abi.memory_page_to_read = vm.current_frame.heap;
         }
         if abi.memory_page_to_write == 0 {
-            abi.memory_page_to_write = state.current_frame.heap;
+            abi.memory_page_to_write = vm.current_frame.heap;
         }
 
         let query = LogQuery {
@@ -56,27 +57,27 @@ fn precompile_call(state: &mut State, instruction: *const Instruction) -> Instru
             is_service: Default::default(),
         };
 
-        let address_bytes = state.current_frame.address.0;
+        let address_bytes = vm.current_frame.address.0;
         let address_low = u16::from_le_bytes([address_bytes[19], address_bytes[18]]);
         match address_low {
             KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
-                keccak256_rounds_function::<_, false>(0, query, &mut state.heaps);
+                keccak256_rounds_function::<_, false>(0, query, &mut vm.heaps);
             }
             SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
-                sha256_rounds_function::<_, false>(0, query, &mut state.heaps);
+                sha256_rounds_function::<_, false>(0, query, &mut vm.heaps);
             }
             ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS => {
-                ecrecover_function::<_, false>(0, query, &mut state.heaps);
+                ecrecover_function::<_, false>(0, query, &mut vm.heaps);
             }
             SECP256R1_VERIFY_PRECOMPILE_ADDRESS => {
-                secp256r1_verify_function::<_, false>(0, query, &mut state.heaps);
+                secp256r1_verify_function::<_, false>(0, query, &mut vm.heaps);
             }
             _ => {
                 // A precompile call may be used just to burn gas
             }
         }
 
-        Register1::set(args, state, 1.into());
+        Register1::set(args, vm, 1.into());
 
         Ok(())
     })
