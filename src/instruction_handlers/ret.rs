@@ -40,7 +40,7 @@ fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
         // TODO check that the return value resides in this or a newer frame's memory
 
         let Some((pc, eh, snapshot)) = vm.state.pop_frame() else {
-            let output = vm.state.heaps[return_value.memory_page as usize]
+            let output = vm.state.heaps[return_value.memory_page]
                 [return_value.start as usize..(return_value.start + return_value.length) as usize]
                 .to_vec();
             return if IS_REVERT {

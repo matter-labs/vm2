@@ -180,16 +180,16 @@ impl Addressable for State {
 #[derive(Debug)]
 pub(crate) struct Heaps(Vec<Vec<u8>>);
 
-impl Index<usize> for Heaps {
+impl Index<u32> for Heaps {
     type Output = Vec<u8>;
 
-    fn index(&self, index: usize) -> &Self::Output {
+    fn index(&self, index: u32) -> &Self::Output {
         &self.0[index as usize]
     }
 }
 
-impl IndexMut<usize> for Heaps {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+impl IndexMut<u32> for Heaps {
+    fn index_mut(&mut self, index: u32) -> &mut Self::Output {
         &mut self.0[index as usize]
     }
 }

@@ -17,14 +17,14 @@ pub trait HeapFromState {
 pub struct Heap;
 impl HeapFromState for Heap {
     fn get_heap(state: &mut State) -> &mut Vec<u8> {
-        &mut state.heaps[state.current_frame.heap as usize]
+        &mut state.heaps[state.current_frame.heap]
     }
 }
 
 pub struct AuxHeap;
 impl HeapFromState for AuxHeap {
     fn get_heap(state: &mut State) -> &mut Vec<u8> {
-        &mut state.heaps[state.current_frame.aux_heap as usize]
+        &mut state.heaps[state.current_frame.aux_heap]
     }
 }
 
@@ -121,7 +121,7 @@ fn load_pointer<const INCREMENT: bool>(
         let input = Register1::get(args, &mut vm.state);
         let pointer = FatPointer::from(input);
 
-        let heap = &vm.state.heaps[pointer.memory_page as usize];
+        let heap = &vm.state.heaps[pointer.memory_page];
 
         // start + offset could be past the end of the fat pointer
         // any bytes past the end are read as zero

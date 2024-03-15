@@ -90,7 +90,7 @@ impl Memory for Heaps {
         _monotonic_cycle_counter: u32,
         mut query: zk_evm_abstractions::queries::MemoryQuery,
     ) -> zk_evm_abstractions::queries::MemoryQuery {
-        let page = query.location.page.0 as usize;
+        let page = query.location.page.0;
         let start = query.location.index.0 as usize * 32;
         let range = start..start + 32;
         if query.rw_flag {

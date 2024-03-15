@@ -69,8 +69,8 @@ struct Meta;
 impl ContextOp for Meta {
     fn get(state: &State) -> U256 {
         VmMetaParameters {
-            heap_size: state.heaps[state.current_frame.heap as usize].len() as u32,
-            aux_heap_size: state.heaps[state.current_frame.aux_heap as usize].len() as u32,
+            heap_size: state.heaps[state.current_frame.heap].len() as u32,
+            aux_heap_size: state.heaps[state.current_frame.aux_heap].len() as u32,
             this_shard_id: 0, // TODO properly implement shards
             caller_shard_id: 0,
             code_shard_id: 0,
