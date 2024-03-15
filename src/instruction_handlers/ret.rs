@@ -14,12 +14,12 @@ fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
 ) -> InstructionResult {
     let args = unsafe { &(*instruction).arguments };
 
-    let gas_left = vm.current_frame.gas;
+    let gas_left = vm.state.current_frame.gas;
 
-    let (pc, snapshot) = if let Some((pc, eh, snapshot)) = vm.current_frame.pop_near_call() {
+    let (pc, snapshot) = if let Some((pc, eh, snapshot)) = vm.state.current_frame.pop_near_call() {
         (
             if TO_LABEL {
-                Immediate1::get(args, vm).low_u32()
+                Immediate1::get(args, &mut vm.state).low_u32()
             } else if IS_REVERT {
                 eh
             } else {
@@ -29,8 +29,8 @@ fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
         )
     } else {
         let return_value = match get_far_call_calldata(
-            Register1::get(args, vm),
-            Register1::is_fat_pointer(args, vm),
+            Register1::get(args, &mut vm.state),
+            Register1::is_fat_pointer(args, &mut vm.state),
             vm,
         ) {
             Ok(pointer) => pointer,
@@ -39,12 +39,13 @@ fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
 
         // TODO check that the return value resides in this or a newer frame's memory
 
-        let Some((pc, eh, snapshot)) = vm.pop_frame() else {
-            let output = vm.heaps[return_value.memory_page as usize]
+        let Some((pc, eh, snapshot)) = vm.state.pop_frame() else {
+            let output = vm.state.heaps[return_value.memory_page as usize]
                 [return_value.start as usize..(return_value.start + return_value.length) as usize]
                 .to_vec();
             return if IS_REVERT {
-                vm.world.rollback(vm.current_frame.world_before_this_frame);
+                vm.world
+                    .rollback(vm.state.current_frame.world_before_this_frame);
                 Err(ExecutionEnd::Reverted(output))
             } else {
                 vm.world.delete_history();
@@ -52,11 +53,11 @@ fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
             };
         };
 
-        vm.set_context_u128(0);
+        vm.state.set_context_u128(0);
 
-        vm.registers = [U256::zero(); 16];
-        vm.registers[1] = return_value.into_u256();
-        vm.register_pointer_flags = 2;
+        vm.state.registers = [U256::zero(); 16];
+        vm.state.registers[1] = return_value.into_u256();
+        vm.state.register_pointer_flags = 2;
 
         (if IS_REVERT { eh } else { pc + 1 }, snapshot)
     };
@@ -65,10 +66,10 @@ fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
         vm.world.rollback(snapshot);
     }
 
-    vm.flags = Flags::new(false, false, false);
-    vm.current_frame.gas += gas_left;
+    vm.state.flags = Flags::new(false, false, false);
+    vm.state.current_frame.gas += gas_left;
 
-    match vm.current_frame.pc_from_u32(pc) {
+    match vm.state.current_frame.pc_from_u32(pc) {
         Some(i) => Ok(i),
         None => ret_panic(vm, Panic::InvalidInstruction),
     }
@@ -79,7 +80,7 @@ fn explicit_panic<const TO_LABEL: bool>(
     instruction: *const Instruction,
 ) -> InstructionResult {
     let label = if TO_LABEL {
-        unsafe { Some(Immediate1::get(&(*instruction).arguments, vm).low_u32()) }
+        unsafe { Some(Immediate1::get(&(*instruction).arguments, &mut vm.state).low_u32()) }
     } else {
         None
     };
@@ -99,7 +100,7 @@ pub(crate) fn free_panic(vm: &mut VirtualMachine, panic: Panic) -> InstructionRe
 const RETURN_COST: u32 = 5;
 
 pub(crate) fn ret_panic(vm: &mut VirtualMachine, mut panic: Panic) -> InstructionResult {
-    if let Err(p) = vm.use_gas(RETURN_COST) {
+    if let Err(p) = vm.state.use_gas(RETURN_COST) {
         panic = p;
     }
     panic_impl(vm, panic, None)
@@ -112,7 +113,8 @@ fn panic_impl(
     mut maybe_label: Option<u32>,
 ) -> InstructionResult {
     loop {
-        let (eh, snapshot) = if let Some((_, eh, snapshot)) = vm.current_frame.pop_near_call() {
+        let (eh, snapshot) = if let Some((_, eh, snapshot)) = vm.state.current_frame.pop_near_call()
+        {
             (
                 if let Some(label) = maybe_label {
                     label
@@ -122,27 +124,28 @@ fn panic_impl(
                 snapshot,
             )
         } else {
-            let Some((_, eh, snapshot)) = vm.pop_frame() else {
-                vm.world.rollback(vm.current_frame.world_before_this_frame);
+            let Some((_, eh, snapshot)) = vm.state.pop_frame() else {
+                vm.world
+                    .rollback(vm.state.current_frame.world_before_this_frame);
                 return Err(ExecutionEnd::Panicked(panic));
             };
-            vm.registers[1] = U256::zero();
-            vm.register_pointer_flags |= 1 << 1;
+            vm.state.registers[1] = U256::zero();
+            vm.state.register_pointer_flags |= 1 << 1;
             (eh, snapshot)
         };
 
         vm.world.rollback(snapshot);
 
-        vm.flags = Flags::new(true, false, false);
-        vm.set_context_u128(0);
+        vm.state.flags = Flags::new(true, false, false);
+        vm.state.set_context_u128(0);
 
-        if let Some(instruction) = vm.current_frame.program.get(eh as usize) {
+        if let Some(instruction) = vm.state.current_frame.program.get(eh as usize) {
             return Ok(instruction);
         }
         panic = Panic::InvalidInstruction;
         maybe_label = None;
 
-        if let Err(p) = vm.use_gas(RETURN_COST) {
+        if let Err(p) = vm.state.use_gas(RETURN_COST) {
             panic = p;
         }
     }

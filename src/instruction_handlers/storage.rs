@@ -7,16 +7,17 @@ use crate::{
 
 fn sstore(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, |vm, args| {
-        let key = Register1::get(args, vm);
-        let value = Register2::get(args, vm);
+        let key = Register1::get(args, &mut vm.state);
+        let value = Register2::get(args, &mut vm.state);
 
         // TODO: pubdata cost
 
-        if vm.current_frame.is_static {
+        if vm.state.current_frame.is_static {
             return Err(Panic::WriteInStaticCall);
         }
 
-        vm.world.write_storage(vm.current_frame.address, key, value);
+        vm.world
+            .write_storage(vm.state.current_frame.address, key, value);
 
         Ok(())
     })
@@ -24,9 +25,9 @@ fn sstore(vm: &mut VirtualMachine, instruction: *const Instruction) -> Instructi
 
 fn sload(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate(vm, instruction, |vm, args| {
-        let key = Register1::get(args, vm);
-        let value = vm.world.read_storage(vm.current_frame.address, key);
-        Register1::set(args, vm, value);
+        let key = Register1::get(args, &mut vm.state);
+        let value = vm.world.read_storage(vm.state.current_frame.address, key);
+        Register1::set(args, &mut vm.state, value);
     })
 }
 

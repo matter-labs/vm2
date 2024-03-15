@@ -1,7 +1,7 @@
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     instruction::InstructionResult,
-    vm::Heaps,
+    state::Heaps,
     Instruction, Predicate, VirtualMachine,
 };
 use u256::U256;
@@ -30,17 +30,17 @@ fn precompile_call(vm: &mut VirtualMachine, instruction: *const Instruction) -> 
 
         // The user gets to decide how much gas to burn
         // This is safe because system contracts are trusted
-        let aux_data = PrecompileAuxData::from_u256(Register2::get(args, vm));
-        vm.use_gas(aux_data.extra_ergs_cost)?;
+        let aux_data = PrecompileAuxData::from_u256(Register2::get(args, &mut vm.state));
+        vm.state.use_gas(aux_data.extra_ergs_cost)?;
 
         // TODO record extra pubdata cost
 
-        let mut abi = PrecompileCallABI::from_u256(Register1::get(args, vm));
+        let mut abi = PrecompileCallABI::from_u256(Register1::get(args, &mut vm.state));
         if abi.memory_page_to_read == 0 {
-            abi.memory_page_to_read = vm.current_frame.heap;
+            abi.memory_page_to_read = vm.state.current_frame.heap;
         }
         if abi.memory_page_to_write == 0 {
-            abi.memory_page_to_write = vm.current_frame.heap;
+            abi.memory_page_to_write = vm.state.current_frame.heap;
         }
 
         let query = LogQuery {
@@ -57,27 +57,28 @@ fn precompile_call(vm: &mut VirtualMachine, instruction: *const Instruction) -> 
             is_service: Default::default(),
         };
 
-        let address_bytes = vm.current_frame.address.0;
+        let address_bytes = vm.state.current_frame.address.0;
         let address_low = u16::from_le_bytes([address_bytes[19], address_bytes[18]]);
+        let heaps = &mut vm.state.heaps;
         match address_low {
             KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
-                keccak256_rounds_function::<_, false>(0, query, &mut vm.heaps);
+                keccak256_rounds_function::<_, false>(0, query, heaps);
             }
             SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
-                sha256_rounds_function::<_, false>(0, query, &mut vm.heaps);
+                sha256_rounds_function::<_, false>(0, query, heaps);
             }
             ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS => {
-                ecrecover_function::<_, false>(0, query, &mut vm.heaps);
+                ecrecover_function::<_, false>(0, query, heaps);
             }
             SECP256R1_VERIFY_PRECOMPILE_ADDRESS => {
-                secp256r1_verify_function::<_, false>(0, query, &mut vm.heaps);
+                secp256r1_verify_function::<_, false>(0, query, heaps);
             }
             _ => {
                 // A precompile call may be used just to burn gas
             }
         }
 
-        Register1::set(args, vm, 1.into());
+        Register1::set(args, &mut vm.state, 1.into());
 
         Ok(())
     })

@@ -16,15 +16,15 @@ fn binop<Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SET_F
     instruction: *const Instruction,
 ) -> InstructionResult {
     instruction_boilerplate(vm, instruction, |vm, args| {
-        let a = In1::get(args, vm);
-        let b = Register2::get(args, vm);
+        let a = In1::get(args, &mut vm.state);
+        let b = Register2::get(args, &mut vm.state);
         let (a, b) = if SWAP { (b, a) } else { (a, b) };
 
         let (result, out2, flags) = Op::perform(&a, &b);
-        Out::set(args, vm, result);
-        out2.write(args, vm);
+        Out::set(args, &mut vm.state, result);
+        out2.write(args, &mut vm.state);
         if SET_FLAGS {
-            vm.flags = flags;
+            vm.state.flags = flags;
         }
     })
 }

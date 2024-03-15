@@ -8,11 +8,12 @@ use crate::{
 fn nop(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate(vm, instruction, |vm, args| {
         // nop's addressing modes can move the stack pointer!
-        AdvanceStackPointer::get(args, vm);
-        vm.current_frame.sp = vm
+        AdvanceStackPointer::get(args, &mut vm.state);
+        vm.state.current_frame.sp = vm
+            .state
             .current_frame
             .sp
-            .wrapping_add(destination_stack_address(args, vm));
+            .wrapping_add(destination_stack_address(args, &mut vm.state));
     })
 }
 

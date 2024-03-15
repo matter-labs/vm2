@@ -27,44 +27,48 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
 
     let address_mask: U256 = U256::MAX >> (256 - 160);
 
-    let raw_abi = Register1::get(args, vm);
-    let destination_address = Register2::get(args, vm) & address_mask;
-    let error_handler = Immediate1::get(args, vm);
+    let raw_abi = Register1::get(args, &mut vm.state);
+    let destination_address = Register2::get(args, &mut vm.state) & address_mask;
+    let error_handler = Immediate1::get(args, &mut vm.state);
 
     let abi = get_far_call_arguments(raw_abi);
 
     let mut encountered_panic = None;
-    let (program, code_page) =
-        match decommit(&mut vm.world, destination_address, vm.default_aa_code_hash) {
-            Ok((p, cp, code_info)) => {
-                if code_info.is_constructed == abi.is_constructor_call {
-                    encountered_panic = Some(Panic::ConstructorCallAndCodeStatusMismatch);
-                }
-                (p, cp)
+    let (program, code_page) = match decommit(
+        &mut vm.world,
+        destination_address,
+        vm.settings.default_aa_code_hash,
+    ) {
+        Ok((p, cp, code_info)) => {
+            if code_info.is_constructed == abi.is_constructor_call {
+                encountered_panic = Some(Panic::ConstructorCallAndCodeStatusMismatch);
             }
-            Err(panic) => {
-                encountered_panic = Some(panic);
-                let substitute: (Arc<[Instruction]>, Arc<[U256]>) = (Arc::new([]), Arc::new([]));
-                substitute
-            }
-        };
-    let calldata = match get_far_call_calldata(raw_abi, Register1::is_fat_pointer(args, vm), vm) {
-        Ok(pointer) => pointer.into_u256(),
+            (p, cp)
+        }
         Err(panic) => {
             encountered_panic = Some(panic);
-            U256::zero()
+            let substitute: (Arc<[Instruction]>, Arc<[U256]>) = (Arc::new([]), Arc::new([]));
+            substitute
         }
     };
+    let calldata =
+        match get_far_call_calldata(raw_abi, Register1::is_fat_pointer(args, &mut vm.state), vm) {
+            Ok(pointer) => pointer.into_u256(),
+            Err(panic) => {
+                encountered_panic = Some(panic);
+                U256::zero()
+            }
+        };
 
-    let maximum_gas = (vm.current_frame.gas as u64 * 63 / 64) as u32;
+    let maximum_gas = (vm.state.current_frame.gas as u64 * 63 / 64) as u32;
     let new_frame_gas = if abi.gas_to_pass == 0 {
         maximum_gas
     } else {
         abi.gas_to_pass.min(maximum_gas)
     };
 
-    vm.current_frame.gas -= new_frame_gas;
-    vm.push_frame::<CALLING_MODE>(
+    vm.state.current_frame.gas -= new_frame_gas;
+    vm.state.push_frame::<CALLING_MODE>(
         instruction,
         u256_into_address(destination_address),
         program,
@@ -72,29 +76,30 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         new_frame_gas,
         error_handler.low_u32(),
         IS_STATIC,
+        vm.world.snapshot(),
     );
 
     if let Some(panic) = encountered_panic {
         return ret_panic(vm, panic);
     }
 
-    vm.flags = Flags::new(false, false, false);
+    vm.state.flags = Flags::new(false, false, false);
 
     if abi.is_system_call {
-        vm.registers[14] = U256::zero();
-        vm.registers[15] = U256::zero();
-        vm.registers[2] = 2.into();
+        vm.state.registers[14] = U256::zero();
+        vm.state.registers[15] = U256::zero();
+        vm.state.registers[2] = 2.into();
     } else if abi.is_constructor_call {
-        vm.registers = [U256::zero(); 16];
-        vm.registers[2] = 1.into();
+        vm.state.registers = [U256::zero(); 16];
+        vm.state.registers[2] = 1.into();
     } else {
-        vm.registers = [U256::zero(); 16];
+        vm.state.registers = [U256::zero(); 16];
     }
 
-    vm.registers[1] = calldata;
-    vm.register_pointer_flags = 2;
+    vm.state.registers[1] = calldata;
+    vm.state.register_pointer_flags = 2;
 
-    Ok(&vm.current_frame.program[0])
+    Ok(&vm.state.current_frame.program[0])
 }
 
 pub(crate) struct FarCallABI {
@@ -149,12 +154,12 @@ pub(crate) fn get_far_call_calldata(
 
             match target {
                 ToHeap => {
-                    grow_heap::<Heap>(vm, bound)?;
-                    pointer.memory_page = vm.current_frame.heap;
+                    grow_heap::<Heap>(&mut vm.state, bound)?;
+                    pointer.memory_page = vm.state.current_frame.heap;
                 }
                 ToAuxHeap => {
-                    grow_heap::<AuxHeap>(vm, pointer.start + pointer.length)?;
-                    pointer.memory_page = vm.current_frame.aux_heap;
+                    grow_heap::<AuxHeap>(&mut vm.state, pointer.start + pointer.length)?;
+                    pointer.memory_page = vm.state.current_frame.aux_heap;
                 }
             }
         }
@@ -195,25 +200,25 @@ impl FatPointer {
 fn near_call(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
     let args = unsafe { &(*instruction).arguments };
 
-    let gas_to_pass = Register1::get(args, vm).0[0] as u32;
-    let destination = Immediate1::get(args, vm);
-    let error_handler = Immediate2::get(args, vm);
+    let gas_to_pass = Register1::get(args, &mut vm.state).0[0] as u32;
+    let destination = Immediate1::get(args, &mut vm.state);
+    let error_handler = Immediate2::get(args, &mut vm.state);
 
     let new_frame_gas = if gas_to_pass == 0 {
-        vm.current_frame.gas
+        vm.state.current_frame.gas
     } else {
-        gas_to_pass.min(vm.current_frame.gas)
+        gas_to_pass.min(vm.state.current_frame.gas)
     };
-    vm.current_frame.push_near_call(
+    vm.state.current_frame.push_near_call(
         new_frame_gas,
         instruction,
         error_handler.low_u32(),
         vm.world.snapshot(),
     );
 
-    vm.flags = Flags::new(false, false, false);
+    vm.state.flags = Flags::new(false, false, false);
 
-    Ok(&vm.current_frame.program[destination.low_u32() as usize])
+    Ok(&vm.state.current_frame.program[destination.low_u32() as usize])
 }
 
 use super::monomorphization::*;

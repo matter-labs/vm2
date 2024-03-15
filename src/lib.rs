@@ -9,6 +9,7 @@ pub mod instruction_handlers;
 mod modified_world;
 mod predication;
 mod rollback;
+mod state;
 mod vm;
 
 use std::sync::Arc;
@@ -20,7 +21,7 @@ pub use instruction::{
 };
 pub use modified_world::Event;
 pub use predication::Predicate;
-pub use vm::VirtualMachine;
+pub use vm::{Settings, VirtualMachine};
 
 pub trait World {
     /// This will be called *every* time a contract is called. Caching and decoding is

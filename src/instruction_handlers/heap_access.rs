@@ -5,24 +5,25 @@ use crate::{
     },
     fat_pointer::FatPointer,
     instruction::{InstructionResult, Panic},
+    state::State,
     Instruction, Predicate, VirtualMachine,
 };
 use u256::U256;
 
 pub trait HeapFromState {
-    fn get_heap(state: &mut VirtualMachine) -> &mut Vec<u8>;
+    fn get_heap(state: &mut State) -> &mut Vec<u8>;
 }
 
 pub struct Heap;
 impl HeapFromState for Heap {
-    fn get_heap(state: &mut VirtualMachine) -> &mut Vec<u8> {
+    fn get_heap(state: &mut State) -> &mut Vec<u8> {
         &mut state.heaps[state.current_frame.heap as usize]
     }
 }
 
 pub struct AuxHeap;
 impl HeapFromState for AuxHeap {
-    fn get_heap(state: &mut VirtualMachine) -> &mut Vec<u8> {
+    fn get_heap(state: &mut State) -> &mut Vec<u8> {
         &mut state.heaps[state.current_frame.aux_heap as usize]
     }
 }
@@ -35,8 +36,8 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
     instruction: *const Instruction,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, |vm, args| {
-        let pointer = In::get(args, vm);
-        if In::is_fat_pointer(args, vm) {
+        let pointer = In::get(args, &mut vm.state);
+        if In::is_fat_pointer(args, &mut vm.state) {
             return Err(Panic::IncorrectPointerTags);
         }
         if pointer > LAST_ADDRESS.into() {
@@ -48,14 +49,14 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
         // The size check above ensures this never overflows
         let new_bound = address + 32;
 
-        grow_heap::<H>(vm, new_bound)?;
+        grow_heap::<H>(&mut vm.state, new_bound)?;
 
-        let heap = H::get_heap(vm);
+        let heap = H::get_heap(&mut vm.state);
         let value = U256::from_big_endian(&heap[address as usize..new_bound as usize]);
-        Register1::set(args, vm, value);
+        Register1::set(args, &mut vm.state, value);
 
         if INCREMENT {
-            Register2::set(args, vm, pointer + 32)
+            Register2::set(args, &mut vm.state, pointer + 32)
         }
 
         Ok(())
@@ -67,38 +68,35 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool>(
     instruction: *const Instruction,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, |vm, args| {
-        let pointer = In::get(args, vm);
-        if In::is_fat_pointer(args, vm) {
+        let pointer = In::get(args, &mut vm.state);
+        if In::is_fat_pointer(args, &mut vm.state) {
             return Err(Panic::IncorrectPointerTags);
         }
         if pointer > LAST_ADDRESS.into() {
             return Err(Panic::AccessingTooLargeHeapAddress);
         }
 
-        let value = Register2::get(args, vm);
+        let value = Register2::get(args, &mut vm.state);
 
         let address = pointer.low_u32();
 
         // The size check above ensures this never overflows
         let new_bound = address + 32;
 
-        grow_heap::<H>(vm, new_bound)?;
+        grow_heap::<H>(&mut vm.state, new_bound)?;
 
-        let heap = H::get_heap(vm);
+        let heap = H::get_heap(&mut vm.state);
         value.to_big_endian(&mut heap[address as usize..new_bound as usize]);
 
         if INCREMENT {
-            Register1::set(args, vm, pointer + 32)
+            Register1::set(args, &mut vm.state, pointer + 32)
         }
 
         Ok(())
     })
 }
 
-pub fn grow_heap<H: HeapFromState>(
-    state: &mut VirtualMachine,
-    new_bound: u32,
-) -> Result<(), Panic> {
+pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<(), Panic> {
     if let Some(growth) = new_bound.checked_sub(H::get_heap(state).len() as u32) {
         state.use_gas(growth)?;
 
@@ -113,13 +111,13 @@ fn load_pointer<const INCREMENT: bool>(
     instruction: *const Instruction,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, |vm, args| {
-        if !Register1::is_fat_pointer(args, vm) {
+        if !Register1::is_fat_pointer(args, &mut vm.state) {
             return Err(Panic::IncorrectPointerTags);
         }
-        let input = Register1::get(args, vm);
+        let input = Register1::get(args, &mut vm.state);
         let pointer = FatPointer::from(input);
 
-        let heap = &vm.heaps[pointer.memory_page as usize];
+        let heap = &vm.state.heaps[pointer.memory_page as usize];
 
         // start + offset could be past the end of the fat pointer
         // any bytes past the end are read as zero
@@ -132,13 +130,13 @@ fn load_pointer<const INCREMENT: bool>(
             buffer[i] = heap[addr as usize];
         }
 
-        Register1::set(args, vm, U256::from_big_endian(&buffer));
+        Register1::set(args, &mut vm.state, U256::from_big_endian(&buffer));
 
         if INCREMENT {
             if pointer.offset > LAST_ADDRESS {
                 return Err(Panic::PointerOffsetOverflows);
             }
-            Register2::set_fat_ptr(args, vm, input + 32)
+            Register2::set_fat_ptr(args, &mut vm.state, input + 32)
         }
 
         Ok(())

@@ -1,6 +1,8 @@
 use crate::{
-    addressing_modes::Arguments, instruction_handlers::ret_panic, vm::VirtualMachine, Predicate,
-    World,
+    addressing_modes::Arguments,
+    instruction_handlers::ret_panic,
+    vm::{Settings, VirtualMachine},
+    Predicate, World,
 };
 use arbitrary::{Arbitrary, Unstructured};
 use std::sync::Arc;
@@ -55,7 +57,7 @@ pub fn jump_to_beginning() -> Instruction {
     }
 }
 fn jump_to_beginning_handler(vm: &mut VirtualMachine, _: *const Instruction) -> InstructionResult {
-    let first_instruction = &vm.current_frame.program[0];
+    let first_instruction = &vm.state.current_frame.program[0];
     Ok(first_instruction)
 }
 
@@ -88,7 +90,9 @@ pub fn run_arbitrary_program(input: &[u8]) -> ExecutionEnd {
         H160::zero(),
         vec![],
         u32::MAX,
-        U256::zero(),
+        Settings {
+            default_aa_code_hash: U256::zero(),
+        },
     );
     state.run()
 }

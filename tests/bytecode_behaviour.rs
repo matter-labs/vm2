@@ -72,8 +72,10 @@ fn call_to_invalid_address() {
         Address::zero(),
         vec![],
         10000,
-        U256::zero(),
+        vm2::Settings {
+            default_aa_code_hash: U256::zero(),
+        },
     );
     assert!(matches!(vm.run(), ExecutionEnd::Panicked(_)));
-    assert_eq!(vm.current_frame.gas, 0);
+    assert_eq!(vm.state.current_frame.gas, 0);
 }

@@ -14,8 +14,8 @@ fn jump<In: Source>(
     mut instruction: *const Instruction,
 ) -> InstructionResult {
     unsafe {
-        let target = In::get(&(*instruction).arguments, vm).low_u32() as u16 as usize;
-        if let Some(i) = vm.current_frame.program.get(target) {
+        let target = In::get(&(*instruction).arguments, &mut vm.state).low_u32() as u16 as usize;
+        if let Some(i) = vm.state.current_frame.program.get(target) {
             instruction = i;
         } else {
             return ret_panic(vm, Panic::InvalidInstruction);

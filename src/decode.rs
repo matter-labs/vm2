@@ -48,7 +48,9 @@ fn unimplemented_handler(
     instruction: *const Instruction,
 ) -> InstructionResult {
     let variant: Opcode = unsafe {
-        std::mem::transmute(Immediate1::get(&(*instruction).arguments, vm).low_u32() as u16)
+        std::mem::transmute(
+            Immediate1::get(&(*instruction).arguments, &mut vm.state).low_u32() as u16,
+        )
     };
     eprintln!("Unimplemented instruction: {:?}!", variant);
     Err(ExecutionEnd::Panicked(Panic::InvalidInstruction))

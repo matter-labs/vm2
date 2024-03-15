@@ -15,10 +15,13 @@ fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     instruction: *const Instruction,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, |vm, args| {
-        let a = (In1::get(args, vm), In1::is_fat_pointer(args, vm));
+        let a = (
+            In1::get(args, &mut vm.state),
+            In1::is_fat_pointer(args, &mut vm.state),
+        );
         let b = (
-            Register2::get(args, vm),
-            Register2::is_fat_pointer(args, vm),
+            Register2::get(args, &mut vm.state),
+            Register2::is_fat_pointer(args, &mut vm.state),
         );
         let (a, b) = if SWAP { (b, a) } else { (a, b) };
         let (a, a_is_pointer) = a;
@@ -30,7 +33,7 @@ fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
 
         let result = Op::perform(a, b)?;
 
-        Out::set_fat_ptr(args, vm, result);
+        Out::set_fat_ptr(args, &mut vm.state, result);
 
         Ok(())
     })
