@@ -169,9 +169,13 @@ impl<'a> Arbitrary<'a> for Instruction {
             17 => {
                 Self::from_load::<Heap>(u.arbitrary()?, u.arbitrary()?, u.arbitrary()?, predicate)
             }
-            18 => {
-                Self::from_store::<Heap>(u.arbitrary()?, u.arbitrary()?, u.arbitrary()?, predicate)
-            }
+            18 => Self::from_store::<Heap>(
+                u.arbitrary()?,
+                u.arbitrary()?,
+                u.arbitrary()?,
+                predicate,
+                false,
+            ),
             19 => {
                 Self::from_load_pointer(u.arbitrary()?, u.arbitrary()?, u.arbitrary()?, predicate)
             }

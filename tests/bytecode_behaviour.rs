@@ -15,6 +15,7 @@ fn program_from_file(filename: &str) -> (Arc<[Instruction]>, Arc<[U256]>) {
                 .chunks_exact(8)
                 .map(|chunk| u64::from_be_bytes(chunk.try_into().unwrap()))
                 .collect::<Vec<_>>(),
+            false,
         )
         .into(),
         blob.chunks_exact(32)
@@ -64,6 +65,10 @@ fn call_to_invalid_address() {
                 0.into()
             }
         }
+
+        fn handle_hook(&mut self, _: u32) {
+            unreachable!()
+        }
     }
 
     let mut vm = VirtualMachine::new(
@@ -74,6 +79,7 @@ fn call_to_invalid_address() {
         10000,
         vm2::Settings {
             default_aa_code_hash: U256::zero(),
+            hook_address: 0,
         },
     );
     assert!(matches!(vm.run(), ExecutionEnd::Panicked(_)));

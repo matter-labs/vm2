@@ -6,7 +6,7 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::{InstructionResult, Panic},
     state::State,
-    Instruction, Predicate, VirtualMachine,
+    Instruction, Predicate, VirtualMachine, World,
 };
 use u256::U256;
 
@@ -63,7 +63,7 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
     })
 }
 
-fn store<H: HeapFromState, In: Source, const INCREMENT: bool>(
+fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENABLED: bool>(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
 ) -> InstructionResult {
@@ -90,6 +90,10 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool>(
 
         if INCREMENT {
             Register1::set(args, &mut vm.state, pointer + 32)
+        }
+
+        if HOOKING_ENABLED && address == vm.settings.hook_address {
+            vm.world.handle_hook(value.as_u32());
         }
 
         Ok(())
@@ -174,10 +178,11 @@ impl Instruction {
         src2: Register2,
         incremented_out: Option<Register1>,
         predicate: Predicate,
+        should_hook: bool,
     ) -> Self {
         let increment = incremented_out.is_some();
         Self {
-            handler: monomorphize!(store [H] match_reg_imm src1 match_boolean increment),
+            handler: monomorphize!(store [H] match_reg_imm src1 match_boolean increment match_boolean should_hook),
             arguments: Arguments::new(predicate, 13)
                 .write_source(&src1)
                 .write_source(&src2)

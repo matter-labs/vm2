@@ -35,6 +35,10 @@ impl World for ModifiedWorld {
             .cloned()
             .unwrap_or_else(|| self.world.read_storage(contract, key))
     }
+
+    fn handle_hook(&mut self, value: u32) {
+        self.world.handle_hook(value)
+    }
 }
 
 impl Rollback for ModifiedWorld {

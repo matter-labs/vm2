@@ -11,6 +11,10 @@ use u256::{H160, U256};
 
 pub struct Settings {
     pub default_aa_code_hash: U256,
+
+    /// Writing to this address on the heap in the bootloader causes a call to
+    /// the handle_hook method of the provided [World].
+    pub hook_address: u32,
 }
 
 pub struct VirtualMachine {

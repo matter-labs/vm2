@@ -82,6 +82,10 @@ pub fn run_arbitrary_program(input: &[u8]) -> ExecutionEnd {
         fn read_storage(&mut self, _: H160, _: U256) -> U256 {
             U256::zero()
         }
+
+        fn handle_hook(&mut self, hook: u32) {
+            todo!()
+        }
     }
 
     let mut state = VirtualMachine::new(
@@ -92,6 +96,7 @@ pub fn run_arbitrary_program(input: &[u8]) -> ExecutionEnd {
         u32::MAX,
         Settings {
             default_aa_code_hash: U256::zero(),
+            hook_address: 0,
         },
     );
     state.run()

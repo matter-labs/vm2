@@ -21,10 +21,10 @@ use zkevm_opcode_defs::{
     SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
 };
 
-pub fn decode_program(raw: &[u64]) -> Vec<Instruction> {
+pub fn decode_program(raw: &[u64], is_bootloader: bool) -> Vec<Instruction> {
     raw.iter()
         .take(1 << 16)
-        .map(|i| decode(*i))
+        .map(|i| decode(*i, is_bootloader))
         .chain(std::iter::once(if raw.len() >= 1 << 16 {
             jump_to_beginning()
         } else {
@@ -56,7 +56,7 @@ fn unimplemented_handler(
     Err(ExecutionEnd::Panicked(Panic::InvalidInstruction))
 }
 
-fn decode(raw: u64) -> Instruction {
+fn decode(raw: u64, is_bootloader: bool) -> Instruction {
     let (parsed, _) = EncodingModeProduction::parse_preliminary_variant_and_absolute_number(raw);
 
     let predicate = match parsed.condition {
@@ -266,6 +266,7 @@ fn decode(raw: u64) -> Instruction {
                     src2,
                     increment.then_some(out.try_into().unwrap()),
                     predicate,
+                    is_bootloader,
                 ),
                 zkevm_opcode_defs::UMAOpcode::AuxHeapRead => Instruction::from_load::<AuxHeap>(
                     src1.try_into().unwrap(),
@@ -278,6 +279,7 @@ fn decode(raw: u64) -> Instruction {
                     src2,
                     increment.then_some(out.try_into().unwrap()),
                     predicate,
+                    false,
                 ),
                 zkevm_opcode_defs::UMAOpcode::FatPointerRead => Instruction::from_load_pointer(
                     src1.try_into().unwrap(),
