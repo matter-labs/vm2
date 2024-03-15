@@ -75,7 +75,7 @@ pub fn run_arbitrary_program(input: &[u8]) -> ExecutionEnd {
 
     struct FakeWorld;
     impl World for FakeWorld {
-        fn decommit(&mut self, hash: U256) -> (Arc<[Instruction]>, Arc<[U256]>) {
+        fn decommit(&mut self, _hash: U256) -> (Arc<[Instruction]>, Arc<[U256]>) {
             todo!()
         }
 
@@ -83,7 +83,7 @@ pub fn run_arbitrary_program(input: &[u8]) -> ExecutionEnd {
             U256::zero()
         }
 
-        fn handle_hook(&mut self, hook: u32) {
+        fn handle_hook(&mut self, _hook: u32) {
             todo!()
         }
     }

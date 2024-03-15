@@ -147,12 +147,8 @@ impl State {
         })
     }
 
-    pub(crate) fn set_context_u128(&mut self, value: u128) -> Result<(), Panic> {
-        if self.current_frame.is_static {
-            return Err(Panic::WriteInStaticCall);
-        }
+    pub(crate) fn set_context_u128(&mut self, value: u128) {
         self.context_u128 = value;
-        Ok(())
     }
 
     pub(crate) fn get_context_u128(&self) -> u128 {
