@@ -1,5 +1,6 @@
 use crate::{
     rollback::{Rollback, RollbackableLog, RollbackableMap},
+    state::State,
     Instruction, World,
 };
 use std::sync::Arc;
@@ -36,8 +37,8 @@ impl World for ModifiedWorld {
             .unwrap_or_else(|| self.world.read_storage(contract, key))
     }
 
-    fn handle_hook(&mut self, value: u32) {
-        self.world.handle_hook(value)
+    fn handle_hook(&mut self, value: u32, state: &mut State) {
+        self.world.handle_hook(value, state)
     }
 }
 

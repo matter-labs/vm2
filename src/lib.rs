@@ -21,6 +21,7 @@ pub use instruction::{
 };
 pub use modified_world::Event;
 pub use predication::Predicate;
+pub use state::State;
 pub use vm::{Settings, VirtualMachine};
 
 pub trait World {
@@ -32,5 +33,5 @@ pub trait World {
     fn read_storage(&mut self, contract: H160, key: U256) -> U256;
 
     /// Called with values that the bootloader writes to the heap location [Settings::hook_address].
-    fn handle_hook(&mut self, hook: u32);
+    fn handle_hook(&mut self, hook: u32, state: &mut State);
 }

@@ -1,6 +1,7 @@
 use crate::{
     addressing_modes::Arguments,
     instruction_handlers::ret_panic,
+    state::State,
     vm::{Settings, VirtualMachine},
     Predicate, World,
 };
@@ -83,7 +84,7 @@ pub fn run_arbitrary_program(input: &[u8]) -> ExecutionEnd {
             U256::zero()
         }
 
-        fn handle_hook(&mut self, _hook: u32) {
+        fn handle_hook(&mut self, _hook: u32, _state: &mut State) {
             todo!()
         }
     }

@@ -27,7 +27,7 @@ pub struct State {
     /// They are needed to continue execution from the correct spot upon return.
     previous_frames: Vec<(u32, Callframe)>,
 
-    pub(crate) heaps: Heaps,
+    pub heaps: Heaps,
 
     context_u128: u128,
 }
@@ -178,7 +178,7 @@ impl Addressable for State {
 }
 
 #[derive(Debug)]
-pub(crate) struct Heaps(Vec<Vec<u8>>);
+pub struct Heaps(Vec<Vec<u8>>);
 
 impl Index<u32> for Heaps {
     type Output = Vec<u8>;

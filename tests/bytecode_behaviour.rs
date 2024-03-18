@@ -66,7 +66,7 @@ fn call_to_invalid_address() {
             }
         }
 
-        fn handle_hook(&mut self, _: u32) {
+        fn handle_hook(&mut self, _: u32, _: &mut vm2::State) {
             unreachable!()
         }
     }

@@ -93,7 +93,7 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
         }
 
         if HOOKING_ENABLED && address == vm.settings.hook_address {
-            vm.world.handle_hook(value.as_u32());
+            vm.world.handle_hook(value.as_u32(), &mut vm.state);
         }
 
         Ok(())
