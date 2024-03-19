@@ -19,6 +19,16 @@ pub enum CallingMode {
     Mimic,
 }
 
+/// A call to another contract.
+///
+/// First, the code of the called contract is fetched and a fat pointer is created
+/// or and existing one is forwarded. Costs for decommitting and memory growth are paid
+/// at this point.
+///
+/// A new stack frame is pushed. At most 63/64 of the *remaining* gas is passed to the called contract.
+///
+/// Even though all errors happen before the new stack frame, they cause a panic in the new frame,
+/// not in the caller!
 fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
@@ -60,7 +70,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
             }
         };
 
-    let maximum_gas = (vm.state.current_frame.gas as u64 * 63 / 64) as u32;
+    let maximum_gas = (vm.state.current_frame.gas / 64 * 63) as u32;
     let new_frame_gas = if abi.gas_to_pass == 0 {
         maximum_gas
     } else {
@@ -142,12 +152,15 @@ pub(crate) fn get_far_call_calldata(
             pointer.narrow();
         }
         FatPointerSource::MakeNewPointer(target) => {
+            // This check has to be first so the penalty for an incorrect bound is always paid.
+            // It must be paid even in cases where memory growth wouldn't be paid due to other errors.
+            let Some(bound) = pointer.start.checked_add(pointer.length) else {
+                let _ = vm.state.use_gas(u32::MAX);
+                return Err(Panic::PointerUpperBoundOverflows);
+            };
             if is_pointer {
                 return Err(Panic::IncorrectPointerTags);
             }
-            let Some(bound) = pointer.start.checked_add(pointer.length) else {
-                return Err(Panic::PointerUpperBoundOverflows);
-            };
             if pointer.offset != 0 {
                 return Err(Panic::PointerOffsetNotZeroAtCreation);
             }

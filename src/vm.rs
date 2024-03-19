@@ -70,9 +70,11 @@ impl VirtualMachine {
                 {
                     print!(
                         "{:?}: ",
-                        instruction.offset_from(&self.current_frame.program[0])
+                        instruction.offset_from(&self.state.current_frame.program[0])
                     );
-                    self.registers[1..].iter().for_each(|x| print!("{x:?} "));
+                    self.state.registers[1..]
+                        .iter()
+                        .for_each(|x| print!("{x:?} "));
                     println!();
                 }
 
