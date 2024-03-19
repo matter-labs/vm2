@@ -41,6 +41,7 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
             return Err(Panic::IncorrectPointerTags);
         }
         if pointer > LAST_ADDRESS.into() {
+            let _ = vm.state.use_gas(u32::MAX);
             return Err(Panic::AccessingTooLargeHeapAddress);
         }
 
@@ -73,6 +74,7 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
             return Err(Panic::IncorrectPointerTags);
         }
         if pointer > LAST_ADDRESS.into() {
+            let _ = vm.state.use_gas(u32::MAX);
             return Err(Panic::AccessingTooLargeHeapAddress);
         }
 
