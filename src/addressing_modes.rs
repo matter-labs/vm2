@@ -64,7 +64,8 @@ pub struct Arguments {
 }
 
 pub(crate) const L1_MESSAGE_COST: u32 = 156250;
-pub(crate) const SSTORE_COST: u32 = 3501;
+pub(crate) const SSTORE_COST: u32 = 5511;
+pub(crate) const SLOAD_COST: u32 = 2008;
 pub(crate) const INVALID_INSTRUCTION_COST: u32 = 4294967295;
 
 impl Arguments {
@@ -83,8 +84,9 @@ impl Arguments {
         match x {
             L1_MESSAGE_COST => 1,
             SSTORE_COST => 2,
-            INVALID_INSTRUCTION_COST => 3,
-            1 | 2 | 3 => panic!("Reserved gas cost values overlap with actual gas costs"),
+            SLOAD_COST => 3,
+            INVALID_INSTRUCTION_COST => 4,
+            1 | 2 | 3 | 4 => panic!("Reserved gas cost values overlap with actual gas costs"),
             x => x.try_into().expect("Gas cost doesn't fit into 8 bits"),
         }
     }
@@ -93,7 +95,8 @@ impl Arguments {
         match self.static_gas_cost {
             1 => L1_MESSAGE_COST,
             2 => SSTORE_COST,
-            3 => INVALID_INSTRUCTION_COST,
+            3 => SLOAD_COST,
+            4 => INVALID_INSTRUCTION_COST,
             x => x.into(),
         }
     }

@@ -1,6 +1,8 @@
 use super::common::{instruction_boilerplate, instruction_boilerplate_with_panic};
 use crate::{
-    addressing_modes::{Arguments, Destination, Register1, Register2, Source, SSTORE_COST},
+    addressing_modes::{
+        Arguments, Destination, Register1, Register2, Source, SLOAD_COST, SSTORE_COST,
+    },
     instruction::{InstructionResult, Panic},
     Instruction, Predicate, VirtualMachine, World,
 };
@@ -48,7 +50,7 @@ impl Instruction {
     pub fn from_sload(src: Register1, dst: Register1, predicate: Predicate) -> Self {
         Self {
             handler: sload,
-            arguments: Arguments::new(predicate, 158)
+            arguments: Arguments::new(predicate, SLOAD_COST)
                 .write_source(&src)
                 .write_destination(&dst),
         }
