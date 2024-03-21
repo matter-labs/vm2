@@ -66,18 +66,6 @@ impl VirtualMachine {
 
         unsafe {
             loop {
-                #[cfg(trace)]
-                {
-                    print!(
-                        "{:?}: ",
-                        instruction.offset_from(&self.state.current_frame.program[0])
-                    );
-                    self.state.registers[1..]
-                        .iter()
-                        .for_each(|x| print!("{x:?} "));
-                    println!();
-                }
-
                 let args = &(*instruction).arguments;
                 let Ok(_) = self.state.use_gas(args.get_static_gas_cost()) else {
                     instruction = match ret_panic(self, Panic::OutOfGas) {
@@ -86,6 +74,26 @@ impl VirtualMachine {
                     };
                     continue;
                 };
+
+                #[cfg(trace)]
+                {
+                    print!(
+                        "{:?}: ",
+                        instruction.offset_from(&self.state.current_frame.program[0])
+                    );
+                    self.state.registers[1..]
+                        .iter()
+                        .zip(1..)
+                        .for_each(|(&(mut x), i)| {
+                            if self.state.register_pointer_flags & (1 << i) != 0 {
+                                x.0[0] &= 0x00000000_ffffffffu64;
+                                x.0[1] &= 0xffffffff_00000000u64;
+                            }
+                            print!("{x:?} ")
+                        });
+                    print!("{}", self.state.current_frame.gas);
+                    println!();
+                }
 
                 if args.predicate.satisfied(&self.state.flags) {
                     instruction = match ((*instruction).handler)(self, instruction) {
