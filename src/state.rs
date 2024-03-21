@@ -1,8 +1,9 @@
 use crate::{
+    address_into_u256,
     addressing_modes::Addressable,
     bitset::Bitset,
     callframe::{self, Callframe, Snapshot},
-    decommit::u256_into_address,
+    decommit::{is_kernel, u256_into_address},
     fat_pointer::FatPointer,
     instruction::Panic,
     instruction_handlers::CallingMode,
@@ -101,11 +102,15 @@ impl State {
         world_before_this_frame: Snapshot,
     ) {
         let new_heap = self.heaps.0.len() as u32;
-        // TODO this is different for kernel frames
-        let new_heap_len = zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND as usize;
+        let new_heap_len = if is_kernel(address_into_u256(code_address)) {
+            zkevm_opcode_defs::system_params::NEW_KERNEL_FRAME_MEMORY_STIPEND
+        } else {
+            zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND
+        } as usize;
         self.heaps
             .0
             .extend([vec![0; new_heap_len], vec![0; new_heap_len]]);
+
         let mut new_frame = Callframe::new(
             if CALLING_MODE == CallingMode::Delegate as u8 {
                 self.current_frame.address

@@ -23,7 +23,7 @@ pub(crate) fn decommit(
         // The Ethereum-like behavior of calls to EOAs returning successfully is implemented
         // by the default address aliasing contract.
         // That contract also implements AA but only when called from the bootloader.
-        if code_info == U256::zero() && address >= (1 << 16).into() {
+        if code_info == U256::zero() && !is_kernel(address) {
             default_aa_code_hash
         } else {
             code_info
@@ -73,4 +73,8 @@ pub(crate) fn u256_into_address(source: U256) -> H160 {
     source.to_big_endian(&mut bytes);
     result.assign_from_slice(&bytes[12..]);
     result
+}
+
+pub(crate) fn is_kernel(address: U256) -> bool {
+    address < (1 << 16).into()
 }
