@@ -36,15 +36,15 @@ impl VirtualMachine {
         gas: u32,
         settings: Settings,
     ) -> Self {
+        let mut world = ModifiedWorld::new(world);
+        let world_before_this_frame = world.snapshot();
+
         let (program, code_page, _) = decommit(
-            &mut *world,
+            &mut world,
             address_into_u256(address),
             settings.default_aa_code_hash,
         )
         .unwrap();
-
-        let world = ModifiedWorld::new(world);
-        let world_before_this_frame = world.snapshot();
 
         Self {
             world,

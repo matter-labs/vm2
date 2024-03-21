@@ -53,8 +53,10 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
             if code_info.is_constructed == abi.is_constructor_call {
                 encountered_panic = Some(Panic::ConstructorCallAndCodeStatusMismatch);
             }
+
+            // TODO this is not paid on panic
             if let Err(panic) = vm.state.use_gas(
-                code_info.code_length_in_words as u32
+                code_info.code_words_to_pay as u32
                     * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT,
             ) {
                 encountered_panic = Some(panic);

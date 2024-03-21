@@ -1,4 +1,4 @@
-use crate::{instruction::Panic, Instruction, World};
+use crate::{instruction::Panic, modified_world::ModifiedWorld, Instruction};
 use std::sync::Arc;
 use u256::{H160, U256};
 use zkevm_opcode_defs::{
@@ -7,11 +7,11 @@ use zkevm_opcode_defs::{
 
 pub(crate) struct CodeInfo {
     pub is_constructed: bool,
-    pub code_length_in_words: u16,
+    pub code_words_to_pay: u16,
 }
 
 pub(crate) fn decommit(
-    world: &mut dyn World,
+    world: &mut ModifiedWorld,
     address: U256,
     default_aa_code_hash: U256,
 ) -> Result<(Arc<[Instruction]>, Arc<[U256]>, CodeInfo), Panic> {
@@ -50,13 +50,13 @@ pub(crate) fn decommit(
 
     // TODO pay based on program length
 
-    let (program, code_page) = world.decommit(code_key);
+    let (program, code_page, first_time) = world.decommit(code_key);
     Ok((
         program,
         code_page,
         CodeInfo {
             is_constructed,
-            code_length_in_words,
+            code_words_to_pay: if first_time { code_length_in_words } else { 0 },
         },
     ))
 }

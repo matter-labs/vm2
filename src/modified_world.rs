@@ -23,25 +23,6 @@ pub struct Event {
     pub tx_number: u32,
 }
 
-impl World for ModifiedWorld {
-    fn decommit(&mut self, hash: U256) -> (Arc<[Instruction]>, Arc<[U256]>) {
-        self.decommitted_hashes.insert(hash, ());
-        self.world.decommit(hash)
-    }
-
-    fn read_storage(&mut self, contract: H160, key: U256) -> U256 {
-        self.storage_changes
-            .as_ref()
-            .get(&(contract, key))
-            .cloned()
-            .unwrap_or_else(|| self.world.read_storage(contract, key))
-    }
-
-    fn handle_hook(&mut self, value: u32, state: &mut State) {
-        self.world.handle_hook(value, state)
-    }
-}
-
 impl Rollback for ModifiedWorld {
     type Snapshot = (
         <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
@@ -78,6 +59,25 @@ impl ModifiedWorld {
             decommitted_hashes: Default::default(),
             events: Default::default(),
         }
+    }
+
+    pub fn decommit(&mut self, hash: U256) -> (Arc<[Instruction]>, Arc<[U256]>, bool) {
+        let first_time = !self.decommitted_hashes.as_ref().contains_key(&hash);
+        self.decommitted_hashes.insert(hash, ());
+        let (i, cp) = self.world.decommit(hash);
+        (i, cp, first_time)
+    }
+
+    pub fn read_storage(&mut self, contract: H160, key: U256) -> U256 {
+        self.storage_changes
+            .as_ref()
+            .get(&(contract, key))
+            .cloned()
+            .unwrap_or_else(|| self.world.read_storage(contract, key))
+    }
+
+    pub fn handle_hook(&mut self, value: u32, state: &mut State) {
+        self.world.handle_hook(value, state)
     }
 
     pub fn write_storage(&mut self, contract: H160, key: U256, value: U256) {
