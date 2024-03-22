@@ -125,23 +125,27 @@ fn load_pointer<const INCREMENT: bool>(
 
         let heap = &vm.state.heaps[pointer.memory_page];
 
-        // start + offset could be past the end of the fat pointer
-        // any bytes past the end are read as zero
-        let start = pointer.start.saturating_add(pointer.offset);
-        let Some(end) = start.checked_add(32) else {
+        // Usually, we just read zeroes instead of out-of-bounds bytes
+        // but if offset + 32 is not representable, we panic, even if we could've read some bytes.
+        // This is not a bug, this is how it must work to be backwards compatible.
+        if pointer.offset > LAST_ADDRESS {
             return Err(Panic::PointerOffsetTooLarge);
         };
+
         let mut buffer = [0; 32];
-        for (i, addr) in (start..end.min(pointer.start + pointer.length)).enumerate() {
-            buffer[i] = heap[addr as usize];
+        if pointer.offset < pointer.length {
+            let start = pointer.start + pointer.offset;
+            let end = start.saturating_add(32).min(pointer.start + pointer.length);
+
+            for (i, addr) in (start..end).enumerate() {
+                buffer[i] = heap[addr as usize];
+            }
         }
 
         Register1::set(args, &mut vm.state, U256::from_big_endian(&buffer));
 
         if INCREMENT {
-            if pointer.offset > LAST_ADDRESS {
-                return Err(Panic::PointerOffsetOverflows);
-            }
+            // This addition does not overflow because we checked that the offset is small enough above.
             Register2::set_fat_ptr(args, &mut vm.state, input + 32)
         }
 
