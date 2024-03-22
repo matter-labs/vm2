@@ -5,60 +5,82 @@ use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
 
-pub(crate) struct CodeInfo {
-    pub is_constructed: bool,
-    pub code_words_to_pay: u16,
-}
+impl ModifiedWorld {
+    pub(crate) fn decommit(
+        &mut self,
+        address: U256,
+        default_aa_code_hash: U256,
+        gas: &mut u32,
+        is_constructor_call: bool,
+    ) -> Result<(Arc<[Instruction]>, Arc<[U256]>), Panic> {
+        let deployer_system_contract_address =
+            Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
 
-pub(crate) fn decommit(
-    world: &mut ModifiedWorld,
-    address: U256,
-    default_aa_code_hash: U256,
-) -> Result<(Arc<[Instruction]>, Arc<[U256]>, CodeInfo), Panic> {
-    let deployer_system_contract_address =
-        Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
+        let code_info = {
+            let code_info = self.read_storage(deployer_system_contract_address, address);
+            // The Ethereum-like behavior of calls to EOAs returning successfully is implemented
+            // by the default address aliasing contract.
+            // That contract also implements AA but only when called from the bootloader.
+            if code_info == U256::zero() && !is_kernel(address) {
+                default_aa_code_hash
+            } else {
+                code_info
+            }
+        };
 
-    let code_info = {
-        let code_info = world.read_storage(deployer_system_contract_address, address);
-        // The Ethereum-like behavior of calls to EOAs returning successfully is implemented
-        // by the default address aliasing contract.
-        // That contract also implements AA but only when called from the bootloader.
-        if code_info == U256::zero() && !is_kernel(address) {
-            default_aa_code_hash
-        } else {
-            code_info
-        }
-    };
+        let mut code_info_bytes = [0; 32];
+        code_info.to_big_endian(&mut code_info_bytes);
 
-    let mut code_info_bytes = [0; 32];
-    code_info.to_big_endian(&mut code_info_bytes);
-
-    if code_info_bytes[0] != 1 {
-        return Err(Panic::MalformedCodeInfo);
-    }
-    let is_constructed = match code_info_bytes[1] {
-        0 => true,
-        1 => false,
-        _ => {
+        if code_info_bytes[0] != 1 {
             return Err(Panic::MalformedCodeInfo);
         }
-    };
-    let code_length_in_words = u16::from_be_bytes([code_info_bytes[2], code_info_bytes[3]]);
+        let is_constructed = match code_info_bytes[1] {
+            0 => true,
+            1 => false,
+            _ => {
+                return Err(Panic::MalformedCodeInfo);
+            }
+        };
+        if is_constructed == is_constructor_call {
+            return Err(Panic::ConstructorCallAndCodeStatusMismatch);
+        }
 
-    code_info_bytes[1] = 0;
-    let code_key: U256 = U256::from_big_endian(&code_info_bytes);
+        let code_length_in_words = u16::from_be_bytes([code_info_bytes[2], code_info_bytes[3]]);
 
-    // TODO pay based on program length
+        code_info_bytes[1] = 0;
+        let code_key: U256 = U256::from_big_endian(&code_info_bytes);
 
-    let (program, code_page, first_time) = world.decommit(code_key);
-    Ok((
-        program,
-        code_page,
-        CodeInfo {
-            is_constructed,
-            code_words_to_pay: if first_time { code_length_in_words } else { 0 },
-        },
-    ))
+        if !self.decommitted_hashes.as_ref().contains_key(&code_key) {
+            let cost =
+                code_length_in_words as u32 * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT;
+            if cost > *gas {
+                // Unlike all other gas costs, this one is not paid if low on gas.
+                return Err(Panic::OutOfGas);
+            } else {
+                *gas -= cost;
+                self.decommitted_hashes.insert(code_key, ());
+            }
+        };
+
+        Ok(self.world.decommit(code_key))
+    }
+
+    /// Used to load code when the VM first starts up.
+    /// Doesn't check for any errors.
+    /// Doesn't cost anything but also doesn't make the code free in future decommits.
+    pub(crate) fn initial_decommit(&mut self, address: U256) -> (Arc<[Instruction]>, Arc<[U256]>) {
+        let deployer_system_contract_address =
+            Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
+        let code_info = self.read_storage(deployer_system_contract_address, address);
+
+        let mut code_info_bytes = [0; 32];
+        code_info.to_big_endian(&mut code_info_bytes);
+
+        code_info_bytes[1] = 0;
+        let code_key: U256 = U256::from_big_endian(&code_info_bytes);
+
+        self.world.decommit(code_key)
+    }
 }
 
 pub fn address_into_u256(address: H160) -> U256 {

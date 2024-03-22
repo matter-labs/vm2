@@ -3,7 +3,7 @@ use std::sync::Arc;
 use super::{heap_access::grow_heap, ret_panic, AuxHeap, Heap};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Register2, Source},
-    decommit::{decommit, u256_into_address},
+    decommit::u256_into_address,
     fat_pointer::FatPointer,
     instruction::{InstructionResult, Panic},
     predication::Flags,
@@ -44,31 +44,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     let abi = get_far_call_arguments(raw_abi);
 
     let mut encountered_panic = None;
-    let (program, code_page) = match decommit(
-        &mut vm.world,
-        destination_address,
-        vm.settings.default_aa_code_hash,
-    ) {
-        Ok((p, cp, code_info)) => {
-            if code_info.is_constructed == abi.is_constructor_call {
-                encountered_panic = Some(Panic::ConstructorCallAndCodeStatusMismatch);
-            }
 
-            // TODO this is not paid on panic
-            if let Err(panic) = vm.state.use_gas(
-                code_info.code_words_to_pay as u32
-                    * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT,
-            ) {
-                encountered_panic = Some(panic);
-            }
-            (p, cp)
-        }
-        Err(panic) => {
-            encountered_panic = Some(panic);
-            let substitute: (Arc<[Instruction]>, Arc<[U256]>) = (Arc::new([]), Arc::new([]));
-            substitute
-        }
-    };
     let calldata =
         match get_far_call_calldata(raw_abi, Register1::is_fat_pointer(args, &mut vm.state), vm) {
             Ok(pointer) => pointer.into_u256(),
@@ -77,6 +53,20 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
                 U256::zero()
             }
         };
+
+    let (program, code_page) = match vm.world.decommit(
+        destination_address,
+        vm.settings.default_aa_code_hash,
+        &mut vm.state.current_frame.gas,
+        abi.is_constructor_call,
+    ) {
+        Ok(program) => program,
+        Err(panic) => {
+            encountered_panic = Some(panic);
+            let substitute: (Arc<[Instruction]>, Arc<[U256]>) = (Arc::new([]), Arc::new([]));
+            substitute
+        }
+    };
 
     let maximum_gas = (vm.state.current_frame.gas / 64 * 63) as u32;
     let new_frame_gas = if abi.gas_to_pass == 0 {

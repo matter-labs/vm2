@@ -1,17 +1,16 @@
 use crate::{
     rollback::{Rollback, RollbackableLog, RollbackableMap},
     state::State,
-    Instruction, World,
+    World,
 };
-use std::sync::Arc;
 use u256::{H160, U256};
 
 /// The global state including pending modifications that are written only at
 /// the end of a block.
 pub struct ModifiedWorld {
-    world: Box<dyn World>,
+    pub(crate) world: Box<dyn World>,
     storage_changes: RollbackableMap<(H160, U256), U256>,
-    decommitted_hashes: RollbackableMap<U256, ()>,
+    pub(crate) decommitted_hashes: RollbackableMap<U256, ()>,
     events: RollbackableLog<Event>,
 }
 
@@ -59,13 +58,6 @@ impl ModifiedWorld {
             decommitted_hashes: Default::default(),
             events: Default::default(),
         }
-    }
-
-    pub fn decommit(&mut self, hash: U256) -> (Arc<[Instruction]>, Arc<[U256]>, bool) {
-        let first_time = !self.decommitted_hashes.as_ref().contains_key(&hash);
-        self.decommitted_hashes.insert(hash, ());
-        let (i, cp) = self.world.decommit(hash);
-        (i, cp, first_time)
     }
 
     pub fn read_storage(&mut self, contract: H160, key: U256) -> U256 {

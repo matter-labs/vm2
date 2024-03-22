@@ -6,7 +6,7 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::{InstructionResult, Panic},
     state::State,
-    Instruction, Predicate, VirtualMachine, World,
+    Instruction, Predicate, VirtualMachine,
 };
 use u256::U256;
 

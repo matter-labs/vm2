@@ -1,11 +1,7 @@
 use crate::{
-    decommit::{address_into_u256, decommit},
-    instruction::Panic,
-    instruction_handlers::ret_panic,
-    modified_world::ModifiedWorld,
-    rollback::Rollback,
-    state::State,
-    ExecutionEnd, Instruction, World,
+    decommit::address_into_u256, instruction::Panic, instruction_handlers::ret_panic,
+    modified_world::ModifiedWorld, rollback::Rollback, state::State, ExecutionEnd, Instruction,
+    World,
 };
 use u256::{H160, U256};
 
@@ -29,7 +25,7 @@ pub struct VirtualMachine {
 
 impl VirtualMachine {
     pub fn new(
-        mut world: Box<dyn World>,
+        world: Box<dyn World>,
         address: H160,
         caller: H160,
         calldata: Vec<u8>,
@@ -39,12 +35,7 @@ impl VirtualMachine {
         let mut world = ModifiedWorld::new(world);
         let world_before_this_frame = world.snapshot();
 
-        let (program, code_page, _) = decommit(
-            &mut world,
-            address_into_u256(address),
-            settings.default_aa_code_hash,
-        )
-        .unwrap();
+        let (program, code_page) = world.initial_decommit(address_into_u256(address));
 
         Self {
             world,

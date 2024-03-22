@@ -4,7 +4,7 @@ use crate::{
         Arguments, Destination, Register1, Register2, Source, SLOAD_COST, SSTORE_COST,
     },
     instruction::{InstructionResult, Panic},
-    Instruction, Predicate, VirtualMachine, World,
+    Instruction, Predicate, VirtualMachine,
 };
 
 fn sstore(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
