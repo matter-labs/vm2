@@ -3,10 +3,11 @@ use crate::{
     modified_world::ModifiedWorld, rollback::Rollback, state::State, ExecutionEnd, Instruction,
     World,
 };
-use u256::{H160, U256};
+use u256::H160;
 
 pub struct Settings {
-    pub default_aa_code_hash: U256,
+    pub default_aa_code_hash: [u8; 32],
+    pub evm_interpreter_code_hash: [u8; 32],
 
     /// Writing to this address on the heap in the bootloader causes a call to
     /// the handle_hook method of the provided [World].

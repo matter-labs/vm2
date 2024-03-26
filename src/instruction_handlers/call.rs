@@ -54,16 +54,18 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
             }
         };
 
-    let (program, code_page) = match vm.world.decommit(
+    let (program, code_page, is_evm_interpreter) = match vm.world.decommit(
         destination_address,
         vm.settings.default_aa_code_hash,
+        vm.settings.evm_interpreter_code_hash,
         &mut vm.state.current_frame.gas,
         abi.is_constructor_call,
     ) {
         Ok(program) => program,
         Err(panic) => {
             encountered_panic = Some(panic);
-            let substitute: (Arc<[Instruction]>, Arc<[U256]>) = (Arc::new([]), Arc::new([]));
+            let substitute: (Arc<[Instruction]>, Arc<[U256]>, bool) =
+                (Arc::new([]), Arc::new([]), false);
             substitute
         }
     };
@@ -79,7 +81,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         code_page,
         new_frame_gas,
         error_handler.low_u32(),
-        IS_STATIC,
+        IS_STATIC && !is_evm_interpreter,
         vm.world.snapshot(),
     );
 
@@ -102,7 +104,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     vm.state.register_pointer_flags = 2;
     vm.state.registers[1] = calldata;
 
-    let is_static_call_to_evm_interpreter = IS_STATIC && false;
+    let is_static_call_to_evm_interpreter = IS_STATIC && is_evm_interpreter;
     let call_type = (u8::from(is_static_call_to_evm_interpreter) << 2)
         | (u8::from(abi.is_system_call) << 1)
         | u8::from(abi.is_constructor_call);

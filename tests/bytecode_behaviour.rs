@@ -78,7 +78,8 @@ fn call_to_invalid_address() {
         vec![],
         10000,
         vm2::Settings {
-            default_aa_code_hash: U256::zero(),
+            default_aa_code_hash: [0; 32],
+            evm_interpreter_code_hash: [0; 32],
             hook_address: 0,
         },
     );

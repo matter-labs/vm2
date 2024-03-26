@@ -96,7 +96,8 @@ pub fn run_arbitrary_program(input: &[u8]) -> ExecutionEnd {
         vec![],
         u32::MAX,
         Settings {
-            default_aa_code_hash: U256::zero(),
+            default_aa_code_hash: [0; 32],
+            evm_interpreter_code_hash: [0; 32],
             hook_address: 0,
         },
     );
