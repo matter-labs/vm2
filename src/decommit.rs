@@ -24,6 +24,19 @@ impl ModifiedWorld {
             let mut code_info_bytes = [0; 32];
             code_info.to_big_endian(&mut code_info_bytes);
 
+            // Note that EOAs are considered constructed because their code info is all zeroes.
+            let is_constructed = match code_info_bytes[1] {
+                0 => true,
+                1 => false,
+                _ => {
+                    return Err(Panic::MalformedCodeInfo);
+                }
+            };
+            if is_constructed == is_constructor_call {
+                dbg!(is_constructed, is_constructor_call);
+                return Err(Panic::ConstructorCallAndCodeStatusMismatch);
+            }
+
             match code_info_bytes[0] {
                 1 => code_info_bytes,
                 2 => {
@@ -39,23 +52,11 @@ impl ModifiedWorld {
             }
         };
 
-        let is_constructed = match code_info[1] {
-            0 => true,
-            1 => false,
-            _ => {
-                return Err(Panic::MalformedCodeInfo);
-            }
-        };
-        if is_constructed == is_constructor_call {
-            return Err(Panic::ConstructorCallAndCodeStatusMismatch);
-        }
-
-        let code_length_in_words = u16::from_be_bytes([code_info[2], code_info[3]]);
-
         code_info[1] = 0;
         let code_key: U256 = U256::from_big_endian(&code_info);
 
         if !self.decommitted_hashes.as_ref().contains_key(&code_key) {
+            let code_length_in_words = u16::from_be_bytes([code_info[2], code_info[3]]);
             let cost =
                 code_length_in_words as u32 * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT;
             if cost > *gas {
