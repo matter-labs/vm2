@@ -69,11 +69,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     };
 
     let maximum_gas = (vm.state.current_frame.gas / 64 * 63) as u32;
-    let new_frame_gas = if abi.gas_to_pass == 0 {
-        maximum_gas
-    } else {
-        abi.gas_to_pass.min(maximum_gas)
-    };
+    let new_frame_gas = abi.gas_to_pass.min(maximum_gas);
 
     vm.state.current_frame.gas -= new_frame_gas;
     vm.state.push_frame::<CALLING_MODE>(
