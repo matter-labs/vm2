@@ -41,7 +41,7 @@ impl Instruction {
     ) -> Self {
         Self {
             handler: event,
-            arguments: Arguments::new(predicate, 38)
+            arguments: Arguments::new(predicate, 34)
                 .write_source(&key)
                 .write_source(&value)
                 .write_source(&Immediate1(is_first.into())),
