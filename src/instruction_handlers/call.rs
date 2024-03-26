@@ -90,18 +90,24 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     vm.state.flags = Flags::new(false, false, false);
 
     if abi.is_system_call {
+        // r3 to r12 are kept but they lose their pointer flags
+        vm.state.registers[13] = U256::zero();
         vm.state.registers[14] = U256::zero();
         vm.state.registers[15] = U256::zero();
-        vm.state.registers[2] = 2.into();
-    } else if abi.is_constructor_call {
-        vm.state.registers = [U256::zero(); 16];
-        vm.state.registers[2] = 1.into();
     } else {
         vm.state.registers = [U256::zero(); 16];
     }
 
-    vm.state.registers[1] = calldata;
+    // Only r1 is a pointer
     vm.state.register_pointer_flags = 2;
+    vm.state.registers[1] = calldata;
+
+    let is_static_call_to_evm_interpreter = IS_STATIC && false;
+    let call_type = (u8::from(is_static_call_to_evm_interpreter) << 2)
+        | (u8::from(abi.is_system_call) << 1)
+        | u8::from(abi.is_constructor_call);
+
+    vm.state.registers[2] = call_type.into();
 
     Ok(&vm.state.current_frame.program[0])
 }
