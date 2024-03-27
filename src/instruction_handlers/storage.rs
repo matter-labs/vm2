@@ -21,8 +21,12 @@ fn sstore(vm: &mut VirtualMachine, instruction: *const Instruction) -> Instructi
             return Ok(&PANIC);
         }
 
-        vm.world
+        let refund = vm
+            .world
             .write_storage(vm.state.current_frame.address, key, value);
+
+        assert!(refund <= SSTORE_COST);
+        vm.state.current_frame.gas += refund;
 
         continue_normally
     })
@@ -31,7 +35,11 @@ fn sstore(vm: &mut VirtualMachine, instruction: *const Instruction) -> Instructi
 fn sload(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate(vm, instruction, |vm, args| {
         let key = Register1::get(args, &mut vm.state);
-        let value = vm.world.read_storage(vm.state.current_frame.address, key);
+        let (value, refund) = vm.world.read_storage(vm.state.current_frame.address, key);
+
+        assert!(refund <= SLOAD_COST);
+        vm.state.current_frame.gas += refund;
+
         Register1::set(args, &mut vm.state, value);
     })
 }

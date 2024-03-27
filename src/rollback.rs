@@ -49,6 +49,18 @@ impl<K: Ord, V> AsRef<BTreeMap<K, V>> for RollbackableMap<K, V> {
     }
 }
 
+pub type RollbackableSet<T> = RollbackableMap<T, ()>;
+
+impl<T: Ord + Clone> RollbackableSet<T> {
+    pub fn add(&mut self, key: T) {
+        self.insert(key, ());
+    }
+
+    pub fn contains(&self, key: &T) -> bool {
+        self.as_ref().contains_key(key)
+    }
+}
+
 pub struct RollbackableLog<T> {
     entries: Vec<T>,
 }

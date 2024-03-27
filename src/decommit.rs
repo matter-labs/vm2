@@ -20,7 +20,7 @@ impl ModifiedWorld {
         let mut is_evm = false;
 
         let mut code_info = {
-            let code_info = self.read_storage(deployer_system_contract_address, address);
+            let (code_info, _) = self.read_storage(deployer_system_contract_address, address);
             let mut code_info_bytes = [0; 32];
             code_info.to_big_endian(&mut code_info_bytes);
 
@@ -76,7 +76,7 @@ impl ModifiedWorld {
     pub(crate) fn initial_decommit(&mut self, address: U256) -> (Arc<[Instruction]>, Arc<[U256]>) {
         let deployer_system_contract_address =
             Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
-        let code_info = self.read_storage(deployer_system_contract_address, address);
+        let (code_info, _) = self.read_storage(deployer_system_contract_address, address);
 
         let mut code_info_bytes = [0; 32];
         code_info.to_big_endian(&mut code_info_bytes);
