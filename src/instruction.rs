@@ -1,6 +1,5 @@
 use crate::{
     addressing_modes::Arguments,
-    instruction_handlers::ret_panic,
     state::State,
     vm::{Settings, VirtualMachine},
     Predicate, World,
@@ -21,34 +20,7 @@ pub(crate) type InstructionResult = Result<*const Instruction, ExecutionEnd>;
 pub enum ExecutionEnd {
     ProgramFinished(Vec<u8>),
     Reverted(Vec<u8>),
-    Panicked(Panic),
-}
-
-#[derive(Debug)]
-pub enum Panic {
-    ExplicitPanic,
-    OutOfGas,
-    IncorrectPointerTags,
-    PointerOffsetTooLarge,
-    PtrPackLowBitsNotZero,
-    PointerUpperBoundOverflows,
-    PointerOffsetNotZeroAtCreation,
-    PointerOffsetOverflows,
-    MalformedCodeInfo,
-    ConstructorCallAndCodeStatusMismatch,
-    AccessingTooLargeHeapAddress,
-    WriteInStaticCall,
-    InvalidInstruction,
-}
-
-pub fn end_execution() -> Instruction {
-    Instruction {
-        handler: end_execution_handler,
-        arguments: Arguments::new(Predicate::Always, 0),
-    }
-}
-fn end_execution_handler(vm: &mut VirtualMachine, _: *const Instruction) -> InstructionResult {
-    ret_panic(vm, Panic::InvalidInstruction)
+    Panicked,
 }
 
 pub fn jump_to_beginning() -> Instruction {
@@ -71,7 +43,7 @@ pub fn run_arbitrary_program(input: &[u8]) -> ExecutionEnd {
         program.push(jump_to_beginning());
     } else {
         // TODO execute invalid instruction or something instead
-        program.push(end_execution());
+        program.push(Instruction::from_invalid());
     }
 
     struct FakeWorld;

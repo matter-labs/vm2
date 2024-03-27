@@ -5,7 +5,6 @@ use crate::{
     callframe::{self, Callframe, Snapshot},
     decommit::{is_kernel, u256_into_address},
     fat_pointer::FatPointer,
-    instruction::Panic,
     instruction_handlers::CallingMode,
     predication::Flags,
     Instruction,
@@ -80,13 +79,13 @@ impl State {
     }
 
     #[inline(always)]
-    pub(crate) fn use_gas(&mut self, amount: u32) -> Result<(), Panic> {
+    pub(crate) fn use_gas(&mut self, amount: u32) -> Result<(), ()> {
         if self.current_frame.gas >= amount {
             self.current_frame.gas -= amount;
             Ok(())
         } else {
             self.current_frame.gas = 0;
-            Err(Panic::OutOfGas)
+            Err(())
         }
     }
 

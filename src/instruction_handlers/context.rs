@@ -1,8 +1,11 @@
-use super::common::{instruction_boilerplate, instruction_boilerplate_with_panic};
+use super::{
+    common::{instruction_boilerplate, instruction_boilerplate_with_panic},
+    free_panic,
+};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Source},
     decommit::address_into_u256,
-    instruction::{InstructionResult, Panic},
+    instruction::InstructionResult,
     state::State,
     Instruction, Predicate, VirtualMachine,
 };
@@ -81,13 +84,15 @@ impl ContextOp for Meta {
 }
 
 fn set_context_u128(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, |vm, args| {
+    instruction_boilerplate_with_panic(vm, instruction, |vm, args, continue_normally| {
         if vm.state.current_frame.is_static {
-            return Err(Panic::WriteInStaticCall);
+            return free_panic(vm);
         }
+
         let value = Register1::get(args, &mut vm.state).low_u128();
         vm.state.set_context_u128(value);
-        Ok(())
+
+        continue_normally
     })
 }
 

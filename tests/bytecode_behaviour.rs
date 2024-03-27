@@ -83,6 +83,6 @@ fn call_to_invalid_address() {
             hook_address: 0,
         },
     );
-    assert!(matches!(vm.run(), ExecutionEnd::Panicked(_)));
+    assert!(matches!(vm.run(), ExecutionEnd::Panicked));
     assert_eq!(vm.state.current_frame.gas, 0);
 }

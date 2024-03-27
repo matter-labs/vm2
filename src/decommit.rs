@@ -1,4 +1,4 @@
-use crate::{instruction::Panic, modified_world::ModifiedWorld, Instruction};
+use crate::{modified_world::ModifiedWorld, Instruction};
 use std::sync::Arc;
 use u256::{H160, U256};
 use zkevm_opcode_defs::{
@@ -13,7 +13,7 @@ impl ModifiedWorld {
         evm_interpreter_code_hash: [u8; 32],
         gas: &mut u32,
         is_constructor_call: bool,
-    ) -> Result<(Arc<[Instruction]>, Arc<[U256]>, bool), Panic> {
+    ) -> Option<(Arc<[Instruction]>, Arc<[U256]>, bool)> {
         let deployer_system_contract_address =
             Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
 
@@ -29,12 +29,11 @@ impl ModifiedWorld {
                 0 => true,
                 1 => false,
                 _ => {
-                    return Err(Panic::MalformedCodeInfo);
+                    return None;
                 }
             };
             if is_constructed == is_constructor_call {
-                dbg!(is_constructed, is_constructor_call);
-                return Err(Panic::ConstructorCallAndCodeStatusMismatch);
+                return None;
             }
 
             match code_info_bytes[0] {
@@ -48,7 +47,7 @@ impl ModifiedWorld {
                 // and address aliasing when called from the bootloader.
                 _ if code_info == U256::zero() && !is_kernel(address) => default_aa_code_hash,
 
-                _ => return Err(Panic::MalformedCodeInfo),
+                _ => return None,
             }
         };
 
@@ -61,14 +60,14 @@ impl ModifiedWorld {
                 code_length_in_words as u32 * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT;
             if cost > *gas {
                 // Unlike all other gas costs, this one is not paid if low on gas.
-                return Err(Panic::OutOfGas);
+                return None;
             }
             *gas -= cost;
             self.decommitted_hashes.insert(code_key, ());
         };
 
         let (p, c) = self.world.decommit(code_key);
-        Ok((p, c, is_evm))
+        Some((p, c, is_evm))
     }
 
     /// Used to load code when the VM first starts up.

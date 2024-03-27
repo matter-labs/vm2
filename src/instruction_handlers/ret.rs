@@ -1,26 +1,50 @@
 use super::call::get_far_call_calldata;
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
-    instruction::{ExecutionEnd, InstructionResult, Panic},
+    instruction::{ExecutionEnd, InstructionResult},
     predication::Flags,
     rollback::Rollback,
     Instruction, Predicate, VirtualMachine,
 };
 use u256::U256;
 
-fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
+#[repr(u8)]
+#[derive(PartialEq)]
+enum ReturnType {
+    Normal = 0,
+    Revert,
+    Panic,
+}
+
+impl ReturnType {
+    fn is_failure(&self) -> bool {
+        *self != ReturnType::Normal
+    }
+
+    fn from_u8(value: u8) -> Self {
+        match value {
+            0 => ReturnType::Normal,
+            1 => ReturnType::Revert,
+            2 => ReturnType::Panic,
+            _ => unreachable!(),
+        }
+    }
+}
+
+fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
 ) -> InstructionResult {
     let args = unsafe { &(*instruction).arguments };
 
+    let mut return_type = ReturnType::from_u8(RETURN_TYPE);
     let gas_left = vm.state.current_frame.gas;
 
     let (pc, snapshot) = if let Some((pc, eh, snapshot)) = vm.state.current_frame.pop_near_call() {
         (
             if TO_LABEL {
                 Immediate1::get(args, &mut vm.state).low_u32()
-            } else if IS_REVERT {
+            } else if return_type.is_failure() {
                 eh
             } else {
                 pc + 1
@@ -28,136 +52,99 @@ fn ret<const IS_REVERT: bool, const TO_LABEL: bool>(
             snapshot,
         )
     } else {
-        let return_value = match get_far_call_calldata(
-            Register1::get(args, &mut vm.state),
-            Register1::is_fat_pointer(args, &mut vm.state),
-            vm,
-        ) {
-            Ok(pointer) => pointer,
-            Err(panic) => return ret_panic(vm, panic),
+        let return_value_or_panic = if return_type == ReturnType::Panic {
+            None
+        } else {
+            let result = get_far_call_calldata(
+                Register1::get(args, &mut vm.state),
+                Register1::is_fat_pointer(args, &mut vm.state),
+                vm,
+            );
+            // TODO check that the return value resides in this or a newer frame's memory
+            if result.is_none() {
+                return_type = ReturnType::Panic;
+            }
+            result
         };
 
-        // TODO check that the return value resides in this or a newer frame's memory
-
         let Some((pc, eh, snapshot)) = vm.state.pop_frame() else {
-            let output = vm.state.heaps[return_value.memory_page]
-                [return_value.start as usize..(return_value.start + return_value.length) as usize]
-                .to_vec();
-            return if IS_REVERT {
+            if return_type.is_failure() {
                 vm.world
                     .rollback(vm.state.current_frame.world_before_this_frame);
-                Err(ExecutionEnd::Reverted(output))
             } else {
                 vm.world.delete_history();
-                Err(ExecutionEnd::ProgramFinished(output))
+            }
+
+            return if let Some(return_value) = return_value_or_panic {
+                let output = vm.state.heaps[return_value.memory_page][return_value.start as usize
+                    ..(return_value.start + return_value.length) as usize]
+                    .to_vec();
+                if return_type == ReturnType::Revert {
+                    Err(ExecutionEnd::Reverted(output))
+                } else {
+                    Err(ExecutionEnd::ProgramFinished(output))
+                }
+            } else {
+                Err(ExecutionEnd::Panicked)
             };
         };
 
         vm.state.set_context_u128(0);
-
         vm.state.registers = [U256::zero(); 16];
-        vm.state.registers[1] = return_value.into_u256();
+
+        if let Some(return_value) = return_value_or_panic {
+            vm.state.registers[1] = return_value.into_u256();
+        }
         vm.state.register_pointer_flags = 2;
 
-        (if IS_REVERT { eh } else { pc + 1 }, snapshot)
+        (if return_type.is_failure() { eh } else { pc + 1 }, snapshot)
     };
 
-    if IS_REVERT {
+    if return_type.is_failure() {
         vm.world.rollback(snapshot);
     }
-
-    vm.state.flags = Flags::new(false, false, false);
+    vm.state.flags = Flags::new(return_type == ReturnType::Panic, false, false);
     vm.state.current_frame.gas += gas_left;
 
     match vm.state.current_frame.pc_from_u32(pc) {
         Some(i) => Ok(i),
-        None => ret_panic(vm, Panic::InvalidInstruction),
+        None => Ok(&INVALID_INSTRUCTION),
     }
 }
 
-fn explicit_panic<const TO_LABEL: bool>(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-) -> InstructionResult {
-    let label = if TO_LABEL {
-        unsafe { Some(Immediate1::get(&(*instruction).arguments, &mut vm.state).low_u32()) }
-    } else {
-        None
-    };
-    panic_impl(vm, Panic::ExplicitPanic, label)
-}
+pub const INVALID_INSTRUCTION: Instruction = Instruction {
+    handler: ret::<{ ReturnType::Panic as u8 }, false>,
+    arguments: Arguments::new(Predicate::Always, INVALID_INSTRUCTION_COST),
+};
 
-fn invalid_instruction(vm: &mut VirtualMachine, _: *const Instruction) -> InstructionResult {
-    panic_impl(vm, Panic::InvalidInstruction, None)
-}
+pub const PANIC: Instruction = Instruction {
+    handler: ret::<{ ReturnType::Panic as u8 }, false>,
+    arguments: Arguments::new(Predicate::Always, RETURN_COST),
+};
 
-/// To be used for panics resulting from static calls attempting mutation and
-/// trying to do system-only operations while not in a system call.
-pub(crate) fn free_panic(vm: &mut VirtualMachine, panic: Panic) -> InstructionResult {
-    panic_impl(vm, panic, None)
+/// Turn the current instruction into a panic at no extra cost. (Great value, I know.)
+///
+/// Call this when:
+/// - gas runs out when paying for the fixed cost of an instruction
+/// - causing side effects in a static context
+/// - using privileged instructions while not in a system call
+/// - the far call stack overflows
+///
+/// For all other panics, point the instruction pointer at [PANIC] instead.
+pub(crate) fn free_panic(vm: &mut VirtualMachine) -> InstructionResult {
+    ret::<{ ReturnType::Panic as u8 }, false>(vm, &PANIC)
 }
 
 const RETURN_COST: u32 = 5;
-
-pub(crate) fn ret_panic(vm: &mut VirtualMachine, mut panic: Panic) -> InstructionResult {
-    if let Err(p) = vm.state.use_gas(RETURN_COST) {
-        panic = p;
-    }
-    panic_impl(vm, panic, None)
-}
-
-#[inline(always)]
-fn panic_impl(
-    vm: &mut VirtualMachine,
-    mut panic: Panic,
-    mut maybe_label: Option<u32>,
-) -> InstructionResult {
-    loop {
-        let (eh, snapshot) = if let Some((_, eh, snapshot)) = vm.state.current_frame.pop_near_call()
-        {
-            (
-                if let Some(label) = maybe_label {
-                    label
-                } else {
-                    eh
-                },
-                snapshot,
-            )
-        } else {
-            let Some((_, eh, snapshot)) = vm.state.pop_frame() else {
-                vm.world
-                    .rollback(vm.state.current_frame.world_before_this_frame);
-                return Err(ExecutionEnd::Panicked(panic));
-            };
-            vm.state.registers[1] = U256::zero();
-            vm.state.register_pointer_flags |= 1 << 1;
-            (eh, snapshot)
-        };
-
-        vm.world.rollback(snapshot);
-
-        vm.state.flags = Flags::new(true, false, false);
-        vm.state.set_context_u128(0);
-
-        if let Some(instruction) = vm.state.current_frame.program.get(eh as usize) {
-            return Ok(instruction);
-        }
-        panic = Panic::InvalidInstruction;
-        maybe_label = None;
-
-        if let Err(p) = vm.state.use_gas(RETURN_COST) {
-            panic = p;
-        }
-    }
-}
 
 use super::monomorphization::*;
 
 impl Instruction {
     pub fn from_ret(src1: Register1, label: Option<Immediate1>, predicate: Predicate) -> Self {
         let to_label = label.is_some();
+        const RETURN_TYPE: u8 = ReturnType::Normal as u8;
         Self {
-            handler: monomorphize!(ret [false] match_boolean to_label),
+            handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
             arguments: Arguments::new(predicate, RETURN_COST)
                 .write_source(&src1)
                 .write_source(&label),
@@ -165,8 +152,9 @@ impl Instruction {
     }
     pub fn from_revert(src1: Register1, label: Option<Immediate1>, predicate: Predicate) -> Self {
         let to_label = label.is_some();
+        const RETURN_TYPE: u8 = ReturnType::Revert as u8;
         Self {
-            handler: monomorphize!(ret [true] match_boolean to_label),
+            handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
             arguments: Arguments::new(predicate, RETURN_COST)
                 .write_source(&src1)
                 .write_source(&label),
@@ -174,16 +162,14 @@ impl Instruction {
     }
     pub fn from_panic(label: Option<Immediate1>, predicate: Predicate) -> Self {
         let to_label = label.is_some();
+        const RETURN_TYPE: u8 = ReturnType::Panic as u8;
         Self {
-            handler: monomorphize!(explicit_panic match_boolean to_label),
+            handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
             arguments: Arguments::new(predicate, RETURN_COST).write_source(&label),
         }
     }
 
     pub fn from_invalid() -> Self {
-        Self {
-            handler: invalid_instruction,
-            arguments: Arguments::new(Predicate::Always, INVALID_INSTRUCTION_COST),
-        }
+        INVALID_INSTRUCTION
     }
 }

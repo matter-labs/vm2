@@ -4,8 +4,7 @@ use crate::{
         Immediate1, Immediate2, Register, Register1, Register2, RegisterAndImmediate,
         RelativeStack, Source, SourceWriter,
     },
-    end_execution,
-    instruction::{ExecutionEnd, InstructionResult, Panic},
+    instruction::{ExecutionEnd, InstructionResult},
     instruction_handlers::{
         Add, And, AuxHeap, CallingMode, Div, Heap, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub,
         RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
@@ -28,8 +27,7 @@ pub fn decode_program(raw: &[u64], is_bootloader: bool) -> Vec<Instruction> {
         .chain(std::iter::once(if raw.len() >= 1 << 16 {
             jump_to_beginning()
         } else {
-            // TODO execute invalid instruction or something instead
-            end_execution()
+            Instruction::from_invalid()
         }))
         .collect()
 }
@@ -53,7 +51,7 @@ fn unimplemented_handler(
         )
     };
     eprintln!("Unimplemented instruction: {:?}!", variant);
-    Err(ExecutionEnd::Panicked(Panic::InvalidInstruction))
+    Err(ExecutionEnd::Panicked)
 }
 
 fn decode(raw: u64, is_bootloader: bool) -> Instruction {

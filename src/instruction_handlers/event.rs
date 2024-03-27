@@ -1,19 +1,17 @@
-use u256::H160;
-use zkevm_opcode_defs::ADDRESS_EVENT_WRITER;
-
+use super::{common::instruction_boilerplate_with_panic, free_panic};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
-    instruction::{InstructionResult, Panic},
+    instruction::InstructionResult,
     modified_world::Event,
     Instruction, Predicate, VirtualMachine,
 };
-
-use super::common::instruction_boilerplate_with_panic;
+use u256::H160;
+use zkevm_opcode_defs::ADDRESS_EVENT_WRITER;
 
 fn event(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, |vm, args| {
+    instruction_boilerplate_with_panic(vm, instruction, |vm, args, continue_normally| {
         if vm.state.current_frame.is_static {
-            return Err(Panic::WriteInStaticCall);
+            return free_panic(vm);
         }
         if vm.state.current_frame.address == H160::from_low_u64_be(ADDRESS_EVENT_WRITER as u64) {
             let key = Register1::get(args, &mut vm.state);
@@ -28,7 +26,8 @@ fn event(vm: &mut VirtualMachine, instruction: *const Instruction) -> Instructio
                 tx_number: 0, // TODO
             });
         }
-        Ok(())
+
+        continue_normally
     })
 }
 

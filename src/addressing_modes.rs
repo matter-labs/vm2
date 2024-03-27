@@ -69,10 +69,10 @@ pub(crate) const SLOAD_COST: u32 = 2008;
 pub(crate) const INVALID_INSTRUCTION_COST: u32 = 4294967295;
 
 impl Arguments {
-    pub fn new(predicate: Predicate, gas_cost: u32) -> Self {
+    pub const fn new(predicate: Predicate, gas_cost: u32) -> Self {
         Self {
-            source_registers: Default::default(),
-            destination_registers: Default::default(),
+            source_registers: PackedRegisters(0),
+            destination_registers: PackedRegisters(0),
             immediate1: 0,
             immediate2: 0,
             predicate,
@@ -80,14 +80,20 @@ impl Arguments {
         }
     }
 
-    fn encode_static_gas_cost(x: u32) -> u8 {
+    const fn encode_static_gas_cost(x: u32) -> u8 {
         match x {
             L1_MESSAGE_COST => 1,
             SSTORE_COST => 2,
             SLOAD_COST => 3,
             INVALID_INSTRUCTION_COST => 4,
             1 | 2 | 3 | 4 => panic!("Reserved gas cost values overlap with actual gas costs"),
-            x => x.try_into().expect("Gas cost doesn't fit into 8 bits"),
+            x => {
+                if x > u8::MAX as u32 {
+                    panic!("Gas cost doesn't fit into 8 bits")
+                } else {
+                    x as u8
+                }
+            }
         }
     }
 
@@ -428,7 +434,6 @@ impl<'a> Arbitrary<'a> for Register {
     }
 }
 
-#[derive(Default)]
 struct PackedRegisters(u8);
 
 impl PackedRegisters {

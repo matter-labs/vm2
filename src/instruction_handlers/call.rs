@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use super::{heap_access::grow_heap, ret_panic, AuxHeap, Heap};
+use super::{heap_access::grow_heap, AuxHeap, Heap, PANIC};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Register2, Source},
     decommit::u256_into_address,
     fat_pointer::FatPointer,
-    instruction::{InstructionResult, Panic},
+    instruction::InstructionResult,
     predication::Flags,
     rollback::Rollback,
     Instruction, Predicate, VirtualMachine,
@@ -43,16 +43,16 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
 
     let abi = get_far_call_arguments(raw_abi);
 
-    let mut encountered_panic = None;
+    let mut encountered_panic = false;
 
-    let calldata =
-        match get_far_call_calldata(raw_abi, Register1::is_fat_pointer(args, &mut vm.state), vm) {
-            Ok(pointer) => pointer.into_u256(),
-            Err(panic) => {
-                encountered_panic = Some(panic);
-                U256::zero()
-            }
-        };
+    let calldata = if let Some(pointer) =
+        get_far_call_calldata(raw_abi, Register1::is_fat_pointer(args, &mut vm.state), vm)
+    {
+        pointer.into_u256()
+    } else {
+        encountered_panic = true;
+        U256::zero()
+    };
 
     let (program, code_page, is_evm_interpreter) = match vm.world.decommit(
         destination_address,
@@ -61,9 +61,9 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         &mut vm.state.current_frame.gas,
         abi.is_constructor_call,
     ) {
-        Ok(program) => program,
-        Err(panic) => {
-            encountered_panic = Some(panic);
+        Some(program) => program,
+        None => {
+            encountered_panic = true;
             let substitute: (Arc<[Instruction]>, Arc<[U256]>, bool) =
                 (Arc::new([]), Arc::new([]), false);
             substitute
@@ -85,8 +85,8 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         vm.world.snapshot(),
     );
 
-    if let Some(panic) = encountered_panic {
-        return ret_panic(vm, panic);
+    if encountered_panic {
+        return Ok(&PANIC);
     }
 
     vm.state.flags = Flags::new(false, false, false);
@@ -138,17 +138,13 @@ pub(crate) fn get_far_call_calldata(
     raw_abi: U256,
     is_pointer: bool,
     vm: &mut VirtualMachine,
-) -> Result<FatPointer, Panic> {
+) -> Option<FatPointer> {
     let mut pointer = FatPointer::from(raw_abi);
 
     match FatPointerSource::from_abi((raw_abi.0[3] >> 32) as u8) {
         FatPointerSource::ForwardFatPointer => {
-            if !is_pointer {
-                return Err(Panic::IncorrectPointerTags);
-            }
-
-            if pointer.offset > pointer.length {
-                return Err(Panic::PointerOffsetTooLarge);
+            if !is_pointer || pointer.offset > pointer.length {
+                return None;
             }
 
             pointer.narrow();
@@ -158,29 +154,26 @@ pub(crate) fn get_far_call_calldata(
             // It must be paid even in cases where memory growth wouldn't be paid due to other errors.
             let Some(bound) = pointer.start.checked_add(pointer.length) else {
                 let _ = vm.state.use_gas(u32::MAX);
-                return Err(Panic::PointerUpperBoundOverflows);
+                return None;
             };
-            if is_pointer {
-                return Err(Panic::IncorrectPointerTags);
-            }
-            if pointer.offset != 0 {
-                return Err(Panic::PointerOffsetNotZeroAtCreation);
+            if is_pointer || pointer.offset != 0 {
+                return None;
             }
 
             match target {
                 ToHeap => {
-                    grow_heap::<Heap>(&mut vm.state, bound)?;
+                    grow_heap::<Heap>(&mut vm.state, bound).ok()?;
                     pointer.memory_page = vm.state.current_frame.heap;
                 }
                 ToAuxHeap => {
-                    grow_heap::<AuxHeap>(&mut vm.state, pointer.start + pointer.length)?;
+                    grow_heap::<AuxHeap>(&mut vm.state, pointer.start + pointer.length).ok()?;
                     pointer.memory_page = vm.state.current_frame.aux_heap;
                 }
             }
         }
     }
 
-    Ok(pointer)
+    Some(pointer)
 }
 
 enum FatPointerSource {

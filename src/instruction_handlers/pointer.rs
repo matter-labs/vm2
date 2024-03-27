@@ -1,11 +1,11 @@
+use super::{common::instruction_boilerplate_with_panic, PANIC};
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
         Destination, Immediate1, Register1, Register2, RelativeStack, Source,
     },
     fat_pointer::FatPointer,
-    instruction::{InstructionResult, Panic},
-    instruction_handlers::common::instruction_boilerplate_with_panic,
+    instruction::InstructionResult,
     Instruction, Predicate, VirtualMachine,
 };
 use u256::U256;
@@ -14,7 +14,7 @@ fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, |vm, args| {
+    instruction_boilerplate_with_panic(vm, instruction, |vm, args, continue_normally| {
         let a = (
             In1::get(args, &mut vm.state),
             In1::is_fat_pointer(args, &mut vm.state),
@@ -28,19 +28,21 @@ fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
         let (b, b_is_pointer) = b;
 
         if !a_is_pointer || b_is_pointer {
-            return Err(Panic::IncorrectPointerTags);
+            return Ok(&PANIC);
         }
 
-        let result = Op::perform(a, b)?;
+        let Some(result) = Op::perform(a, b) else {
+            return Ok(&PANIC);
+        };
 
         Out::set_fat_ptr(args, &mut vm.state, result);
 
-        Ok(())
+        continue_normally
     })
 }
 
 pub trait PtrOp {
-    fn perform(in1: U256, in2: U256) -> Result<U256, Panic>;
+    fn perform(in1: U256, in2: U256) -> Option<U256>;
 }
 
 pub struct PtrAddSub<const IS_ADD: bool>;
@@ -48,9 +50,9 @@ pub type PtrAdd = PtrAddSub<true>;
 pub type PtrSub = PtrAddSub<false>;
 
 impl<const IS_ADD: bool> PtrOp for PtrAddSub<IS_ADD> {
-    fn perform(mut in1: U256, in2: U256) -> Result<U256, Panic> {
+    fn perform(mut in1: U256, in2: U256) -> Option<U256> {
         if in2 > u32::MAX.into() {
-            return Err(Panic::PointerOffsetTooLarge);
+            return None;
         }
         let pointer: &mut FatPointer = (&mut in1).into();
 
@@ -58,35 +60,31 @@ impl<const IS_ADD: bool> PtrOp for PtrAddSub<IS_ADD> {
             pointer.offset.checked_add(in2.low_u32())
         } else {
             pointer.offset.checked_sub(in2.low_u32())
-        }
-        .ok_or(Panic::PointerOffsetTooLarge)?;
+        }?;
 
         pointer.offset = new_offset;
 
-        Ok(in1)
+        Some(in1)
     }
 }
 
 pub struct PtrPack;
 impl PtrOp for PtrPack {
-    fn perform(in1: U256, in2: U256) -> Result<U256, Panic> {
+    fn perform(in1: U256, in2: U256) -> Option<U256> {
         if in2.low_u128() != 0 {
-            Err(Panic::PtrPackLowBitsNotZero)
+            None
         } else {
-            Ok(U256([in1.0[0], in1.0[1], in2.0[2], in2.0[3]]))
+            Some(U256([in1.0[0], in1.0[1], in2.0[2], in2.0[3]]))
         }
     }
 }
 
 pub struct PtrShrink;
 impl PtrOp for PtrShrink {
-    fn perform(mut in1: U256, in2: U256) -> Result<U256, Panic> {
+    fn perform(mut in1: U256, in2: U256) -> Option<U256> {
         let pointer: &mut FatPointer = (&mut in1).into();
-        pointer.length = pointer
-            .length
-            .checked_sub(in2.low_u32())
-            .ok_or(Panic::PointerOffsetTooLarge)?;
-        Ok(in1)
+        pointer.length = pointer.length.checked_sub(in2.low_u32())?;
+        Some(in1)
     }
 }
 

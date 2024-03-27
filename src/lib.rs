@@ -16,9 +16,7 @@ use std::sync::Arc;
 use u256::{H160, U256};
 
 pub use decommit::address_into_u256;
-pub use instruction::{
-    end_execution, jump_to_beginning, run_arbitrary_program, ExecutionEnd, Instruction,
-};
+pub use instruction::{jump_to_beginning, run_arbitrary_program, ExecutionEnd, Instruction};
 pub use modified_world::Event;
 pub use predication::Predicate;
 pub use state::State;

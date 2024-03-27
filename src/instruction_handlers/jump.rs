@@ -1,10 +1,10 @@
-use super::ret_panic;
+use super::ret::INVALID_INSTRUCTION;
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Immediate1, Register1,
         RelativeStack, Source,
     },
-    instruction::{Instruction, InstructionResult, Panic},
+    instruction::{Instruction, InstructionResult},
     predication::Predicate,
     VirtualMachine,
 };
@@ -18,7 +18,7 @@ fn jump<In: Source>(
         if let Some(i) = vm.state.current_frame.program.get(target) {
             instruction = i;
         } else {
-            return ret_panic(vm, Panic::InvalidInstruction);
+            return Ok(&INVALID_INSTRUCTION);
         }
 
         Ok(instruction)

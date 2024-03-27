@@ -1,7 +1,6 @@
 use crate::{
-    decommit::address_into_u256, instruction::Panic, instruction_handlers::ret_panic,
-    modified_world::ModifiedWorld, rollback::Rollback, state::State, ExecutionEnd, Instruction,
-    World,
+    decommit::address_into_u256, instruction_handlers::free_panic, modified_world::ModifiedWorld,
+    rollback::Rollback, state::State, ExecutionEnd, Instruction, World,
 };
 use u256::H160;
 
@@ -60,7 +59,7 @@ impl VirtualMachine {
             loop {
                 let args = &(*instruction).arguments;
                 let Ok(_) = self.state.use_gas(args.get_static_gas_cost()) else {
-                    instruction = match ret_panic(self, Panic::OutOfGas) {
+                    instruction = match free_panic(self) {
                         Ok(i) => i,
                         Err(e) => return e,
                     };

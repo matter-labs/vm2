@@ -1,3 +1,4 @@
+use super::{common::instruction_boilerplate_with_panic, PANIC};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     instruction::InstructionResult,
@@ -22,16 +23,16 @@ use zkevm_opcode_defs::{
     PrecompileAuxData, PrecompileCallABI,
 };
 
-use super::common::instruction_boilerplate_with_panic;
-
 fn precompile_call(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, |vm, args| {
+    instruction_boilerplate_with_panic(vm, instruction, |vm, args, continue_normally| {
         // TODO check that we're in a system call
 
         // The user gets to decide how much gas to burn
         // This is safe because system contracts are trusted
         let aux_data = PrecompileAuxData::from_u256(Register2::get(args, &mut vm.state));
-        vm.state.use_gas(aux_data.extra_ergs_cost)?;
+        let Ok(()) = vm.state.use_gas(aux_data.extra_ergs_cost) else {
+            return Ok(&PANIC);
+        };
 
         // TODO record extra pubdata cost
 
@@ -80,7 +81,7 @@ fn precompile_call(vm: &mut VirtualMachine, instruction: *const Instruction) -> 
 
         Register1::set(args, &mut vm.state, 1.into());
 
-        Ok(())
+        continue_normally
     })
 }
 
