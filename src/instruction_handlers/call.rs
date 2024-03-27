@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use super::{heap_access::grow_heap, AuxHeap, Heap, PANIC};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Register2, Source},
@@ -10,7 +8,9 @@ use crate::{
     rollback::Rollback,
     Instruction, Predicate, VirtualMachine,
 };
+use std::sync::Arc;
 use u256::U256;
+use zkevm_opcode_defs::system_params::EVM_SIMULATOR_STIPEND;
 
 #[repr(u8)]
 pub enum CallingMode {
@@ -71,7 +71,16 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     };
 
     let maximum_gas = (vm.state.current_frame.gas / 64 * 63) as u32;
-    let new_frame_gas = abi.gas_to_pass.min(maximum_gas);
+    let stipend = if is_evm_interpreter {
+        EVM_SIMULATOR_STIPEND
+    } else {
+        0
+    };
+    let new_frame_gas = abi
+        .gas_to_pass
+        .min(maximum_gas)
+        .checked_add(stipend)
+        .expect("stipend must not cause overflow");
 
     vm.state.current_frame.gas -= new_frame_gas;
     vm.state.push_frame::<CALLING_MODE>(
@@ -80,6 +89,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         program,
         code_page,
         new_frame_gas,
+        stipend,
         error_handler.low_u32(),
         IS_STATIC && !is_evm_interpreter,
         vm.world.snapshot(),

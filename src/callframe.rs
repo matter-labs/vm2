@@ -21,6 +21,7 @@ pub struct Callframe {
 
     pub sp: u16,
     pub gas: u32,
+    pub stipend: u32,
 
     near_calls: Vec<NearCallFrame>,
 
@@ -47,6 +48,7 @@ impl Callframe {
         heap: u32,
         aux_heap: u32,
         gas: u32,
+        stipend: u32,
         exception_handler: u32,
         context_u128: u128,
         is_static: bool,
@@ -69,6 +71,7 @@ impl Callframe {
             aux_heap,
             sp: 1024,
             gas,
+            stipend,
             exception_handler,
             near_calls: vec![],
             world_before_this_frame,

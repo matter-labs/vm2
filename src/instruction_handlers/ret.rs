@@ -38,7 +38,11 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
     let args = unsafe { &(*instruction).arguments };
 
     let mut return_type = ReturnType::from_u8(RETURN_TYPE);
-    let gas_left = vm.state.current_frame.gas;
+    let gas_to_return = vm
+        .state
+        .current_frame
+        .gas
+        .saturating_sub(vm.state.current_frame.stipend);
 
     let (pc, snapshot) = if let Some((pc, eh, snapshot)) = vm.state.current_frame.pop_near_call() {
         (
@@ -104,7 +108,7 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
         vm.world.rollback(snapshot);
     }
     vm.state.flags = Flags::new(return_type == ReturnType::Panic, false, false);
-    vm.state.current_frame.gas += gas_left;
+    vm.state.current_frame.gas += gas_to_return;
 
     match vm.state.current_frame.pc_from_u32(pc) {
         Some(i) => Ok(i),

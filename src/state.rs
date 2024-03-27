@@ -66,6 +66,7 @@ impl State {
                 gas,
                 0,
                 0,
+                0,
                 false,
                 world_before_this_frame,
             ),
@@ -96,6 +97,7 @@ impl State {
         program: Arc<[Instruction]>,
         code_page: Arc<[U256]>,
         gas: u32,
+        stipend: u32,
         exception_handler: u32,
         is_static: bool,
         world_before_this_frame: Snapshot,
@@ -130,6 +132,7 @@ impl State {
             new_heap,
             new_heap + 1,
             gas,
+            stipend,
             exception_handler,
             if CALLING_MODE == CallingMode::Delegate as u8 {
                 self.current_frame.context_u128
