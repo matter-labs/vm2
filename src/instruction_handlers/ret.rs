@@ -38,13 +38,11 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
     let args = unsafe { &(*instruction).arguments };
 
     let mut return_type = ReturnType::from_u8(RETURN_TYPE);
-    let gas_to_return = vm
-        .state
-        .current_frame
-        .gas
-        .saturating_sub(vm.state.current_frame.stipend);
+    let near_call_leftover_gas = vm.state.current_frame.gas;
 
-    let (pc, snapshot) = if let Some((pc, eh, snapshot)) = vm.state.current_frame.pop_near_call() {
+    let (pc, snapshot, leftover_gas) = if let Some((pc, eh, snapshot)) =
+        vm.state.current_frame.pop_near_call()
+    {
         (
             if TO_LABEL {
                 Immediate1::get(args, &mut vm.state).low_u32()
@@ -54,6 +52,7 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
                 pc + 1
             },
             snapshot,
+            near_call_leftover_gas,
         )
     } else {
         let return_value_or_panic = if return_type == ReturnType::Panic {
@@ -70,6 +69,12 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
             }
             result
         };
+
+        let leftover_gas = vm
+            .state
+            .current_frame
+            .gas
+            .saturating_sub(vm.state.current_frame.stipend);
 
         let Some((pc, eh, snapshot)) = vm.state.pop_frame() else {
             if return_type.is_failure() {
@@ -101,14 +106,18 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
         }
         vm.state.register_pointer_flags = 2;
 
-        (if return_type.is_failure() { eh } else { pc + 1 }, snapshot)
+        (
+            if return_type.is_failure() { eh } else { pc + 1 },
+            snapshot,
+            leftover_gas,
+        )
     };
 
     if return_type.is_failure() {
         vm.world.rollback(snapshot);
     }
     vm.state.flags = Flags::new(return_type == ReturnType::Panic, false, false);
-    vm.state.current_frame.gas += gas_to_return;
+    vm.state.current_frame.gas += leftover_gas;
 
     match vm.state.current_frame.pc_from_u32(pc) {
         Some(i) => Ok(i),
