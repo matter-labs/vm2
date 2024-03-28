@@ -1,19 +1,20 @@
 use crate::{instruction::Instruction, Predicate};
 use arbitrary::Arbitrary;
 pub use binop::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor};
-pub use call::CallingMode;
+pub use far_call::CallingMode;
 pub use heap_access::{AuxHeap, Heap};
 pub use pointer::{PtrAdd, PtrPack, PtrShrink, PtrSub};
 pub(crate) use ret::{free_panic, PANIC};
 
 mod binop;
-mod call;
 mod common;
 mod context;
 mod event;
+mod far_call;
 mod heap_access;
 mod jump;
 mod monomorphization;
+mod near_call;
 mod nop;
 mod pointer;
 mod precompiles;

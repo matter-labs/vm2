@@ -1,4 +1,4 @@
-use super::call::get_far_call_calldata;
+use super::far_call::get_far_call_calldata;
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     instruction::{ExecutionEnd, InstructionResult},
