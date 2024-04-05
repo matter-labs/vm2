@@ -1,10 +1,6 @@
 use u256::U256;
-use vm2::{
-    address_into_u256, decode::decode_program, ExecutionEnd, Program, VirtualMachine, World,
-};
-use zkevm_opcode_defs::{
-    ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
-};
+use vm2::{decode::decode_program, testworld::TestWorld, ExecutionEnd, Program, VirtualMachine};
+use zkevm_opcode_defs::ethereum_types::Address;
 
 fn program_from_file(filename: &str) -> Program {
     let blob = std::fs::read(filename).unwrap();
@@ -28,49 +24,12 @@ fn call_to_invalid_address() {
     // Thus, setting the error handler to the call instruction itself should
     // result in an infinite loop.
 
-    struct TestWorld;
-    impl World for TestWorld {
-        fn decommit(&mut self, hash: u256::U256) -> Program {
-            let code_hash = {
-                let mut abi = [0u8; 32];
-                abi[0] = 1;
-                U256::from_big_endian(&abi)
-            };
-
-            if hash == code_hash {
-                program_from_file("tests/bytecodes/call_far")
-            } else {
-                panic!("unexpected decommit")
-            }
-        }
-
-        fn read_storage(&mut self, contract: u256::H160, key: u256::U256) -> u256::U256 {
-            let deployer_system_contract_address =
-                Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
-
-            let code_hash = {
-                let mut abi = [0u8; 32];
-                abi[0] = 1;
-                U256::from_big_endian(&abi)
-            };
-
-            if contract == deployer_system_contract_address
-                && key == address_into_u256(Address::from_low_u64_be(0x1234567890abcdef))
-            {
-                code_hash
-            } else {
-                0.into()
-            }
-        }
-
-        fn handle_hook(&mut self, _: u32, _: &mut vm2::State) {
-            unreachable!()
-        }
-    }
+    let address = Address::from_low_u64_be(0x1234567890abcdef);
+    let world = TestWorld::new(&[(address, program_from_file("tests/bytecodes/call_far"))]);
 
     let mut vm = VirtualMachine::new(
-        Box::new(TestWorld),
-        Address::from_low_u64_be(0x1234567890abcdef),
+        Box::new(world),
+        address,
         Address::zero(),
         vec![],
         10000,

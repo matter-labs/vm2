@@ -54,6 +54,7 @@ impl<T: DestinationWriter> DestinationWriter for Option<T> {
     }
 }
 
+#[derive(Hash)]
 pub struct Arguments {
     source_registers: PackedRegisters,
     destination_registers: PackedRegisters,
@@ -434,6 +435,7 @@ impl<'a> Arbitrary<'a> for Register {
     }
 }
 
+#[derive(Hash)]
 struct PackedRegisters(u8);
 
 impl PackedRegisters {

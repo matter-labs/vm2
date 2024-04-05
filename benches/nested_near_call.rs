@@ -1,9 +1,10 @@
 use divan::{black_box, Bencher};
 use vm2::{
     addressing_modes::{Immediate1, Immediate2, Register, Register1, Register2},
+    testworld::TestWorld,
     Instruction,
     Predicate::Always,
-    Program, World,
+    Program,
 };
 use zkevm_opcode_defs::ethereum_types::Address;
 
@@ -20,10 +21,13 @@ fn nested_near_call(bencher: Bencher) {
         vec![],
     );
 
+    let address = Address::from_low_u64_be(0xabe123ff);
+
     bencher.bench(|| {
+        let world = Box::new(TestWorld::new(&[(address, program.clone())]));
         let mut vm = vm2::VirtualMachine::new(
-            Box::new(TestWorld(black_box(program.clone()))),
-            Address::zero(),
+            black_box(world),
+            address,
             Address::zero(),
             vec![],
             80_000_000,
@@ -60,10 +64,13 @@ fn nested_near_call_with_storage_write(bencher: Bencher) {
         vec![],
     );
 
+    let address = Address::from_low_u64_be(0xabe123ff);
+
     bencher.bench(|| {
+        let world = Box::new(TestWorld::new(&[(address, program.clone())]));
         let mut vm = vm2::VirtualMachine::new(
-            Box::new(TestWorld(black_box(program.clone()))),
-            Address::zero(),
+            black_box(world),
+            address,
             Address::zero(),
             vec![],
             80_000_000,
@@ -76,21 +83,6 @@ fn nested_near_call_with_storage_write(bencher: Bencher) {
 
         vm.run();
     });
-}
-
-struct TestWorld(Program);
-impl World for TestWorld {
-    fn decommit(&mut self, _: u256::U256) -> Program {
-        self.0.clone()
-    }
-
-    fn read_storage(&mut self, _: u256::H160, _: u256::U256) -> u256::U256 {
-        0.into()
-    }
-
-    fn handle_hook(&mut self, _: u32, _: &mut vm2::State) {
-        unreachable!()
-    }
 }
 
 fn main() {

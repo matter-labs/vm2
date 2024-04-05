@@ -9,6 +9,8 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+u256 = { package = "primitive-types", version = "0.12.1" }
 
 [dependencies.vm2]
 path = ".."
