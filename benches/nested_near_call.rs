@@ -1,23 +1,24 @@
-use std::sync::Arc;
-
 use divan::{black_box, Bencher};
 use vm2::{
     addressing_modes::{Immediate1, Immediate2, Register, Register1, Register2},
     Instruction,
     Predicate::Always,
-    World,
+    Program, World,
 };
 use zkevm_opcode_defs::ethereum_types::Address;
 
 #[divan::bench]
 fn nested_near_call(bencher: Bencher) {
-    let program = Arc::new([Instruction::from_near_call(
-        // zero means pass all gas
-        Register1(Register::new(0)),
-        Immediate1(0),
-        Immediate2(0),
-        Always,
-    )]);
+    let program = Program::new(
+        vec![Instruction::from_near_call(
+            // zero means pass all gas
+            Register1(Register::new(0)),
+            Immediate1(0),
+            Immediate2(0),
+            Always,
+        )],
+        vec![],
+    );
 
     bencher.bench(|| {
         let mut vm = vm2::VirtualMachine::new(
@@ -39,22 +40,25 @@ fn nested_near_call(bencher: Bencher) {
 
 #[divan::bench]
 fn nested_near_call_with_storage_write(bencher: Bencher) {
-    let program = Arc::new([
-        Instruction::from_ergs_left(Register1(Register::new(1)), Always),
-        Instruction::from_sstore(
-            // always use same storage slot to get a warm write discount
-            Register1(Register::new(0)),
-            Register2(Register::new(1)),
-            Always,
-        ),
-        Instruction::from_near_call(
-            // zero means pass all gas
-            Register1(Register::new(0)),
-            Immediate1(0),
-            Immediate2(0),
-            Always,
-        ),
-    ]);
+    let program = Program::new(
+        vec![
+            Instruction::from_ergs_left(Register1(Register::new(1)), Always),
+            Instruction::from_sstore(
+                // always use same storage slot to get a warm write discount
+                Register1(Register::new(0)),
+                Register2(Register::new(1)),
+                Always,
+            ),
+            Instruction::from_near_call(
+                // zero means pass all gas
+                Register1(Register::new(0)),
+                Immediate1(0),
+                Immediate2(0),
+                Always,
+            ),
+        ],
+        vec![],
+    );
 
     bencher.bench(|| {
         let mut vm = vm2::VirtualMachine::new(
@@ -74,10 +78,10 @@ fn nested_near_call_with_storage_write(bencher: Bencher) {
     });
 }
 
-struct TestWorld(Arc<[Instruction]>);
+struct TestWorld(Program);
 impl World for TestWorld {
-    fn decommit(&mut self, _: u256::U256) -> (Arc<[Instruction]>, Arc<[u256::U256]>) {
-        (self.0.clone(), Arc::new([]))
+    fn decommit(&mut self, _: u256::U256) -> Program {
+        self.0.clone()
     }
 
     fn read_storage(&mut self, _: u256::H160, _: u256::U256) -> u256::U256 {

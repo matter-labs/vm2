@@ -1,5 +1,4 @@
-use crate::{modified_world::ModifiedWorld, Instruction};
-use std::sync::Arc;
+use crate::{modified_world::ModifiedWorld, program::Program};
 use u256::{H160, U256};
 use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
@@ -13,7 +12,7 @@ impl ModifiedWorld {
         evm_interpreter_code_hash: [u8; 32],
         gas: &mut u32,
         is_constructor_call: bool,
-    ) -> Option<(Arc<[Instruction]>, Arc<[U256]>, bool)> {
+    ) -> Option<(Program, bool)> {
         let deployer_system_contract_address =
             Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
 
@@ -66,14 +65,14 @@ impl ModifiedWorld {
             self.decommitted_hashes.insert(code_key, ());
         };
 
-        let (p, c) = self.world.decommit(code_key);
-        Some((p, c, is_evm))
+        let program = self.world.decommit(code_key);
+        Some((program, is_evm))
     }
 
     /// Used to load code when the VM first starts up.
     /// Doesn't check for any errors.
     /// Doesn't cost anything but also doesn't make the code free in future decommits.
-    pub(crate) fn initial_decommit(&mut self, address: U256) -> (Arc<[Instruction]>, Arc<[U256]>) {
+    pub(crate) fn initial_decommit(&mut self, address: U256) -> Program {
         let deployer_system_contract_address =
             Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
         let (code_info, _) = self.read_storage(deployer_system_contract_address, address);

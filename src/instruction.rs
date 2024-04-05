@@ -1,11 +1,11 @@
 use crate::{
     addressing_modes::Arguments,
+    program::Program,
     state::State,
     vm::{Settings, VirtualMachine},
     Predicate, World,
 };
 use arbitrary::{Arbitrary, Unstructured};
-use std::sync::Arc;
 use u256::{H160, U256};
 
 pub struct Instruction {
@@ -30,7 +30,7 @@ pub fn jump_to_beginning() -> Instruction {
     }
 }
 fn jump_to_beginning_handler(vm: &mut VirtualMachine, _: *const Instruction) -> InstructionResult {
-    let first_instruction = &vm.state.current_frame.program[0];
+    let first_instruction = &vm.state.current_frame.program.instructions()[0];
     Ok(first_instruction)
 }
 
@@ -42,13 +42,12 @@ pub fn run_arbitrary_program(input: &[u8]) -> ExecutionEnd {
         program.truncate(1 << 16);
         program.push(jump_to_beginning());
     } else {
-        // TODO execute invalid instruction or something instead
         program.push(Instruction::from_invalid());
     }
 
     struct FakeWorld;
     impl World for FakeWorld {
-        fn decommit(&mut self, _hash: U256) -> (Arc<[Instruction]>, Arc<[U256]>) {
+        fn decommit(&mut self, _hash: U256) -> Program {
             todo!()
         }
 

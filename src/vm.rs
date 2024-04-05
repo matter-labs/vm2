@@ -35,7 +35,7 @@ impl VirtualMachine {
         let mut world = ModifiedWorld::new(world);
         let world_before_this_frame = world.snapshot();
 
-        let (program, code_page) = world.initial_decommit(address_into_u256(address));
+        let program = world.initial_decommit(address_into_u256(address));
 
         Self {
             world,
@@ -45,7 +45,6 @@ impl VirtualMachine {
                 calldata,
                 gas,
                 program,
-                code_page,
                 world_before_this_frame,
             ),
             settings,
@@ -53,7 +52,8 @@ impl VirtualMachine {
     }
 
     pub fn run(&mut self) -> ExecutionEnd {
-        let mut instruction: *const Instruction = &self.state.current_frame.program[0];
+        let mut instruction: *const Instruction =
+            &self.state.current_frame.program.instructions()[0];
 
         unsafe {
             loop {

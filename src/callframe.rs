@@ -1,13 +1,14 @@
-use crate::{bitset::Bitset, modified_world::ModifiedWorld, rollback::Rollback, Instruction};
-use std::sync::Arc;
+use crate::{
+    bitset::Bitset, modified_world::ModifiedWorld, program::Program, rollback::Rollback,
+    Instruction,
+};
 use u256::{H160, U256};
 
 pub struct Callframe {
     pub address: H160,
     pub code_address: H160,
     pub caller: H160,
-    pub program: Arc<[Instruction]>,
-    pub code_page: Arc<[U256]>,
+    pub program: Program,
     pub(crate) exception_handler: u32,
     pub(crate) context_u128: u128,
     pub(crate) is_static: bool,
@@ -43,8 +44,7 @@ impl Callframe {
         address: H160,
         code_address: H160,
         caller: H160,
-        program: Arc<[Instruction]>,
-        code_page: Arc<[U256]>,
+        program: Program,
         heap: u32,
         aux_heap: u32,
         gas: u32,
@@ -66,7 +66,6 @@ impl Callframe {
                 .try_into()
                 .unwrap(),
             stack_pointer_flags: Default::default(),
-            code_page,
             heap,
             aux_heap,
             sp: 1024,
@@ -108,11 +107,12 @@ impl Callframe {
     }
 
     pub(crate) fn pc_to_u32(&self, pc: *const Instruction) -> u32 {
-        unsafe { pc.offset_from(&self.program[0]) as u32 }
+        unsafe { pc.offset_from(&self.program.instructions()[0]) as u32 }
     }
 
     pub(crate) fn pc_from_u32(&self, index: u32) -> Option<*const Instruction> {
         self.program
+            .instructions()
             .get(index as usize)
             .map(|p| p as *const Instruction)
     }

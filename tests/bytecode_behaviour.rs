@@ -1,27 +1,24 @@
-use std::sync::Arc;
 use u256::U256;
 use vm2::{
-    address_into_u256, decode::decode_program, ExecutionEnd, Instruction, VirtualMachine, World,
+    address_into_u256, decode::decode_program, ExecutionEnd, Program, VirtualMachine, World,
 };
 use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
 
-fn program_from_file(filename: &str) -> (Arc<[Instruction]>, Arc<[U256]>) {
+fn program_from_file(filename: &str) -> Program {
     let blob = std::fs::read(filename).unwrap();
-    (
+    Program::new(
         decode_program(
             &blob
                 .chunks_exact(8)
                 .map(|chunk| u64::from_be_bytes(chunk.try_into().unwrap()))
                 .collect::<Vec<_>>(),
             false,
-        )
-        .into(),
+        ),
         blob.chunks_exact(32)
             .map(|chunk| U256::from_big_endian(chunk.try_into().unwrap()))
-            .collect::<Vec<_>>()
-            .into(),
+            .collect::<Vec<_>>(),
     )
 }
 
@@ -33,7 +30,7 @@ fn call_to_invalid_address() {
 
     struct TestWorld;
     impl World for TestWorld {
-        fn decommit(&mut self, hash: u256::U256) -> (Arc<[Instruction]>, Arc<[u256::U256]>) {
+        fn decommit(&mut self, hash: u256::U256) -> Program {
             let code_hash = {
                 let mut abi = [0u8; 32];
                 abi[0] = 1;

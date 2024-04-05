@@ -5,10 +5,10 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::InstructionResult,
     predication::Flags,
+    program::Program,
     rollback::Rollback,
     Instruction, Predicate, VirtualMachine,
 };
-use std::sync::Arc;
 use u256::U256;
 use zkevm_opcode_defs::system_params::EVM_SIMULATOR_STIPEND;
 
@@ -54,7 +54,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         U256::zero()
     };
 
-    let (program, code_page, is_evm_interpreter) = match vm.world.decommit(
+    let (program, is_evm_interpreter) = match vm.world.decommit(
         destination_address,
         vm.settings.default_aa_code_hash,
         vm.settings.evm_interpreter_code_hash,
@@ -64,9 +64,8 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         Some(program) => program,
         None => {
             encountered_panic = true;
-            let substitute: (Arc<[Instruction]>, Arc<[U256]>, bool) =
-                (Arc::new([]), Arc::new([]), false);
-            substitute
+
+            (Program::new(vec![], vec![]), false)
         }
     };
 
@@ -87,7 +86,6 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         instruction,
         u256_into_address(destination_address),
         program,
-        code_page,
         new_frame_gas,
         stipend,
         error_handler.low_u32(),
@@ -121,7 +119,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
 
     vm.state.registers[2] = call_type.into();
 
-    Ok(&vm.state.current_frame.program[0])
+    Ok(&vm.state.current_frame.program.instructions()[0])
 }
 
 pub(crate) struct FarCallABI {

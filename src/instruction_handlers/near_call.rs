@@ -27,7 +27,7 @@ fn near_call(vm: &mut VirtualMachine, instruction: *const Instruction) -> Instru
 
     vm.state.flags = Flags::new(false, false, false);
 
-    Ok(&vm.state.current_frame.program[destination.low_u32() as usize])
+    Ok(&vm.state.current_frame.program.instructions()[destination.low_u32() as usize])
 }
 
 impl Instruction {

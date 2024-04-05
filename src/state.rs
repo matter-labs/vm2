@@ -7,12 +7,10 @@ use crate::{
     fat_pointer::FatPointer,
     instruction_handlers::CallingMode,
     predication::Flags,
+    program::Program,
     Instruction,
 };
-use std::{
-    ops::{Index, IndexMut},
-    sync::Arc,
-};
+use std::ops::{Index, IndexMut};
 use u256::{H160, U256};
 
 pub struct State {
@@ -38,8 +36,7 @@ impl State {
         caller: H160,
         calldata: Vec<u8>,
         gas: u32,
-        program: std::sync::Arc<[crate::Instruction]>,
-        code_page: std::sync::Arc<[U256]>,
+        program: Program,
         world_before_this_frame: callframe::Snapshot,
     ) -> Self {
         let mut registers: [U256; 16] = Default::default();
@@ -60,7 +57,6 @@ impl State {
                 address,
                 caller,
                 program,
-                code_page,
                 2,
                 3,
                 gas,
@@ -94,8 +90,7 @@ impl State {
         &mut self,
         instruction_pointer: *const Instruction,
         code_address: H160,
-        program: Arc<[Instruction]>,
-        code_page: Arc<[U256]>,
+        program: Program,
         gas: u32,
         stipend: u32,
         exception_handler: u32,
@@ -128,7 +123,6 @@ impl State {
                 u256_into_address(self.registers[15])
             },
             program,
-            code_page,
             new_heap,
             new_heap + 1,
             gas,
@@ -184,7 +178,7 @@ impl Addressable for State {
         &mut self.current_frame.sp
     }
     fn code_page(&self) -> &[U256] {
-        &self.current_frame.code_page
+        &self.current_frame.program.code_page()
     }
 }
 
