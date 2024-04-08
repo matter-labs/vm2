@@ -9,7 +9,7 @@ pub struct Instruction {
 pub(crate) type Handler = fn(&mut VirtualMachine, *const Instruction) -> InstructionResult;
 pub(crate) type InstructionResult = Result<*const Instruction, ExecutionEnd>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ExecutionEnd {
     ProgramFinished(Vec<u8>),
     Reverted(Vec<u8>),
