@@ -70,7 +70,8 @@ impl VirtualMachine {
                 {
                     print!(
                         "{:?}: ",
-                        instruction.offset_from(&self.state.current_frame.program[0])
+                        instruction
+                            .offset_from(&self.state.current_frame.program.instructions()[0])
                     );
                     self.state.registers[1..]
                         .iter()

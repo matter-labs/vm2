@@ -9,8 +9,8 @@ use zkevm_opcode_defs::{
 };
 
 pub struct TestWorld {
-    address_to_hash: BTreeMap<U256, U256>,
-    hash_to_contract: BTreeMap<U256, Program>,
+    pub address_to_hash: BTreeMap<U256, U256>,
+    pub hash_to_contract: BTreeMap<U256, Program>,
 }
 
 impl TestWorld {
