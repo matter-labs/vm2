@@ -62,8 +62,9 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
                 Register1::get(args, &mut vm.state),
                 Register1::is_fat_pointer(args, &mut vm.state),
                 vm,
-            );
-            // TODO check that the return value resides in this or a newer frame's memory
+            )
+            .filter(|pointer| pointer.memory_page != vm.state.current_frame.calldata_heap);
+
             if result.is_none() {
                 return_type = ReturnType::Panic;
             }
@@ -76,7 +77,11 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
             .gas
             .saturating_sub(vm.state.current_frame.stipend);
 
-        let Some((pc, eh, snapshot)) = vm.state.pop_frame() else {
+        let Some((pc, eh, snapshot)) = vm.state.pop_frame(
+            return_value_or_panic
+                .as_ref()
+                .map(|pointer| pointer.memory_page),
+        ) else {
             if return_type.is_failure() {
                 vm.world
                     .rollback(vm.state.current_frame.world_before_this_frame);
@@ -125,6 +130,7 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
     }
 }
 
+/// Panics, burning all available gas.
 pub const INVALID_INSTRUCTION: Instruction = Instruction {
     handler: ret::<{ ReturnType::Panic as u8 }, false>,
     arguments: Arguments::new(Predicate::Always, INVALID_INSTRUCTION_COST),

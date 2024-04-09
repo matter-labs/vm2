@@ -59,6 +59,7 @@ impl State {
                 program,
                 2,
                 3,
+                1,
                 gas,
                 0,
                 0,
@@ -95,6 +96,7 @@ impl State {
         stipend: u32,
         exception_handler: u32,
         is_static: bool,
+        calldata_heap: u32,
         world_before_this_frame: Snapshot,
     ) {
         let new_heap = self.heaps.0.len() as u32;
@@ -125,6 +127,7 @@ impl State {
             program,
             new_heap,
             new_heap + 1,
+            calldata_heap,
             gas,
             stipend,
             exception_handler,
@@ -143,13 +146,56 @@ impl State {
         self.previous_frames.push((old_pc, new_frame));
     }
 
-    pub(crate) fn pop_frame(&mut self) -> Option<(u32, u32, Snapshot)> {
+    pub(crate) fn pop_frame(&mut self, heap_to_keep: Option<u32>) -> Option<(u32, u32, Snapshot)> {
         self.previous_frames.pop().map(|(pc, frame)| {
+            for &heap in [self.current_frame.heap, self.current_frame.aux_heap]
+                .iter()
+                .chain(&self.current_frame.heaps_i_am_keeping_alive)
+            {
+                if Some(heap) != heap_to_keep {
+                    self.heaps.deallocate(heap);
+                }
+            }
+
             let eh = self.current_frame.exception_handler;
             let snapshot = self.current_frame.world_before_this_frame;
+
             self.current_frame = frame;
+            self.current_frame
+                .heaps_i_am_keeping_alive
+                .extend(heap_to_keep);
+
             (pc, eh, snapshot)
         })
+    }
+
+    /// Pushes a new frame with only the exception handler set to a sensible value.
+    /// Only to be used when far call panics.
+    pub(crate) fn push_dummy_frame(
+        &mut self,
+        instruction_pointer: *const Instruction,
+        exception_handler: u32,
+        world_before_this_frame: Snapshot,
+    ) {
+        let mut new_frame = Callframe::new(
+            H160::zero(),
+            H160::zero(),
+            H160::zero(),
+            Program::new(vec![], vec![]),
+            0,
+            0,
+            0,
+            0,
+            0,
+            exception_handler,
+            0,
+            false,
+            world_before_this_frame,
+        );
+
+        let old_pc = self.current_frame.pc_to_u32(instruction_pointer);
+        std::mem::swap(&mut new_frame, &mut self.current_frame);
+        self.previous_frames.push((old_pc, new_frame));
     }
 
     pub(crate) fn set_context_u128(&mut self, value: u128) {
@@ -184,6 +230,12 @@ impl Addressable for State {
 
 #[derive(Debug)]
 pub struct Heaps(Vec<Vec<u8>>);
+
+impl Heaps {
+    pub(crate) fn deallocate(&mut self, heap: u32) {
+        self.0[heap as usize] = vec![];
+    }
+}
 
 impl Index<u32> for Heaps {
     type Output = Vec<u8>;

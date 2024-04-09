@@ -20,6 +20,17 @@ pub struct Callframe {
     pub heap: u32,
     pub aux_heap: u32,
 
+    /// Returning a pointer to the calldata is illegal because it could result in
+    /// the caller's heap being accessible both directly and via the fat pointer.
+    /// The problem only occurs if the calldata originates from the caller's heap
+    /// but this rule is easy to implement.
+    pub(crate) calldata_heap: u32,
+
+    /// Because of the above rule we know that heaps returned to this frame only
+    /// exist to allow this frame to read from them. Therefore we can deallocate
+    /// all of them upon return, except possibly one that we pass on.
+    pub(crate) heaps_i_am_keeping_alive: Vec<u32>,
+
     pub sp: u16,
     pub gas: u32,
     pub stipend: u32,
@@ -47,6 +58,7 @@ impl Callframe {
         program: Program,
         heap: u32,
         aux_heap: u32,
+        calldata_heap: u32,
         gas: u32,
         stipend: u32,
         exception_handler: u32,
@@ -68,6 +80,8 @@ impl Callframe {
             stack_pointer_flags: Default::default(),
             heap,
             aux_heap,
+            calldata_heap,
+            heaps_i_am_keeping_alive: vec![],
             sp: 1024,
             gas,
             stipend,

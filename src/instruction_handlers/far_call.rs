@@ -1,11 +1,10 @@
-use super::{heap_access::grow_heap, AuxHeap, Heap, PANIC};
+use super::{heap_access::grow_heap, ret::INVALID_INSTRUCTION, AuxHeap, Heap};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
     decommit::u256_into_address,
     fat_pointer::FatPointer,
     instruction::InstructionResult,
     predication::Flags,
-    program::Program,
     rollback::Rollback,
     Instruction, Predicate, VirtualMachine,
 };
@@ -39,63 +38,51 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
 
     let raw_abi = Register1::get(args, &mut vm.state);
     let destination_address = Register2::get(args, &mut vm.state) & address_mask;
-    let error_handler = Immediate1::get(args, &mut vm.state);
+    let exception_handler = Immediate1::get(args, &mut vm.state).low_u32();
 
     let abi = get_far_call_arguments(raw_abi);
 
-    let mut encountered_panic = false;
+    let calldata =
+        get_far_call_calldata(raw_abi, Register1::is_fat_pointer(args, &mut vm.state), vm);
 
-    let calldata = if let Some(pointer) =
-        get_far_call_calldata(raw_abi, Register1::is_fat_pointer(args, &mut vm.state), vm)
-    {
-        pointer.into_u256()
-    } else {
-        encountered_panic = true;
-        U256::zero()
-    };
-
-    let (program, is_evm_interpreter) = match vm.world.decommit(
+    let decommit_result = vm.world.decommit(
         destination_address,
         vm.settings.default_aa_code_hash,
         vm.settings.evm_interpreter_code_hash,
         &mut vm.state.current_frame.gas,
         abi.is_constructor_call,
-    ) {
-        Some(program) => program,
-        None => {
-            encountered_panic = true;
-
-            (Program::new(vec![], vec![]), false)
-        }
-    };
+    );
 
     let maximum_gas = (vm.state.current_frame.gas / 64 * 63) as u32;
+    let new_frame_gas = abi.gas_to_pass.min(maximum_gas);
+    vm.state.current_frame.gas -= new_frame_gas;
+
+    let (Some(calldata), Some((program, is_evm_interpreter))) = (calldata, decommit_result) else {
+        vm.state
+            .push_dummy_frame(instruction, exception_handler, vm.world.snapshot());
+        return Ok(&INVALID_INSTRUCTION);
+    };
+
     let stipend = if is_evm_interpreter {
         EVM_SIMULATOR_STIPEND
     } else {
         0
     };
-    let new_frame_gas = abi
-        .gas_to_pass
-        .min(maximum_gas)
+    let new_frame_gas = new_frame_gas
         .checked_add(stipend)
         .expect("stipend must not cause overflow");
 
-    vm.state.current_frame.gas -= new_frame_gas;
     vm.state.push_frame::<CALLING_MODE>(
         instruction,
         u256_into_address(destination_address),
         program,
         new_frame_gas,
         stipend,
-        error_handler.low_u32(),
+        exception_handler,
         IS_STATIC && !is_evm_interpreter,
+        calldata.memory_page,
         vm.world.snapshot(),
     );
-
-    if encountered_panic {
-        return Ok(&PANIC);
-    }
 
     vm.state.flags = Flags::new(false, false, false);
 
@@ -110,7 +97,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
 
     // Only r1 is a pointer
     vm.state.register_pointer_flags = 2;
-    vm.state.registers[1] = calldata;
+    vm.state.registers[1] = calldata.into_u256();
 
     let is_static_call_to_evm_interpreter = IS_STATIC && is_evm_interpreter;
     let call_type = (u8::from(is_static_call_to_evm_interpreter) << 2)
