@@ -23,7 +23,7 @@ pub struct State {
 
     /// Contains indices to the far call instructions currently being executed.
     /// They are needed to continue execution from the correct spot upon return.
-    previous_frames: Vec<(u32, Callframe)>,
+    previous_frames: Vec<(u16, Callframe)>,
 
     pub heaps: Heaps,
 
@@ -94,7 +94,7 @@ impl State {
         program: Program,
         gas: u32,
         stipend: u32,
-        exception_handler: u32,
+        exception_handler: u16,
         is_static: bool,
         calldata_heap: u32,
         world_before_this_frame: Snapshot,
@@ -141,12 +141,12 @@ impl State {
         );
         self.context_u128 = 0;
 
-        let old_pc = self.current_frame.pc_to_u32(instruction_pointer);
+        let old_pc = self.current_frame.pc_to_u16(instruction_pointer);
         std::mem::swap(&mut new_frame, &mut self.current_frame);
         self.previous_frames.push((old_pc, new_frame));
     }
 
-    pub(crate) fn pop_frame(&mut self, heap_to_keep: Option<u32>) -> Option<(u32, u32, Snapshot)> {
+    pub(crate) fn pop_frame(&mut self, heap_to_keep: Option<u32>) -> Option<(u16, u16, Snapshot)> {
         self.previous_frames.pop().map(|(pc, frame)| {
             for &heap in [self.current_frame.heap, self.current_frame.aux_heap]
                 .iter()
@@ -174,7 +174,7 @@ impl State {
     pub(crate) fn push_dummy_frame(
         &mut self,
         instruction_pointer: *const Instruction,
-        exception_handler: u32,
+        exception_handler: u16,
         world_before_this_frame: Snapshot,
     ) {
         let mut new_frame = Callframe::new(
@@ -193,7 +193,7 @@ impl State {
             world_before_this_frame,
         );
 
-        let old_pc = self.current_frame.pc_to_u32(instruction_pointer);
+        let old_pc = self.current_frame.pc_to_u16(instruction_pointer);
         std::mem::swap(&mut new_frame, &mut self.current_frame);
         self.previous_frames.push((old_pc, new_frame));
     }

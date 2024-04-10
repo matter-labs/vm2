@@ -21,7 +21,7 @@ fn near_call(vm: &mut VirtualMachine, instruction: *const Instruction) -> Instru
     vm.state.current_frame.push_near_call(
         new_frame_gas,
         instruction,
-        error_handler.low_u32(),
+        error_handler.low_u32() as u16,
         vm.world.snapshot(),
     );
 

@@ -18,7 +18,7 @@ pub enum ExecutionEnd {
     /// Returned when the bootloader writes to the heap location [crate::Settings::hook_address]
     SuspendedOnHook {
         hook: u32,
-        pc: u32,
+        pc_to_resume_from: u16,
     },
 }
 

@@ -45,11 +45,11 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
     {
         (
             if TO_LABEL {
-                Immediate1::get(args, &mut vm.state).low_u32()
+                Immediate1::get(args, &mut vm.state).low_u32() as u16
             } else if return_type.is_failure() {
                 eh
             } else {
-                pc + 1
+                pc.wrapping_add(1)
             },
             snapshot,
             near_call_leftover_gas,
@@ -112,7 +112,11 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
         vm.state.register_pointer_flags = 2;
 
         (
-            if return_type.is_failure() { eh } else { pc + 1 },
+            if return_type.is_failure() {
+                eh
+            } else {
+                pc.wrapping_add(1)
+            },
             snapshot,
             leftover_gas,
         )
@@ -124,7 +128,7 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
     vm.state.flags = Flags::new(return_type == ReturnType::Panic, false, false);
     vm.state.current_frame.gas += leftover_gas;
 
-    match vm.state.current_frame.pc_from_u32(pc) {
+    match vm.state.current_frame.pc_from_u16(pc) {
         Some(i) => Ok(i),
         None => Ok(&INVALID_INSTRUCTION),
     }

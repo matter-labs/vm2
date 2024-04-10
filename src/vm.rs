@@ -54,11 +54,11 @@ impl VirtualMachine {
         self.start_at(0)
     }
 
-    pub fn resume_after_hook(&mut self, pc: u32) -> ExecutionEnd {
-        self.start_at(pc + 1)
+    pub fn resume_from(&mut self, pc: u16) -> ExecutionEnd {
+        self.start_at(pc)
     }
 
-    fn start_at(&mut self, instruction_number: u32) -> ExecutionEnd {
+    fn start_at(&mut self, instruction_number: u16) -> ExecutionEnd {
         let mut instruction: *const Instruction =
             &self.state.current_frame.program.instructions()[instruction_number as usize];
 

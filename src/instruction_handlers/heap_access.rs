@@ -101,7 +101,11 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
         if HOOKING_ENABLED && address == vm.settings.hook_address {
             Err(ExecutionEnd::SuspendedOnHook {
                 hook: value.as_u32(),
-                pc: vm.state.current_frame.pc_to_u32(instruction),
+                pc_to_resume_from: vm
+                    .state
+                    .current_frame
+                    .pc_to_u16(instruction)
+                    .wrapping_add(1),
             })
         } else {
             continue_normally

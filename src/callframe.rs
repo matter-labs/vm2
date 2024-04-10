@@ -9,7 +9,7 @@ pub struct Callframe {
     pub code_address: H160,
     pub caller: H160,
     pub program: Program,
-    pub(crate) exception_handler: u32,
+    pub(crate) exception_handler: u16,
     pub(crate) context_u128: u128,
     pub(crate) is_static: bool,
 
@@ -41,8 +41,8 @@ pub struct Callframe {
 }
 
 struct NearCallFrame {
-    call_instruction: u32,
-    exception_handler: u32,
+    call_instruction: u16,
+    exception_handler: u16,
     previous_frame_sp: u16,
     previous_frame_gas: u32,
     world_before_this_frame: Snapshot,
@@ -61,7 +61,7 @@ impl Callframe {
         calldata_heap: u32,
         gas: u32,
         stipend: u32,
-        exception_handler: u32,
+        exception_handler: u16,
         context_u128: u128,
         is_static: bool,
         world_before_this_frame: Snapshot,
@@ -95,11 +95,11 @@ impl Callframe {
         &mut self,
         gas_to_call: u32,
         old_pc: *const Instruction,
-        exception_handler: u32,
+        exception_handler: u16,
         world_before_this_frame: Snapshot,
     ) {
         self.near_calls.push(NearCallFrame {
-            call_instruction: self.pc_to_u32(old_pc),
+            call_instruction: self.pc_to_u16(old_pc),
             exception_handler,
             previous_frame_sp: self.sp,
             previous_frame_gas: self.gas - gas_to_call,
@@ -108,7 +108,7 @@ impl Callframe {
         self.gas = gas_to_call;
     }
 
-    pub(crate) fn pop_near_call(&mut self) -> Option<(u32, u32, Snapshot)> {
+    pub(crate) fn pop_near_call(&mut self) -> Option<(u16, u16, Snapshot)> {
         self.near_calls.pop().map(|f| {
             self.sp = f.previous_frame_sp;
             self.gas = f.previous_frame_gas;
@@ -120,11 +120,11 @@ impl Callframe {
         })
     }
 
-    pub(crate) fn pc_to_u32(&self, pc: *const Instruction) -> u32 {
-        unsafe { pc.offset_from(&self.program.instructions()[0]) as u32 }
+    pub(crate) fn pc_to_u16(&self, pc: *const Instruction) -> u16 {
+        unsafe { pc.offset_from(&self.program.instructions()[0]) as u16 }
     }
 
-    pub(crate) fn pc_from_u32(&self, index: u32) -> Option<*const Instruction> {
+    pub(crate) fn pc_from_u16(&self, index: u16) -> Option<*const Instruction> {
         self.program
             .instructions()
             .get(index as usize)
