@@ -61,8 +61,4 @@ impl World for TestWorld {
             0.into()
         }
     }
-
-    fn handle_hook(&mut self, _: u32, _: &mut crate::State) {
-        unimplemented!()
-    }
 }

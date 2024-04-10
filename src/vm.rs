@@ -8,8 +8,7 @@ pub struct Settings {
     pub default_aa_code_hash: [u8; 32],
     pub evm_interpreter_code_hash: [u8; 32],
 
-    /// Writing to this address on the heap in the bootloader causes a call to
-    /// the handle_hook method of the provided [World].
+    /// Writing to this address in the bootloader's heap suspends execution
     pub hook_address: u32,
 }
 
@@ -52,8 +51,16 @@ impl VirtualMachine {
     }
 
     pub fn run(&mut self) -> ExecutionEnd {
+        self.start_at(0)
+    }
+
+    pub fn resume_after_hook(&mut self, pc: u32) -> ExecutionEnd {
+        self.start_at(pc + 1)
+    }
+
+    fn start_at(&mut self, instruction_number: u32) -> ExecutionEnd {
         let mut instruction: *const Instruction =
-            &self.state.current_frame.program.instructions()[0];
+            &self.state.current_frame.program.instructions()[instruction_number as usize];
 
         unsafe {
             loop {

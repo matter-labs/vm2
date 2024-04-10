@@ -1,6 +1,5 @@
 use crate::{
     rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackableSet},
-    state::State,
     World,
 };
 use u256::{H160, U256};
@@ -104,10 +103,6 @@ impl ModifiedWorld {
                 0
             }
         }
-    }
-
-    pub fn handle_hook(&mut self, value: u32, state: &mut State) {
-        self.world.handle_hook(value, state)
     }
 
     pub fn get_storage_changes(&self) -> impl Iterator<Item = ((H160, U256), U256)> + '_ {

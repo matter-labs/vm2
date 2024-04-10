@@ -14,6 +14,12 @@ pub enum ExecutionEnd {
     ProgramFinished(Vec<u8>),
     Reverted(Vec<u8>),
     Panicked,
+
+    /// Returned when the bootloader writes to the heap location [crate::Settings::hook_address]
+    SuspendedOnHook {
+        hook: u32,
+        pc: u32,
+    },
 }
 
 pub fn jump_to_beginning() -> Instruction {

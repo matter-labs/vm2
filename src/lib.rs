@@ -31,7 +31,4 @@ pub trait World {
 
     /// There is no write_storage; [ModifiedWorld::get_storage_changes] gives a list of all storage changes.
     fn read_storage(&mut self, contract: H160, key: U256) -> U256;
-
-    /// Called with values that the bootloader writes to the heap location [Settings::hook_address].
-    fn handle_hook(&mut self, hook: u32, state: &mut State);
 }

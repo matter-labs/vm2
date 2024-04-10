@@ -7,7 +7,7 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::InstructionResult,
     state::State,
-    Instruction, Predicate, VirtualMachine,
+    ExecutionEnd, Instruction, Predicate, VirtualMachine,
 };
 use u256::U256;
 
@@ -80,10 +80,9 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
             let _ = vm.state.use_gas(u32::MAX);
             return Ok(&PANIC);
         }
+        let address = pointer.low_u32();
 
         let value = Register2::get(args, &mut vm.state);
-
-        let address = pointer.low_u32();
 
         // The size check above ensures this never overflows
         let new_bound = address + 32;
@@ -100,10 +99,13 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
         }
 
         if HOOKING_ENABLED && address == vm.settings.hook_address {
-            vm.world.handle_hook(value.as_u32(), &mut vm.state);
+            Err(ExecutionEnd::SuspendedOnHook {
+                hook: value.as_u32(),
+                pc: vm.state.current_frame.pc_to_u32(instruction),
+            })
+        } else {
+            continue_normally
         }
-
-        continue_normally
     })
 }
 
