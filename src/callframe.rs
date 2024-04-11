@@ -8,10 +8,10 @@ pub struct Callframe {
     pub address: H160,
     pub code_address: H160,
     pub caller: H160,
-    pub program: Program,
-    pub(crate) exception_handler: u16,
-    pub(crate) context_u128: u128,
-    pub(crate) is_static: bool,
+
+    pub exception_handler: u16,
+    pub context_u128: u128,
+    pub is_static: bool,
 
     // TODO: joint allocate these.
     pub stack: Box<[U256; 1 << 16]>,
@@ -19,6 +19,14 @@ pub struct Callframe {
 
     pub heap: u32,
     pub aux_heap: u32,
+    pub sp: u16,
+
+    pub gas: u32,
+    pub stipend: u32,
+
+    near_calls: Vec<NearCallFrame>,
+
+    pub(crate) program: Program,
 
     /// Returning a pointer to the calldata is illegal because it could result in
     /// the caller's heap being accessible both directly and via the fat pointer.
@@ -30,12 +38,6 @@ pub struct Callframe {
     /// exist to allow this frame to read from them. Therefore we can deallocate
     /// all of them upon return, except possibly one that we pass on.
     pub(crate) heaps_i_am_keeping_alive: Vec<u32>,
-
-    pub sp: u16,
-    pub gas: u32,
-    pub stipend: u32,
-
-    near_calls: Vec<NearCallFrame>,
 
     pub(crate) world_before_this_frame: Snapshot,
 }
