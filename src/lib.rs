@@ -1,4 +1,6 @@
 pub mod addressing_modes;
+#[cfg(feature = "arbitrary")]
+mod arbitrary_instruction;
 mod bitset;
 mod callframe;
 pub mod decode;

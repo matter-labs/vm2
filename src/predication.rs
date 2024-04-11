@@ -1,5 +1,3 @@
-use arbitrary::Arbitrary;
-
 const LT_BIT: u8 = 1;
 const EQ_BIT: u8 = 1 << 1;
 const GT_BIT: u8 = 1 << 2;
@@ -15,7 +13,8 @@ impl Flags {
 }
 
 /// Predicate encoded so that comparing it to flags is efficient
-#[derive(Arbitrary, Copy, Clone, Debug, Hash)]
+#[derive(Copy, Clone, Debug, Hash)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[repr(u8)]
 pub enum Predicate {
     Always = ALWAYS_BIT,

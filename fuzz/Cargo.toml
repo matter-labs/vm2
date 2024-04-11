@@ -14,6 +14,7 @@ u256 = { package = "primitive-types", version = "0.12.1" }
 
 [dependencies.vm2]
 path = ".."
+features = ["arbitrary"]
 
 # Prevent this from interfering with workspaces
 [workspace]

@@ -8,7 +8,7 @@ zkevm_opcode_defs = { git = "https://github.com/matter-labs/era-zkevm_opcode_def
 zk_evm_abstractions = {git = "https://github.com/matter-labs/era-zk_evm_abstractions.git", branch = "v1.5.0" }
 u256 = { package = "primitive-types", version = "0.12.1" }
 enum_dispatch = "0.3"
-arbitrary = { version = "1", features = ["derive"] }
+arbitrary = { version = "1", features = ["derive"], optional = true }
 
 [dev-dependencies]
 divan = "0.1"
