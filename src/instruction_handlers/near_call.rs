@@ -2,7 +2,6 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Source},
     instruction::InstructionResult,
     predication::Flags,
-    rollback::Rollback,
     Instruction, Predicate, VirtualMachine,
 };
 

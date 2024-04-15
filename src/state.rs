@@ -2,10 +2,11 @@ use crate::{
     address_into_u256,
     addressing_modes::Addressable,
     bitset::Bitset,
-    callframe::{self, Callframe, Snapshot},
+    callframe::Callframe,
     decommit::{is_kernel, u256_into_address},
     fat_pointer::FatPointer,
     instruction_handlers::CallingMode,
+    modified_world::Snapshot,
     predication::Flags,
     program::Program,
     Instruction,
@@ -37,7 +38,7 @@ impl State {
         calldata: Vec<u8>,
         gas: u32,
         program: Program,
-        world_before_this_frame: callframe::Snapshot,
+        world_before_this_frame: Snapshot,
     ) -> Self {
         let mut registers: [U256; 16] = Default::default();
         registers[1] = FatPointer {

@@ -1,6 +1,6 @@
 use crate::{
     decommit::address_into_u256, instruction_handlers::free_panic, modified_world::ModifiedWorld,
-    rollback::Rollback, state::State, ExecutionEnd, Instruction, World,
+    state::State, ExecutionEnd, Instruction, World,
 };
 use u256::H160;
 

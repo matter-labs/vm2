@@ -1,7 +1,4 @@
-use crate::{
-    bitset::Bitset, modified_world::ModifiedWorld, program::Program, rollback::Rollback,
-    Instruction,
-};
+use crate::{bitset::Bitset, modified_world::Snapshot, program::Program, Instruction};
 use u256::{H160, U256};
 
 pub struct Callframe {
@@ -49,8 +46,6 @@ struct NearCallFrame {
     previous_frame_gas: u32,
     world_before_this_frame: Snapshot,
 }
-
-pub(crate) type Snapshot = <ModifiedWorld as Rollback>::Snapshot;
 
 impl Callframe {
     pub(crate) fn new(

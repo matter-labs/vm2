@@ -3,7 +3,6 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     instruction::{ExecutionEnd, InstructionResult},
     predication::Flags,
-    rollback::Rollback,
     Instruction, Predicate, VirtualMachine,
 };
 use u256::U256;
@@ -85,8 +84,6 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
             if return_type.is_failure() {
                 vm.world
                     .rollback(vm.state.current_frame.world_before_this_frame);
-            } else {
-                vm.world.delete_history();
             }
 
             return if let Some(return_value) = return_value_or_panic {
