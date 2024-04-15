@@ -1,3 +1,4 @@
+#[derive(Clone)]
 pub struct Bitset([u64; 1 << 10]);
 
 impl Bitset {

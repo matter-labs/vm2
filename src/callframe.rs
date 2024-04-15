@@ -1,6 +1,7 @@
 use crate::{bitset::Bitset, modified_world::Snapshot, program::Program, Instruction};
 use u256::{H160, U256};
 
+#[derive(Clone)]
 pub struct Callframe {
     pub address: H160,
     pub code_address: H160,
@@ -39,6 +40,7 @@ pub struct Callframe {
     pub(crate) world_before_this_frame: Snapshot,
 }
 
+#[derive(Clone)]
 struct NearCallFrame {
     call_instruction: u16,
     exception_handler: u16,

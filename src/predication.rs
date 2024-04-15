@@ -3,7 +3,7 @@ const EQ_BIT: u8 = 1 << 1;
 const GT_BIT: u8 = 1 << 2;
 const ALWAYS_BIT: u8 = 1 << 3;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Flags(u8);
 
 impl Flags {
