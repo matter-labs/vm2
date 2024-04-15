@@ -87,6 +87,16 @@ impl State {
         }
     }
 
+    /// Returns the total unspent gas in the VM, including stipends.
+    pub(crate) fn total_unspent_gas(&self) -> u32 {
+        self.current_frame.gas
+            + self
+                .previous_frames
+                .iter()
+                .map(|(_, frame)| frame.contained_gas())
+                .sum::<u32>()
+    }
+
     pub(crate) fn push_frame<const CALLING_MODE: u8>(
         &mut self,
         instruction_pointer: *const Instruction,

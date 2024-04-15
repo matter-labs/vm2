@@ -132,4 +132,14 @@ impl Callframe {
             .get(index as usize)
             .map(|p| p as *const Instruction)
     }
+
+    /// The total amount of gas in this frame, including gas currently inaccessible because of a near call.
+    pub(crate) fn contained_gas(&self) -> u32 {
+        self.gas
+            + self
+                .near_calls
+                .iter()
+                .map(|f| f.previous_frame_gas)
+                .sum::<u32>()
+    }
 }
