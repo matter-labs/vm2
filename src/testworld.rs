@@ -56,7 +56,7 @@ impl World for TestWorld {
             self.address_to_hash
                 .get(&key)
                 .copied()
-                .unwrap_or_else(|| U256::zero())
+                .unwrap_or(U256::zero())
         } else {
             0.into()
         }

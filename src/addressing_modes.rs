@@ -88,7 +88,7 @@ impl Arguments {
             SSTORE_COST => 2,
             SLOAD_COST => 3,
             INVALID_INSTRUCTION_COST => 4,
-            1 | 2 | 3 | 4 => panic!("Reserved gas cost values overlap with actual gas costs"),
+            1..=4 => panic!("Reserved gas cost values overlap with actual gas costs"),
             x => {
                 if x > u8::MAX as u32 {
                     panic!("Gas cost doesn't fit into 8 bits")

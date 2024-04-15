@@ -53,7 +53,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         abi.is_constructor_call,
     );
 
-    let maximum_gas = (vm.state.current_frame.gas / 64 * 63) as u32;
+    let maximum_gas = vm.state.current_frame.gas / 64 * 63;
     let new_frame_gas = abi.gas_to_pass.min(maximum_gas);
     vm.state.current_frame.gas -= new_frame_gas;
 

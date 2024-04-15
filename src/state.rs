@@ -234,7 +234,7 @@ impl Addressable for State {
         &mut self.current_frame.sp
     }
     fn code_page(&self) -> &[U256] {
-        &self.current_frame.program.code_page()
+        self.current_frame.program.code_page()
     }
 }
 
