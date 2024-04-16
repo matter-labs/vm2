@@ -29,3 +29,15 @@ impl Program {
         &self.code_page
     }
 }
+
+// This implementation compares pointers instead of programs.
+//
+// That works well enough for the tests that this is written for.
+// I don't want to implement PartialEq for Instruction because
+// comparing function pointers can work in suprising ways.
+impl PartialEq for Program {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.code_page, &other.code_page)
+            && Arc::ptr_eq(&self.instructions, &other.instructions)
+    }
+}

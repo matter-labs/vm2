@@ -14,7 +14,7 @@ use crate::{
 use std::ops::{Index, IndexMut};
 use u256::{H160, U256};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct State {
     pub registers: [U256; 16],
     pub(crate) register_pointer_flags: u16,
@@ -260,5 +260,16 @@ impl Index<u32> for Heaps {
 impl IndexMut<u32> for Heaps {
     fn index_mut(&mut self, index: u32) -> &mut Self::Output {
         &mut self.0[index as usize]
+    }
+}
+
+impl PartialEq for Heaps {
+    fn eq(&self, other: &Self) -> bool {
+        for i in 0..self.0.len().max(other.0.len()) {
+            if self.0.get(i).unwrap_or(&vec![]) != other.0.get(i).unwrap_or(&vec![]) {
+                return false;
+            }
+        }
+        true
     }
 }
