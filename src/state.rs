@@ -25,7 +25,7 @@ pub struct State {
 
     /// Contains indices to the far call instructions currently being executed.
     /// They are needed to continue execution from the correct spot upon return.
-    previous_frames: Vec<(u16, Callframe)>,
+    pub previous_frames: Vec<(u16, Callframe)>,
 
     pub heaps: Heaps,
 
