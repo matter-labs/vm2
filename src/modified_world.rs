@@ -33,7 +33,7 @@ pub struct ExternalSnapshot {
     written_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Event {
     pub key: U256,
     pub value: U256,

@@ -1,4 +1,4 @@
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Bitset([u64; 1 << 10]);
 
 impl Bitset {

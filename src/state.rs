@@ -14,7 +14,7 @@ use crate::{
 use std::ops::{Index, IndexMut};
 use u256::{H160, U256};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct State {
     pub registers: [U256; 16],
     pub(crate) register_pointer_flags: u16,

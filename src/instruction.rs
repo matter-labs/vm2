@@ -1,6 +1,6 @@
 use crate::{addressing_modes::Arguments, vm::VirtualMachine, Predicate};
 
-#[derive(Hash)]
+#[derive(Hash, Debug)]
 pub struct Instruction {
     pub(crate) handler: Handler,
     pub(crate) arguments: Arguments,

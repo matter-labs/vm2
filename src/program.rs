@@ -7,7 +7,7 @@ use u256::U256;
 // enable changing the internals later.
 
 /// Cloning this is cheap. It is a handle to memory similar to [std::sync::Arc].
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Program {
     code_page: Arc<[U256]>,
     instructions: Arc<[Instruction]>,
