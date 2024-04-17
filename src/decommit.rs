@@ -1,4 +1,4 @@
-use crate::{modified_world::ModifiedWorld, program::Program};
+use crate::{modified_world::ModifiedWorld, program::Program, World};
 use u256::{H160, U256};
 use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
@@ -68,23 +68,24 @@ impl ModifiedWorld {
         let program = self.world.decommit(code_key);
         Some((program, is_evm))
     }
+}
 
-    /// Used to load code when the VM first starts up.
-    /// Doesn't check for any errors.
-    /// Doesn't cost anything but also doesn't make the code free in future decommits.
-    pub(crate) fn initial_decommit(&mut self, address: U256) -> Program {
-        let deployer_system_contract_address =
-            Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
-        let (code_info, _) = self.read_storage(deployer_system_contract_address, address);
+/// May be used to load code when the VM first starts up.
+/// Doesn't check for any errors.
+/// Doesn't cost anything but also doesn't make the code free in future decommits.
+pub fn initial_decommit(world: &mut impl World, address: H160) -> Program {
+    let deployer_system_contract_address =
+        Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
+    let code_info =
+        world.read_storage(deployer_system_contract_address, address_into_u256(address));
 
-        let mut code_info_bytes = [0; 32];
-        code_info.to_big_endian(&mut code_info_bytes);
+    let mut code_info_bytes = [0; 32];
+    code_info.to_big_endian(&mut code_info_bytes);
 
-        code_info_bytes[1] = 0;
-        let code_key: U256 = U256::from_big_endian(&code_info_bytes);
+    code_info_bytes[1] = 0;
+    let code_key: U256 = U256::from_big_endian(&code_info_bytes);
 
-        self.world.decommit(code_key)
-    }
+    world.decommit(code_key)
 }
 
 pub fn address_into_u256(address: H160) -> U256 {

@@ -1,6 +1,7 @@
 use proptest::prelude::*;
 use vm2::{
     addressing_modes::{Immediate1, Immediate2, Register, Register1},
+    initial_decommit,
     testworld::TestWorld,
     ExecutionEnd, Instruction, Predicate, Program, VirtualMachine,
 };
@@ -29,11 +30,13 @@ proptest! {
         let program = Program::new(instructions, vec![]);
 
         let address = Address::from_low_u64_be(0x1234567890abcdef);
-        let world = TestWorld::new(&[(address, program)]);
+        let mut world = TestWorld::new(&[(address, program)]);
+        let program = initial_decommit(&mut world, address);
 
         let mut vm = VirtualMachine::new(
             Box::new(world),
             address,
+            program,
             Address::zero(),
             vec![],
             1000,

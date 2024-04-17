@@ -1,6 +1,6 @@
 use crate::{
-    decommit::address_into_u256, instruction_handlers::free_panic, modified_world::ModifiedWorld,
-    state::State, ExecutionEnd, Instruction, World,
+    instruction_handlers::free_panic, modified_world::ModifiedWorld, state::State, ExecutionEnd,
+    Instruction, Program, World,
 };
 use u256::H160;
 
@@ -26,15 +26,14 @@ impl VirtualMachine {
     pub fn new(
         world: Box<dyn World>,
         address: H160,
+        program: Program,
         caller: H160,
         calldata: Vec<u8>,
         gas: u32,
         settings: Settings,
     ) -> Self {
-        let mut world = ModifiedWorld::new(world);
+        let world = ModifiedWorld::new(world);
         let world_before_this_frame = world.snapshot();
-
-        let program = world.initial_decommit(address_into_u256(address));
 
         Self {
             world,

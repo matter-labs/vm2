@@ -4,6 +4,7 @@ use vm2::{
     addressing_modes::{
         CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
     },
+    initial_decommit,
     instruction_handlers::{Add, CallingMode},
     testworld::TestWorld,
     ExecutionEnd, Instruction, Predicate, Program, VirtualMachine,
@@ -92,9 +93,12 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
         .address_to_hash
         .insert(ethereum_address.into(), ethereum_hash.into());
 
+    let program = initial_decommit(&mut world, main_address);
+
     let mut vm = VirtualMachine::new(
         Box::new(world),
         main_address,
+        program,
         Address::zero(),
         vec![],
         INITIAL_GAS,

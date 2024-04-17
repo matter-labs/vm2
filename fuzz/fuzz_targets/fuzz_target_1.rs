@@ -19,11 +19,13 @@ fuzz_target!(|data: &[u8]| {
     }
 
     let address = H160::from_low_u64_be(0x1234567890abcdef);
-    let world = TestWorld::new(&[(address, Program::new(program, vec![]))]);
+    let mut world = TestWorld::new(&[(address, Program::new(program, vec![]))]);
+    let program = vm2::initial_decommit(&mut world, address);
 
     let mut state = VirtualMachine::new(
         Box::new(world),
         address,
+        program,
         H160::zero(),
         vec![],
         u32::MAX,

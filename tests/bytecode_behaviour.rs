@@ -1,5 +1,8 @@
 use u256::U256;
-use vm2::{decode::decode_program, testworld::TestWorld, ExecutionEnd, Program, VirtualMachine};
+use vm2::{
+    decode::decode_program, initial_decommit, testworld::TestWorld, ExecutionEnd, Program,
+    VirtualMachine,
+};
 use zkevm_opcode_defs::ethereum_types::Address;
 
 fn program_from_file(filename: &str) -> Program {
@@ -25,11 +28,13 @@ fn call_to_invalid_address() {
     // result in an infinite loop.
 
     let address = Address::from_low_u64_be(0x1234567890abcdef);
-    let world = TestWorld::new(&[(address, program_from_file("tests/bytecodes/call_far"))]);
+    let mut world = TestWorld::new(&[(address, program_from_file("tests/bytecodes/call_far"))]);
+    let program = initial_decommit(&mut world, address);
 
     let mut vm = VirtualMachine::new(
         Box::new(world),
         address,
+        program,
         Address::zero(),
         vec![],
         10000,
