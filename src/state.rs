@@ -32,6 +32,8 @@ pub struct State {
     context_u128: u128,
 }
 
+pub const FIRST_HEAP: u32 = 2;
+
 impl State {
     pub(crate) fn new(
         address: H160,
@@ -59,7 +61,7 @@ impl State {
                 address,
                 caller,
                 program,
-                2,
+                FIRST_HEAP,
                 3,
                 1,
                 gas,

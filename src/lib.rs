@@ -23,7 +23,7 @@ pub use instruction::{jump_to_beginning, ExecutionEnd, Instruction};
 pub use modified_world::{Event, ExternalSnapshot, ModifiedWorld};
 pub use predication::Predicate;
 pub use program::Program;
-pub use state::State;
+pub use state::{State, FIRST_HEAP};
 pub use vm::{Settings, VirtualMachine};
 
 pub trait World {
