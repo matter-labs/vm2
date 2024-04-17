@@ -173,8 +173,9 @@ fn decode(raw: u64, is_bootloader: bool) -> Instruction {
             zkevm_opcode_defs::ContextOpcode::Meta => {
                 Instruction::from_context_meta(out.try_into().unwrap(), predicate)
             }
-            /*zkevm_opcode_defs::ContextOpcode::SetErgsPerPubdataByte => ,
-            zkevm_opcode_defs::ContextOpcode::IncrementTxNumber => ,*/
+            zkevm_opcode_defs::ContextOpcode::IncrementTxNumber => {
+                Instruction::from_increment_tx_number(predicate)
+            }
             x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Context(x)),
         },
         zkevm_opcode_defs::Opcode::Ptr(x) => match x {

@@ -29,6 +29,8 @@ pub struct State {
 
     pub heaps: Heaps,
 
+    pub transaction_number: u16,
+
     context_u128: u128,
 }
 
@@ -76,6 +78,8 @@ impl State {
             // The first heap can never be used because heap zero
             // means the current heap in precompile calls
             heaps: Heaps(vec![vec![], calldata, vec![], vec![]]),
+
+            transaction_number: 0,
             context_u128: 0,
         }
     }

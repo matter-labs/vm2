@@ -96,6 +96,15 @@ fn set_context_u128(vm: &mut VirtualMachine, instruction: *const Instruction) ->
     })
 }
 
+fn increment_tx_number(
+    vm: &mut VirtualMachine,
+    instruction: *const Instruction,
+) -> InstructionResult {
+    instruction_boilerplate(vm, instruction, |vm, _| {
+        vm.state.transaction_number = vm.state.transaction_number.wrapping_add(1);
+    })
+}
+
 impl Instruction {
     fn from_context<Op: ContextOp>(out: Register1, predicate: Predicate) -> Self {
         Self {
@@ -129,6 +138,12 @@ impl Instruction {
         Self {
             handler: set_context_u128,
             arguments: Arguments::new(predicate, 5).write_source(&src),
+        }
+    }
+    pub fn from_increment_tx_number(predicate: Predicate) -> Self {
+        Self {
+            handler: increment_tx_number,
+            arguments: Arguments::new(predicate, 5),
         }
     }
 }
