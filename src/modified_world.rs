@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::{
     rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackableSet},
     World,
@@ -95,8 +97,8 @@ impl ModifiedWorld {
         }
     }
 
-    pub fn get_storage_changes(&self) -> impl Iterator<Item = ((H160, U256), U256)> + '_ {
-        self.storage_changes.as_ref().iter().map(|(k, v)| (*k, *v))
+    pub fn get_storage_changes(&self) -> &BTreeMap<(H160, U256), U256> {
+        self.storage_changes.as_ref()
     }
 
     pub fn record_event(&mut self, event: Event) {
