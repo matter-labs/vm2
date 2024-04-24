@@ -236,7 +236,18 @@ fn decode(raw: u64, is_bootloader: bool) -> Instruction {
             zkevm_opcode_defs::LogOpcode::StorageWrite => {
                 Instruction::from_sstore(src1.try_into().unwrap(), src2, predicate)
             }
-            //zkevm_opcode_defs::LogOpcode::ToL1Message => ,
+            // TODO: This is obviously wrong but I want to nop instead of crashing
+            zkevm_opcode_defs::LogOpcode::ToL1Message => Instruction::from_nop(
+                AdvanceStackPointer(RegisterAndImmediate {
+                    immediate: 0,
+                    register: Register::new(0),
+                }),
+                AdvanceStackPointer(RegisterAndImmediate {
+                    immediate: 0,
+                    register: Register::new(0),
+                }),
+                Predicate::Always,
+            ),
             zkevm_opcode_defs::LogOpcode::Event => Instruction::from_event(
                 src1.try_into().unwrap(),
                 src2,
