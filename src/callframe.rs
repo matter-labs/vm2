@@ -50,6 +50,7 @@ struct NearCallFrame {
 }
 
 impl Callframe {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         address: H160,
         code_address: H160,

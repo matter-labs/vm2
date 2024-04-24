@@ -105,6 +105,7 @@ impl State {
                 .sum::<u32>()
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_frame<const CALLING_MODE: u8>(
         &mut self,
         instruction_pointer: *const Instruction,
