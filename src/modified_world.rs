@@ -41,7 +41,7 @@ pub struct Event {
     pub value: U256,
     pub is_first: bool,
     pub shard_id: u8,
-    pub tx_number: u32,
+    pub tx_number: u16,
 }
 
 impl ModifiedWorld {
