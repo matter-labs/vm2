@@ -22,8 +22,8 @@ fn event(vm: &mut VirtualMachine, instruction: *const Instruction) -> Instructio
                 key,
                 value,
                 is_first,
-                shard_id: 0,  // TODO
-                tx_number: 0, // TODO
+                shard_id: 0, // shards currently aren't supported
+                tx_number: vm.state.transaction_number,
             });
         }
 
