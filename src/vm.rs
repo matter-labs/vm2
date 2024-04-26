@@ -1,6 +1,6 @@
 use crate::{
-    instruction_handlers::free_panic, modified_world::ModifiedWorld, state::State, ExecutionEnd,
-    Instruction, Program, World,
+    instruction_handlers::free_panic, modified_world::ModifiedWorld, stack::StackPool,
+    state::State, ExecutionEnd, Instruction, Program, World,
 };
 use u256::H160;
 
@@ -20,6 +20,8 @@ pub struct VirtualMachine {
     pub state: State,
 
     pub(crate) settings: Settings,
+
+    pub(crate) stack_pool: StackPool,
 }
 
 impl VirtualMachine {
@@ -34,6 +36,7 @@ impl VirtualMachine {
     ) -> Self {
         let world = ModifiedWorld::new(world);
         let world_before_this_frame = world.snapshot();
+        let mut stack_pool = StackPool::default();
 
         Self {
             world,
@@ -44,8 +47,10 @@ impl VirtualMachine {
                 gas,
                 program,
                 world_before_this_frame,
+                stack_pool.get(),
             ),
             settings,
+            stack_pool,
         }
     }
 

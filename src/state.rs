@@ -1,7 +1,7 @@
 use crate::{
     addressing_modes::Addressable, bitset::Bitset, callframe::Callframe,
     decommit::u256_into_address, fat_pointer::FatPointer, instruction_handlers::CallingMode,
-    modified_world::Snapshot, predication::Flags, program::Program, Instruction,
+    modified_world::Snapshot, predication::Flags, program::Program, stack::Stack, Instruction,
 };
 use std::ops::{Index, IndexMut};
 use u256::{H160, U256};
@@ -37,6 +37,7 @@ impl State {
         gas: u32,
         program: Program,
         world_before_this_frame: Snapshot,
+        stack: Box<Stack>,
     ) -> Self {
         let mut registers: [U256; 16] = Default::default();
         registers[1] = FatPointer {
@@ -56,6 +57,7 @@ impl State {
                 address,
                 caller,
                 program,
+                stack,
                 FIRST_HEAP,
                 3,
                 1,
@@ -109,6 +111,7 @@ impl State {
         is_static: bool,
         calldata_heap: u32,
         world_before_this_frame: Snapshot,
+        stack: Box<Stack>,
     ) {
         let new_heap = self.heaps.0.len() as u32;
 
@@ -133,6 +136,7 @@ impl State {
                 u256_into_address(self.registers[15])
             },
             program,
+            stack,
             new_heap,
             new_heap + 1,
             calldata_heap,
@@ -154,8 +158,11 @@ impl State {
         self.previous_frames.push((old_pc, new_frame));
     }
 
-    pub(crate) fn pop_frame(&mut self, heap_to_keep: Option<u32>) -> Option<(u16, u16, Snapshot)> {
-        self.previous_frames.pop().map(|(pc, frame)| {
+    pub(crate) fn pop_frame(
+        &mut self,
+        heap_to_keep: Option<u32>,
+    ) -> Option<(u16, u16, Snapshot, Box<Stack>)> {
+        self.previous_frames.pop().map(|(pc, mut frame)| {
             for &heap in [self.current_frame.heap, self.current_frame.aux_heap]
                 .iter()
                 .chain(&self.current_frame.heaps_i_am_keeping_alive)
@@ -165,15 +172,19 @@ impl State {
                 }
             }
 
-            let eh = self.current_frame.exception_handler;
-            let snapshot = self.current_frame.world_before_this_frame;
+            std::mem::swap(&mut self.current_frame, &mut frame);
+            let Callframe {
+                exception_handler,
+                world_before_this_frame,
+                stack,
+                ..
+            } = frame;
 
-            self.current_frame = frame;
             self.current_frame
                 .heaps_i_am_keeping_alive
                 .extend(heap_to_keep);
 
-            (pc, eh, snapshot)
+            (pc, exception_handler, world_before_this_frame, stack)
         })
     }
 
@@ -184,12 +195,14 @@ impl State {
         instruction_pointer: *const Instruction,
         exception_handler: u16,
         world_before_this_frame: Snapshot,
+        stack: Box<Stack>,
     ) {
         let mut new_frame = Callframe::new(
             H160::zero(),
             H160::zero(),
             H160::zero(),
             Program::new(vec![], vec![]),
+            stack,
             0,
             0,
             0,
@@ -223,10 +236,10 @@ impl Addressable for State {
         &mut self.register_pointer_flags
     }
     fn stack(&mut self) -> &mut [U256; 1 << 16] {
-        &mut self.current_frame.stack
+        &mut self.current_frame.stack.slots
     }
     fn stack_pointer_flags(&mut self) -> &mut Bitset {
-        &mut self.current_frame.stack_pointer_flags
+        &mut self.current_frame.stack.pointer_flags
     }
     fn stack_pointer(&mut self) -> &mut u16 {
         &mut self.current_frame.sp

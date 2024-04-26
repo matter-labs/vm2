@@ -76,7 +76,7 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
             .gas
             .saturating_sub(vm.state.current_frame.stipend);
 
-        let Some((pc, eh, snapshot)) = vm.state.pop_frame(
+        let Some((pc, eh, snapshot, stack)) = vm.state.pop_frame(
             return_value_or_panic
                 .as_ref()
                 .map(|pointer| pointer.memory_page),
@@ -99,6 +99,7 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
                 Err(ExecutionEnd::Panicked)
             };
         };
+        vm.stack_pool.recycle(stack);
 
         vm.state.set_context_u128(0);
         vm.state.registers = [U256::zero(); 16];

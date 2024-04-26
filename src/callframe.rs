@@ -1,5 +1,5 @@
-use crate::{bitset::Bitset, modified_world::Snapshot, program::Program, Instruction};
-use u256::{H160, U256};
+use crate::{modified_world::Snapshot, program::Program, stack::Stack, Instruction};
+use u256::H160;
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Callframe {
@@ -12,8 +12,7 @@ pub struct Callframe {
     pub is_static: bool,
 
     // TODO: joint allocate these.
-    pub stack: Box<[U256; 1 << 16]>,
-    pub stack_pointer_flags: Box<Bitset>,
+    pub stack: Box<Stack>,
 
     pub heap: u32,
     pub aux_heap: u32,
@@ -55,6 +54,7 @@ impl Callframe {
         code_address: H160,
         caller: H160,
         program: Program,
+        stack: Box<Stack>,
         heap: u32,
         aux_heap: u32,
         calldata_heap: u32,
@@ -72,11 +72,7 @@ impl Callframe {
             program,
             context_u128,
             is_static,
-            stack: vec![U256::zero(); 1 << 16]
-                .into_boxed_slice()
-                .try_into()
-                .unwrap(),
-            stack_pointer_flags: Default::default(),
+            stack,
             heap,
             aux_heap,
             calldata_heap,
