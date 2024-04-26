@@ -5,6 +5,7 @@ use crate::{
 };
 use std::ops::{Index, IndexMut};
 use u256::{H160, U256};
+use zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND;
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct State {
@@ -112,7 +113,10 @@ impl State {
     ) {
         let new_heap = self.heaps.0.len() as u32;
 
-        self.heaps.0.extend([vec![], vec![]]);
+        self.heaps.0.extend([
+            vec![0; NEW_FRAME_MEMORY_STIPEND as usize],
+            vec![0; NEW_FRAME_MEMORY_STIPEND as usize],
+        ]);
 
         let mut new_frame = Callframe::new(
             if CALLING_MODE == CallingMode::Delegate as u8 {
