@@ -12,6 +12,7 @@ mod modified_world;
 mod predication;
 mod program;
 mod rollback;
+mod stack;
 mod state;
 pub mod testworld;
 mod vm;

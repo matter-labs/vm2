@@ -56,9 +56,11 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     let new_frame_gas = abi.gas_to_pass.min(maximum_gas);
     vm.state.current_frame.gas -= new_frame_gas;
 
+    let stack = vm.stack_pool.get();
+
     let (Some(calldata), Some((program, is_evm_interpreter))) = (calldata, decommit_result) else {
         vm.state
-            .push_dummy_frame(instruction, exception_handler, vm.world.snapshot());
+            .push_dummy_frame(instruction, exception_handler, vm.world.snapshot(), stack);
         return Ok(&INVALID_INSTRUCTION);
     };
 
@@ -81,6 +83,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         IS_STATIC && !is_evm_interpreter,
         calldata.memory_page,
         vm.world.snapshot(),
+        stack,
     );
 
     vm.state.flags = Flags::new(false, false, false);
