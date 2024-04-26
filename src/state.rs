@@ -1,15 +1,7 @@
 use crate::{
-    address_into_u256,
-    addressing_modes::Addressable,
-    bitset::Bitset,
-    callframe::Callframe,
-    decommit::{is_kernel, u256_into_address},
-    fat_pointer::FatPointer,
-    instruction_handlers::CallingMode,
-    modified_world::Snapshot,
-    predication::Flags,
-    program::Program,
-    Instruction,
+    addressing_modes::Addressable, bitset::Bitset, callframe::Callframe,
+    decommit::u256_into_address, fat_pointer::FatPointer, instruction_handlers::CallingMode,
+    modified_world::Snapshot, predication::Flags, program::Program, Instruction,
 };
 use std::ops::{Index, IndexMut};
 use u256::{H160, U256};
@@ -118,14 +110,8 @@ impl State {
         world_before_this_frame: Snapshot,
     ) {
         let new_heap = self.heaps.0.len() as u32;
-        let new_heap_len = if is_kernel(address_into_u256(code_address)) {
-            zkevm_opcode_defs::system_params::NEW_KERNEL_FRAME_MEMORY_STIPEND
-        } else {
-            zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND
-        } as usize;
-        self.heaps
-            .0
-            .extend([vec![0; new_heap_len], vec![0; new_heap_len]]);
+
+        self.heaps.0.extend([vec![], vec![]]);
 
         let mut new_frame = Callframe::new(
             if CALLING_MODE == CallingMode::Delegate as u8 {
