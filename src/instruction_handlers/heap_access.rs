@@ -12,7 +12,7 @@ use crate::{
     ExecutionEnd, Instruction, Predicate, VirtualMachine,
 };
 use u256::U256;
-use zkevm_opcode_defs::system_params::{NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND};
+use zkevm_opcode_defs::system_params::NEW_KERNEL_FRAME_MEMORY_STIPEND;
 
 pub trait HeapFromState {
     fn get_heap(state: &mut State) -> &mut Vec<u8>;
@@ -117,13 +117,12 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
 }
 
 pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<(), ()> {
-    let stipend = if is_kernel(address_into_u256(state.current_frame.code_address)) {
-        NEW_KERNEL_FRAME_MEMORY_STIPEND
-    } else {
-        NEW_FRAME_MEMORY_STIPEND
-    };
     let heap_length = H::get_heap(state).len() as u32;
-    let already_paid = heap_length.max(stipend);
+    let already_paid = if is_kernel(address_into_u256(state.current_frame.code_address)) {
+        heap_length.max(NEW_KERNEL_FRAME_MEMORY_STIPEND)
+    } else {
+        heap_length
+    };
 
     state.use_gas(new_bound.saturating_sub(already_paid))?;
     if heap_length < new_bound {
