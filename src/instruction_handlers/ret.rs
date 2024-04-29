@@ -1,6 +1,7 @@
 use super::far_call::get_far_call_calldata;
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
+    callframe::FrameRemnant,
     instruction::{ExecutionEnd, InstructionResult},
     predication::Flags,
     Instruction, Predicate, VirtualMachine,
@@ -39,16 +40,19 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
     let mut return_type = ReturnType::from_u8(RETURN_TYPE);
     let near_call_leftover_gas = vm.state.current_frame.gas;
 
-    let (pc, snapshot, leftover_gas) = if let Some((pc, eh, snapshot)) =
-        vm.state.current_frame.pop_near_call()
+    let (pc, snapshot, leftover_gas) = if let Some(FrameRemnant {
+        program_counter,
+        exception_handler,
+        snapshot,
+    }) = vm.state.current_frame.pop_near_call()
     {
         (
             if TO_LABEL {
                 Immediate1::get(args, &mut vm.state).low_u32() as u16
             } else if return_type.is_failure() {
-                eh
+                exception_handler
             } else {
-                pc.wrapping_add(1)
+                program_counter.wrapping_add(1)
             },
             snapshot,
             near_call_leftover_gas,
@@ -76,11 +80,16 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
             .gas
             .saturating_sub(vm.state.current_frame.stipend);
 
-        let Some((pc, eh, snapshot)) = vm.state.pop_frame(
+        let Some(FrameRemnant {
+            program_counter,
+            exception_handler,
+            snapshot,
+        }) = vm.pop_frame(
             return_value_or_panic
                 .as_ref()
                 .map(|pointer| pointer.memory_page),
-        ) else {
+        )
+        else {
             if return_type.is_failure() {
                 vm.world
                     .rollback(vm.state.current_frame.world_before_this_frame);
@@ -110,9 +119,9 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
 
         (
             if return_type.is_failure() {
-                eh
+                exception_handler
             } else {
-                pc.wrapping_add(1)
+                program_counter.wrapping_add(1)
             },
             snapshot,
             leftover_gas,
@@ -126,6 +135,29 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
     vm.state.current_frame.gas += leftover_gas;
 
     match vm.state.current_frame.pc_from_u16(pc) {
+        Some(i) => Ok(i),
+        None => Ok(&INVALID_INSTRUCTION),
+    }
+}
+
+/// Formally, a far call pushes a new frame and returns from it immediately if it panics.
+/// This function instead panics without popping a frame to save on allocation.
+/// TODO: when tracers are implemented, this function should count as a separate instruction!
+pub(crate) fn panic_from_failed_far_call(
+    vm: &mut VirtualMachine,
+    exception_handler: u16,
+) -> InstructionResult {
+    // Gas is already subtracted in the far call code.
+    // No need to roll back, as no changes are made in this "frame".
+
+    vm.state.set_context_u128(0);
+
+    vm.state.registers = [U256::zero(); 16];
+    vm.state.register_pointer_flags = 2;
+
+    vm.state.flags = Flags::new(true, false, false);
+
+    match vm.state.current_frame.pc_from_u16(exception_handler) {
         Some(i) => Ok(i),
         None => Ok(&INVALID_INSTRUCTION),
     }

@@ -1,4 +1,4 @@
-use super::{heap_access::grow_heap, ret::INVALID_INSTRUCTION, AuxHeap, Heap};
+use super::{heap_access::grow_heap, ret::panic_from_failed_far_call, AuxHeap, Heap};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
     decommit::u256_into_address,
@@ -57,9 +57,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     vm.state.current_frame.gas -= new_frame_gas;
 
     let (Some(calldata), Some((program, is_evm_interpreter))) = (calldata, decommit_result) else {
-        vm.state
-            .push_dummy_frame(instruction, exception_handler, vm.world.snapshot());
-        return Ok(&INVALID_INSTRUCTION);
+        return panic_from_failed_far_call(vm, exception_handler);
     };
 
     let stipend = if is_evm_interpreter {
@@ -71,7 +69,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         .checked_add(stipend)
         .expect("stipend must not cause overflow");
 
-    vm.state.push_frame::<CALLING_MODE>(
+    vm.push_frame::<CALLING_MODE>(
         instruction,
         u256_into_address(destination_address),
         program,

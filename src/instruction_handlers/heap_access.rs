@@ -1,15 +1,18 @@
 use super::{common::instruction_boilerplate_with_panic, PANIC};
 use crate::{
+    address_into_u256,
     addressing_modes::{
         Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
         RegisterOrImmediate, Source,
     },
+    decommit::is_kernel,
     fat_pointer::FatPointer,
     instruction::InstructionResult,
     state::State,
     ExecutionEnd, Instruction, Predicate, VirtualMachine,
 };
 use u256::U256;
+use zkevm_opcode_defs::system_params::NEW_KERNEL_FRAME_MEMORY_STIPEND;
 
 pub trait HeapFromState {
     fn get_heap(state: &mut State) -> &mut Vec<u8>;
@@ -114,10 +117,15 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
 }
 
 pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<(), ()> {
-    if let Some(growth) = new_bound.checked_sub(H::get_heap(state).len() as u32) {
-        state.use_gas(growth)?;
+    let heap_length = H::get_heap(state).len() as u32;
+    let already_paid = if is_kernel(address_into_u256(state.current_frame.code_address)) {
+        heap_length.max(NEW_KERNEL_FRAME_MEMORY_STIPEND)
+    } else {
+        heap_length
+    };
 
-        // This will not cause frequent reallocations; it allocates in a geometric series like push.
+    state.use_gas(new_bound.saturating_sub(already_paid))?;
+    if heap_length < new_bound {
         H::get_heap(state).resize(new_bound as usize, 0);
     }
     Ok(())

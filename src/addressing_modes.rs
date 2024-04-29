@@ -22,7 +22,8 @@ pub trait Addressable {
     fn registers(&mut self) -> &mut [U256; 16];
     fn register_pointer_flags(&mut self) -> &mut u16;
 
-    fn stack(&mut self) -> &mut [U256; 1 << 16];
+    fn read_stack(&mut self, slot: u16) -> U256;
+    fn write_stack(&mut self, slot: u16, value: U256);
     fn stack_pointer_flags(&mut self) -> &mut Bitset;
     fn stack_pointer(&mut self) -> &mut u16;
 
@@ -266,7 +267,7 @@ trait StackAddressing {
 impl<T: StackAddressing> Source for T {
     fn get(args: &Arguments, state: &mut impl Addressable) -> U256 {
         let address = Self::address_for_get(args, state);
-        state.stack()[address as usize]
+        state.read_stack(address)
     }
 
     fn is_fat_pointer(args: &Arguments, state: &mut impl Addressable) -> bool {
@@ -278,13 +279,13 @@ impl<T: StackAddressing> Source for T {
 impl<T: StackAddressing> Destination for T {
     fn set(args: &Arguments, state: &mut impl Addressable, value: U256) {
         let address = Self::address_for_set(args, state);
-        state.stack()[address as usize] = value;
+        state.write_stack(address, value);
         state.stack_pointer_flags().clear(address);
     }
 
     fn set_fat_ptr(args: &Arguments, state: &mut impl Addressable, value: U256) {
         let address = Self::address_for_set(args, state);
-        state.stack()[address as usize] = value;
+        state.write_stack(address, value);
         state.stack_pointer_flags().set(address);
     }
 }

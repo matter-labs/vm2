@@ -1,8 +1,14 @@
 use crate::{
-    instruction_handlers::free_panic, modified_world::ModifiedWorld, state::State, ExecutionEnd,
-    Instruction, Program, World,
+    callframe::{Callframe, FrameRemnant},
+    decommit::u256_into_address,
+    instruction_handlers::{free_panic, CallingMode},
+    modified_world::{ModifiedWorld, Snapshot},
+    stack::StackPool,
+    state::State,
+    ExecutionEnd, Instruction, Program, World,
 };
 use u256::H160;
+use zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND;
 
 pub struct Settings {
     pub default_aa_code_hash: [u8; 32],
@@ -20,6 +26,8 @@ pub struct VirtualMachine {
     pub state: State,
 
     pub(crate) settings: Settings,
+
+    pub(crate) stack_pool: StackPool,
 }
 
 impl VirtualMachine {
@@ -34,6 +42,7 @@ impl VirtualMachine {
     ) -> Self {
         let world = ModifiedWorld::new(world);
         let world_before_this_frame = world.snapshot();
+        let mut stack_pool = StackPool::default();
 
         Self {
             world,
@@ -44,8 +53,10 @@ impl VirtualMachine {
                 gas,
                 program,
                 world_before_this_frame,
+                stack_pool.get(),
             ),
             settings,
+            stack_pool,
         }
     }
 
@@ -132,6 +143,104 @@ impl VirtualMachine {
             .total_unspent_gas()
             .checked_sub(minimum_gas)
             .map(|left| (left, end))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_frame<const CALLING_MODE: u8>(
+        &mut self,
+        instruction_pointer: *const Instruction,
+        code_address: H160,
+        program: Program,
+        gas: u32,
+        stipend: u32,
+        exception_handler: u16,
+        is_static: bool,
+        calldata_heap: u32,
+        world_before_this_frame: Snapshot,
+    ) {
+        let new_heap = self.state.heaps.0.len() as u32;
+
+        self.state.heaps.0.extend([
+            vec![0; NEW_FRAME_MEMORY_STIPEND as usize],
+            vec![0; NEW_FRAME_MEMORY_STIPEND as usize],
+        ]);
+
+        let mut new_frame = Callframe::new(
+            if CALLING_MODE == CallingMode::Delegate as u8 {
+                self.state.current_frame.address
+            } else {
+                code_address
+            },
+            code_address,
+            if CALLING_MODE == CallingMode::Normal as u8 {
+                self.state.current_frame.address
+            } else if CALLING_MODE == CallingMode::Delegate as u8 {
+                self.state.current_frame.caller
+            } else {
+                // Mimic call
+                u256_into_address(self.state.registers[15])
+            },
+            program,
+            self.stack_pool.get(),
+            new_heap,
+            new_heap + 1,
+            calldata_heap,
+            gas,
+            stipend,
+            exception_handler,
+            if CALLING_MODE == CallingMode::Delegate as u8 {
+                self.state.current_frame.context_u128
+            } else {
+                self.state.context_u128
+            },
+            is_static || self.state.current_frame.is_static,
+            world_before_this_frame,
+        );
+        self.state.context_u128 = 0;
+
+        let old_pc = self.state.current_frame.pc_to_u16(instruction_pointer);
+        std::mem::swap(&mut new_frame, &mut self.state.current_frame);
+        self.state.previous_frames.push((old_pc, new_frame));
+    }
+
+    pub(crate) fn pop_frame(&mut self, heap_to_keep: Option<u32>) -> Option<FrameRemnant> {
+        self.state
+            .previous_frames
+            .pop()
+            .map(|(program_counter, mut frame)| {
+                for &heap in [
+                    self.state.current_frame.heap,
+                    self.state.current_frame.aux_heap,
+                ]
+                .iter()
+                .chain(&self.state.current_frame.heaps_i_am_keeping_alive)
+                {
+                    if Some(heap) != heap_to_keep {
+                        self.state.heaps.deallocate(heap);
+                    }
+                }
+
+                std::mem::swap(&mut self.state.current_frame, &mut frame);
+                let Callframe {
+                    exception_handler,
+                    world_before_this_frame,
+                    stack,
+                    ..
+                } = frame;
+
+                self.stack_pool.recycle(stack);
+
+                self.state
+                    .current_frame
+                    .heaps_i_am_keeping_alive
+                    .extend(heap_to_keep);
+
+                FrameRemnant {
+                    program_counter,
+                    exception_handler,
+                    snapshot: world_before_this_frame,
+                }
+            })
     }
 
     #[cfg(trace)]
