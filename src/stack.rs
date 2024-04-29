@@ -1,4 +1,5 @@
 use crate::bitset::Bitset;
+use std::alloc::{alloc_zeroed, Layout};
 use u256::U256;
 
 #[derive(Clone, PartialEq, Debug)]
@@ -9,10 +10,7 @@ pub struct Stack {
 
 impl Stack {
     pub(crate) fn new() -> Box<Self> {
-        Box::new(Stack {
-            pointer_flags: Default::default(),
-            slots: [U256::zero(); 1 << 16],
-        })
+        unsafe { Box::from_raw(alloc_zeroed(Layout::new::<Stack>()).cast::<Stack>()) }
     }
     fn zero(&mut self) {
         self.pointer_flags = Default::default();
