@@ -132,6 +132,29 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
     }
 }
 
+/// Formally, a far call pushes a new frame and returns from it immediately if it panics.
+/// This function instead panics without popping a frame to save on allocation.
+/// TODO: when tracers are implemented, this function should count as a separate instruction!
+pub(crate) fn panic_from_failed_far_call(
+    vm: &mut VirtualMachine,
+    exception_handler: u16,
+) -> InstructionResult {
+    // Gas is already subtracted in the far call code.
+    // No need to roll back, as no changes are made in this "frame".
+
+    vm.state.set_context_u128(0);
+
+    vm.state.registers = [U256::zero(); 16];
+    vm.state.register_pointer_flags = 2;
+
+    vm.state.flags = Flags::new(true, false, false);
+
+    match vm.state.current_frame.pc_from_u16(exception_handler) {
+        Some(i) => Ok(i),
+        None => Ok(&INVALID_INSTRUCTION),
+    }
+}
+
 /// Panics, burning all available gas.
 pub const INVALID_INSTRUCTION: Instruction = Instruction {
     handler: ret::<{ ReturnType::Panic as u8 }, false>,

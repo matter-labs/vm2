@@ -8,7 +8,7 @@ pub struct Stack {
 }
 
 impl Stack {
-    fn new() -> Box<Self> {
+    pub(crate) fn new() -> Box<Self> {
         Box::new(Stack {
             pointer_flags: Default::default(),
             slots: [U256::zero(); 1 << 16],

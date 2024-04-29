@@ -1,4 +1,4 @@
-use super::{heap_access::grow_heap, ret::INVALID_INSTRUCTION, AuxHeap, Heap};
+use super::{heap_access::grow_heap, ret::panic_from_failed_far_call, AuxHeap, Heap};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
     decommit::u256_into_address,
@@ -56,12 +56,8 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     let new_frame_gas = abi.gas_to_pass.min(maximum_gas);
     vm.state.current_frame.gas -= new_frame_gas;
 
-    let stack = vm.stack_pool.get();
-
     let (Some(calldata), Some((program, is_evm_interpreter))) = (calldata, decommit_result) else {
-        vm.state
-            .push_dummy_frame(instruction, exception_handler, vm.world.snapshot(), stack);
-        return Ok(&INVALID_INSTRUCTION);
+        return panic_from_failed_far_call(vm, exception_handler);
     };
 
     let stipend = if is_evm_interpreter {
@@ -83,7 +79,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         IS_STATIC && !is_evm_interpreter,
         calldata.memory_page,
         vm.world.snapshot(),
-        stack,
+        vm.stack_pool.get(),
     );
 
     vm.state.flags = Flags::new(false, false, false);
