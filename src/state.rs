@@ -189,37 +189,6 @@ impl State {
         })
     }
 
-    /// Pushes a new frame with only the exception handler set to a sensible value.
-    /// Only to be used when far call panics.
-    pub(crate) fn push_dummy_frame(
-        &mut self,
-        instruction_pointer: *const Instruction,
-        exception_handler: u16,
-        world_before_this_frame: Snapshot,
-        stack: Box<Stack>,
-    ) {
-        let mut new_frame = Callframe::new(
-            H160::zero(),
-            H160::zero(),
-            H160::zero(),
-            Program::new(vec![], vec![]),
-            stack,
-            0,
-            0,
-            0,
-            0,
-            0,
-            exception_handler,
-            0,
-            false,
-            world_before_this_frame,
-        );
-
-        let old_pc = self.current_frame.pc_to_u16(instruction_pointer);
-        std::mem::swap(&mut new_frame, &mut self.current_frame);
-        self.previous_frames.push((old_pc, new_frame));
-    }
-
     pub(crate) fn set_context_u128(&mut self, value: u128) {
         self.context_u128 = value;
     }
