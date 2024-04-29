@@ -5,20 +5,40 @@ use u256::U256;
 #[derive(Clone, PartialEq, Debug)]
 pub struct Stack {
     pub pointer_flags: Bitset,
-    pub slots: [U256; 1 << 16],
+    dirty_areas: u64,
+    slots: [U256; 1 << 16],
 }
+
+const NUMBER_OF_DIRTY_AREAS: usize = 64;
+const DIRTY_AREA_SIZE: usize = (1 << 16) / NUMBER_OF_DIRTY_AREAS;
 
 impl Stack {
     pub(crate) fn new() -> Box<Self> {
         unsafe { Box::from_raw(alloc_zeroed(Layout::new::<Stack>()).cast::<Stack>()) }
     }
-    fn zero(&mut self) {
-        self.pointer_flags = Default::default();
 
-        // This loop results in just one call to _bzero unlike setting self.slots
-        for slot in self.slots.iter_mut() {
-            *slot = U256::zero();
+    pub(crate) fn get(&self, slot: u16) -> U256 {
+        self.slots[slot as usize]
+    }
+
+    pub(crate) fn set(&mut self, slot: u16, value: U256) {
+        let written_area = slot as usize / DIRTY_AREA_SIZE;
+        self.dirty_areas |= 1 << written_area;
+
+        self.slots[slot as usize] = value;
+    }
+
+    fn zero(&mut self) {
+        for i in 0..NUMBER_OF_DIRTY_AREAS {
+            if self.dirty_areas & (1 << i) != 0 {
+                for slot in self.slots[i * DIRTY_AREA_SIZE..(i + 1) * DIRTY_AREA_SIZE].iter_mut() {
+                    *slot = U256::zero();
+                }
+            }
         }
+
+        self.dirty_areas = 0;
+        self.pointer_flags = Default::default();
     }
 }
 

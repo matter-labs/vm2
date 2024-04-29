@@ -207,10 +207,10 @@ impl Addressable for State {
     }
 
     fn read_stack(&mut self, slot: u16) -> U256 {
-        self.current_frame.stack.slots[slot as usize]
+        self.current_frame.stack.get(slot)
     }
     fn write_stack(&mut self, slot: u16, value: U256) {
-        self.current_frame.stack.slots[slot as usize] = value;
+        self.current_frame.stack.set(slot, value)
     }
     fn stack_pointer_flags(&mut self) -> &mut Bitset {
         &mut self.current_frame.stack.pointer_flags
