@@ -104,15 +104,16 @@ impl Callframe {
         self.gas = gas_to_call;
     }
 
-    pub(crate) fn pop_near_call(&mut self) -> Option<(u16, u16, Snapshot)> {
+    pub(crate) fn pop_near_call(&mut self) -> Option<FrameRemnant> {
         self.near_calls.pop().map(|f| {
             self.sp = f.previous_frame_sp;
             self.gas = f.previous_frame_gas;
-            (
-                f.call_instruction,
-                f.exception_handler,
-                f.world_before_this_frame,
-            )
+
+            FrameRemnant {
+                program_counter: f.call_instruction,
+                exception_handler: f.exception_handler,
+                snapshot: f.world_before_this_frame,
+            }
         })
     }
 
@@ -136,4 +137,10 @@ impl Callframe {
                 .map(|f| f.previous_frame_gas)
                 .sum::<u32>()
     }
+}
+
+pub(crate) struct FrameRemnant {
+    pub(crate) program_counter: u16,
+    pub(crate) exception_handler: u16,
+    pub(crate) snapshot: Snapshot,
 }

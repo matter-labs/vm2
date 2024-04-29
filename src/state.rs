@@ -1,11 +1,9 @@
 use crate::{
-    addressing_modes::Addressable, bitset::Bitset, callframe::Callframe,
-    decommit::u256_into_address, fat_pointer::FatPointer, instruction_handlers::CallingMode,
-    modified_world::Snapshot, predication::Flags, program::Program, stack::Stack, Instruction,
+    addressing_modes::Addressable, bitset::Bitset, callframe::Callframe, fat_pointer::FatPointer,
+    modified_world::Snapshot, predication::Flags, program::Program, stack::Stack,
 };
 use std::ops::{Index, IndexMut};
 use u256::{H160, U256};
-use zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND;
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct State {
@@ -24,7 +22,7 @@ pub struct State {
 
     pub transaction_number: u16,
 
-    context_u128: u128,
+    pub(crate) context_u128: u128,
 }
 
 pub const FIRST_HEAP: u32 = 2;
@@ -100,95 +98,6 @@ impl State {
                 .sum::<u32>()
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn push_frame<const CALLING_MODE: u8>(
-        &mut self,
-        instruction_pointer: *const Instruction,
-        code_address: H160,
-        program: Program,
-        gas: u32,
-        stipend: u32,
-        exception_handler: u16,
-        is_static: bool,
-        calldata_heap: u32,
-        world_before_this_frame: Snapshot,
-        stack: Box<Stack>,
-    ) {
-        let new_heap = self.heaps.0.len() as u32;
-
-        self.heaps.0.extend([
-            vec![0; NEW_FRAME_MEMORY_STIPEND as usize],
-            vec![0; NEW_FRAME_MEMORY_STIPEND as usize],
-        ]);
-
-        let mut new_frame = Callframe::new(
-            if CALLING_MODE == CallingMode::Delegate as u8 {
-                self.current_frame.address
-            } else {
-                code_address
-            },
-            code_address,
-            if CALLING_MODE == CallingMode::Normal as u8 {
-                self.current_frame.address
-            } else if CALLING_MODE == CallingMode::Delegate as u8 {
-                self.current_frame.caller
-            } else {
-                // Mimic call
-                u256_into_address(self.registers[15])
-            },
-            program,
-            stack,
-            new_heap,
-            new_heap + 1,
-            calldata_heap,
-            gas,
-            stipend,
-            exception_handler,
-            if CALLING_MODE == CallingMode::Delegate as u8 {
-                self.current_frame.context_u128
-            } else {
-                self.context_u128
-            },
-            is_static || self.current_frame.is_static,
-            world_before_this_frame,
-        );
-        self.context_u128 = 0;
-
-        let old_pc = self.current_frame.pc_to_u16(instruction_pointer);
-        std::mem::swap(&mut new_frame, &mut self.current_frame);
-        self.previous_frames.push((old_pc, new_frame));
-    }
-
-    pub(crate) fn pop_frame(
-        &mut self,
-        heap_to_keep: Option<u32>,
-    ) -> Option<(u16, u16, Snapshot, Box<Stack>)> {
-        self.previous_frames.pop().map(|(pc, mut frame)| {
-            for &heap in [self.current_frame.heap, self.current_frame.aux_heap]
-                .iter()
-                .chain(&self.current_frame.heaps_i_am_keeping_alive)
-            {
-                if Some(heap) != heap_to_keep {
-                    self.heaps.deallocate(heap);
-                }
-            }
-
-            std::mem::swap(&mut self.current_frame, &mut frame);
-            let Callframe {
-                exception_handler,
-                world_before_this_frame,
-                stack,
-                ..
-            } = frame;
-
-            self.current_frame
-                .heaps_i_am_keeping_alive
-                .extend(heap_to_keep);
-
-            (pc, exception_handler, world_before_this_frame, stack)
-        })
-    }
-
     pub(crate) fn set_context_u128(&mut self, value: u128) {
         self.context_u128 = value;
     }
@@ -224,7 +133,7 @@ impl Addressable for State {
 }
 
 #[derive(Debug, Clone)]
-pub struct Heaps(Vec<Vec<u8>>);
+pub struct Heaps(pub(crate) Vec<Vec<u8>>);
 
 impl Heaps {
     pub(crate) fn deallocate(&mut self, heap: u32) {

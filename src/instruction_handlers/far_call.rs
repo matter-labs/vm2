@@ -69,7 +69,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         .checked_add(stipend)
         .expect("stipend must not cause overflow");
 
-    vm.state.push_frame::<CALLING_MODE>(
+    vm.push_frame::<CALLING_MODE>(
         instruction,
         u256_into_address(destination_address),
         program,
@@ -79,7 +79,6 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         IS_STATIC && !is_evm_interpreter,
         calldata.memory_page,
         vm.world.snapshot(),
-        vm.stack_pool.get(),
     );
 
     vm.state.flags = Flags::new(false, false, false);
