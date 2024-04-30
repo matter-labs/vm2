@@ -63,3 +63,15 @@ impl StackPool {
         self.stacks.push(stack);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The code produced by derive(Clone) overflows the stack in debug mode.
+    #[test]
+    fn clone_does_not_segfault() {
+        let stack = Stack::new();
+        let _ = stack.clone();
+    }
+}
