@@ -35,6 +35,8 @@ pub struct ExternalSnapshot {
     written_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
 }
 
+/// There is no address field because nobody is interested in events that don't come
+/// from the event writer, so we simply do not record events coming frome anywhere else.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Event {
     pub key: U256,

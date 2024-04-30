@@ -4,6 +4,7 @@ use u256::U256;
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Stack {
+    /// set of slots that may be interpreted as [crate::fat_pointer::FatPointer].
     pub pointer_flags: Bitset,
     dirty_areas: u64,
     slots: [U256; 1 << 16],
