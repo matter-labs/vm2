@@ -11,7 +11,6 @@ pub struct Callframe {
     pub context_u128: u128,
     pub is_static: bool,
 
-    // TODO: joint allocate these.
     pub stack: Box<Stack>,
 
     pub heap: u32,
