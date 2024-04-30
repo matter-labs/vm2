@@ -22,7 +22,7 @@ use u256::{H160, U256};
 pub use decommit::address_into_u256;
 pub use decommit::initial_decommit;
 pub use instruction::{jump_to_beginning, ExecutionEnd, Instruction};
-pub use modified_world::{Event, ExternalSnapshot, ModifiedWorld};
+pub use modified_world::{Event, ExternalSnapshot, L2ToL1Log, ModifiedWorld};
 pub use predication::Predicate;
 pub use program::Program;
 pub use state::{State, FIRST_HEAP};
