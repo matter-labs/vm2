@@ -1,8 +1,8 @@
 use crate::bitset::Bitset;
-use std::alloc::{alloc_zeroed, Layout};
+use std::alloc::{alloc, alloc_zeroed, Layout};
 use u256::U256;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(PartialEq, Debug)]
 pub struct Stack {
     /// set of slots that may be interpreted as [crate::fat_pointer::FatPointer].
     pub pointer_flags: Bitset,
@@ -40,6 +40,16 @@ impl Stack {
 
         self.dirty_areas = 0;
         self.pointer_flags = Default::default();
+    }
+}
+
+impl Clone for Box<Stack> {
+    fn clone(&self) -> Self {
+        unsafe {
+            let allocation = alloc(Layout::for_value(&**self)).cast();
+            std::ptr::copy_nonoverlapping(&**self, allocation, 1);
+            Box::from_raw(allocation)
+        }
     }
 }
 
