@@ -18,6 +18,7 @@ pub struct ModifiedWorld {
     // These are rolled back on revert or panic (and when the whole VM is rolled back).
     storage_changes: RollbackableMap<(H160, U256), U256>,
     events: RollbackableLog<Event>,
+    l2_to_l1_logs: RollbackableLog<L2ToL1Log>,
 
     // The field below are only rolled back when the whole VM is rolled back.
     pub(crate) decommitted_hashes: RollbackableSet<U256>,
@@ -28,6 +29,7 @@ pub struct ModifiedWorld {
 pub struct ExternalSnapshot {
     storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
     events: <RollbackableLog<Event> as Rollback>::Snapshot,
+    l2_to_l1_logs: <RollbackableLog<L2ToL1Log> as Rollback>::Snapshot,
 
     // The field below are only rolled back when the whole VM is rolled back.
     pub(crate) decommitted_hashes: <RollbackableMap<U256, ()> as Rollback>::Snapshot,
@@ -46,12 +48,22 @@ pub struct Event {
     pub tx_number: u16,
 }
 
+pub struct L2ToL1Log {
+    pub key: U256,
+    pub value: U256,
+    pub is_service: bool,
+    pub address: H160,
+    pub shard_id: u8,
+    pub tx_number: u16,
+}
+
 impl ModifiedWorld {
     pub fn new(world: Box<dyn World>) -> Self {
         Self {
             world,
             storage_changes: Default::default(),
             events: Default::default(),
+            l2_to_l1_logs: Default::default(),
             decommitted_hashes: Default::default(),
             read_storage_slots: Default::default(),
             written_storage_slots: Default::default(),
@@ -103,7 +115,7 @@ impl ModifiedWorld {
         self.storage_changes.as_ref()
     }
 
-    pub fn record_event(&mut self, event: Event) {
+    pub(crate) fn record_event(&mut self, event: Event) {
         self.events.push(event);
     }
 
@@ -111,19 +123,33 @@ impl ModifiedWorld {
         self.events.as_ref()
     }
 
-    pub(crate) fn snapshot(&self) -> Snapshot {
-        (self.storage_changes.snapshot(), self.events.snapshot())
+    pub(crate) fn record_l2_to_l1_log(&mut self, log: L2ToL1Log) {
+        self.l2_to_l1_logs.push(log);
     }
 
-    pub(crate) fn rollback(&mut self, (storage, events): Snapshot) {
+    pub fn l2_to_l1_logs(&self) -> &[L2ToL1Log] {
+        self.l2_to_l1_logs.as_ref()
+    }
+
+    pub(crate) fn snapshot(&self) -> Snapshot {
+        (
+            self.storage_changes.snapshot(),
+            self.events.snapshot(),
+            self.l2_to_l1_logs.snapshot(),
+        )
+    }
+
+    pub(crate) fn rollback(&mut self, (storage, events, l2_to_l1_logs): Snapshot) {
         self.storage_changes.rollback(storage);
         self.events.rollback(events);
+        self.l2_to_l1_logs.rollback(l2_to_l1_logs);
     }
 
     pub fn external_snapshot(&mut self) -> ExternalSnapshot {
         ExternalSnapshot {
             storage_changes: self.storage_changes.snapshot(),
             events: self.events.snapshot(),
+            l2_to_l1_logs: self.l2_to_l1_logs.snapshot(),
             decommitted_hashes: self.decommitted_hashes.snapshot(),
             read_storage_slots: self.read_storage_slots.snapshot(),
             written_storage_slots: self.written_storage_slots.snapshot(),
@@ -133,6 +159,7 @@ impl ModifiedWorld {
     pub fn external_rollback(&mut self, snapshot: ExternalSnapshot) {
         self.storage_changes.rollback(snapshot.storage_changes);
         self.events.rollback(snapshot.events);
+        self.l2_to_l1_logs.rollback(snapshot.l2_to_l1_logs);
         self.decommitted_hashes
             .rollback(snapshot.decommitted_hashes);
         self.read_storage_slots
@@ -157,6 +184,7 @@ impl ModifiedWorld {
 pub(crate) type Snapshot = (
     <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
     <RollbackableLog<Event> as Rollback>::Snapshot,
+    <RollbackableLog<L2ToL1Log> as Rollback>::Snapshot,
 );
 
 const WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST - STORAGE_ACCESS_WARM_READ_COST;
