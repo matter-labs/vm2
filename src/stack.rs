@@ -1,8 +1,8 @@
 use crate::bitset::Bitset;
-use std::alloc::{alloc_zeroed, Layout};
+use std::alloc::{alloc, alloc_zeroed, Layout};
 use u256::U256;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(PartialEq, Debug)]
 pub struct Stack {
     /// set of slots that may be interpreted as [crate::fat_pointer::FatPointer].
     pub pointer_flags: Bitset,
@@ -43,6 +43,16 @@ impl Stack {
     }
 }
 
+impl Clone for Box<Stack> {
+    fn clone(&self) -> Self {
+        unsafe {
+            let allocation = alloc(Layout::for_value(&**self)).cast();
+            std::ptr::copy_nonoverlapping(&**self, allocation, 1);
+            Box::from_raw(allocation)
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct StackPool {
     stacks: Vec<Box<Stack>>,
@@ -61,5 +71,17 @@ impl StackPool {
 
     pub fn recycle(&mut self, stack: Box<Stack>) {
         self.stacks.push(stack);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The code produced by derive(Clone) overflows the stack in debug mode.
+    #[test]
+    fn clone_does_not_segfault() {
+        let stack = Stack::new();
+        let _ = stack.clone();
     }
 }
