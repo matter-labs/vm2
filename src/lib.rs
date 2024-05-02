@@ -22,11 +22,11 @@ use u256::{H160, U256};
 pub use decommit::address_into_u256;
 pub use decommit::initial_decommit;
 pub use instruction::{jump_to_beginning, ExecutionEnd, Instruction};
-pub use modified_world::{Event, ExternalSnapshot, L2ToL1Log, ModifiedWorld};
+pub use modified_world::{Event, L2ToL1Log, ModifiedWorld};
 pub use predication::Predicate;
 pub use program::Program;
 pub use state::{State, FIRST_HEAP};
-pub use vm::{Settings, VirtualMachine};
+pub use vm::{Settings, VirtualMachine, VmSnapshot as Snapshot};
 
 pub trait World {
     /// This will be called *every* time a contract is called. Caching and decoding is

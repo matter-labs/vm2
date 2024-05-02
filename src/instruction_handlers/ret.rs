@@ -90,10 +90,10 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
                 .map(|pointer| pointer.memory_page),
         )
         else {
-            if return_type.is_failure() {
-                vm.world
-                    .rollback(vm.state.current_frame.world_before_this_frame);
-            }
+            // The initial frame is not rolled back, even if it fails.
+            // It is the caller's job to clean up when the execution as a whole fails because
+            // the caller may take external snapshots while the VM is in the initial frame and
+            // these would break were the initial frame to be rolled back.
 
             return if let Some(return_value) = return_value_or_panic {
                 let output = vm.state.heaps[return_value.memory_page][return_value.start as usize
