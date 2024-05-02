@@ -2,6 +2,9 @@
 name = "vm2"
 version = "0.1.0"
 edition = "2021"
+homepage = "https://zksync.io/"
+license = "MIT OR Apache-2.0"
+authors = ["The Matter Labs Team <hello@matterlabs.dev>"]
 
 [dependencies]
 zkevm_opcode_defs = { git = "https://github.com/matter-labs/era-zkevm_opcode_defs.git", branch = "v1.5.0" }
