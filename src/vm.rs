@@ -1,3 +1,4 @@
+use crate::modified_world::ExternalSnapshot;
 use crate::{
     callframe::{Callframe, FrameRemnant},
     decommit::u256_into_address,
@@ -145,6 +146,22 @@ impl VirtualMachine {
             .map(|left| (left, end))
     }
 
+    /// # Panics
+    /// Calling this function outside of the initial callframe is not allowed.
+    /// Also, rolling back snapshots in anything but LIFO order will eventually case a panic.
+    pub fn snapshot(&self) -> VmSnapshot {
+        assert!(self.state.previous_frames.is_empty());
+        VmSnapshot {
+            world_snapshot: self.world.external_snapshot(),
+            state_snapshot: self.state.clone(),
+        }
+    }
+
+    pub fn rollback(&mut self, snapshot: VmSnapshot) {
+        self.world.external_rollback(snapshot.world_snapshot);
+        self.state = snapshot.state_snapshot;
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_frame<const CALLING_MODE: u8>(
         &mut self,
@@ -261,4 +278,9 @@ impl VirtualMachine {
         print!("{}", self.state.current_frame.gas);
         println!();
     }
+}
+
+pub struct VmSnapshot {
+    world_snapshot: ExternalSnapshot,
+    state_snapshot: State,
 }

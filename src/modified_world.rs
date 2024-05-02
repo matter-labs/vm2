@@ -20,7 +20,7 @@ pub struct ModifiedWorld {
     events: RollbackableLog<Event>,
     l2_to_l1_logs: RollbackableLog<L2ToL1Log>,
 
-    // The field below are only rolled back when the whole VM is rolled back.
+    // The fields below are only rolled back when the whole VM is rolled back.
     pub(crate) decommitted_hashes: RollbackableSet<U256>,
     read_storage_slots: RollbackableSet<(H160, U256)>,
     written_storage_slots: RollbackableSet<(H160, U256)>,
@@ -145,7 +145,9 @@ impl ModifiedWorld {
         self.l2_to_l1_logs.rollback(l2_to_l1_logs);
     }
 
-    pub fn external_snapshot(&mut self) -> ExternalSnapshot {
+    /// This function must only be called during the initial frame
+    /// because otherwise internal rollbacks can roll back past the external snapshot.
+    pub(crate) fn external_snapshot(&self) -> ExternalSnapshot {
         ExternalSnapshot {
             storage_changes: self.storage_changes.snapshot(),
             events: self.events.snapshot(),
@@ -156,7 +158,7 @@ impl ModifiedWorld {
         }
     }
 
-    pub fn external_rollback(&mut self, snapshot: ExternalSnapshot) {
+    pub(crate) fn external_rollback(&mut self, snapshot: ExternalSnapshot) {
         self.storage_changes.rollback(snapshot.storage_changes);
         self.events.rollback(snapshot.events);
         self.l2_to_l1_logs.rollback(snapshot.l2_to_l1_logs);
