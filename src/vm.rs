@@ -146,9 +146,11 @@ impl VirtualMachine {
             .map(|left| (left, end))
     }
 
+    /// Returns a compact representation of the VM's current state,
+    /// including pending side effects like storage changes and emitted events.
+    /// [VirtualMachine::rollback] can be used to return the VM to this state.
     /// # Panics
     /// Calling this function outside of the initial callframe is not allowed.
-    /// Also, rolling back snapshots in anything but LIFO order will eventually case a panic.
     pub fn snapshot(&self) -> VmSnapshot {
         assert!(self.state.previous_frames.is_empty());
         VmSnapshot {
@@ -157,6 +159,9 @@ impl VirtualMachine {
         }
     }
 
+    /// Returns the VM to the state it was in when the snapshot was created.
+    /// # Panics
+    /// Rolling back snapshots in anything but LIFO order may panic.
     pub fn rollback(&mut self, snapshot: VmSnapshot) {
         self.world.external_rollback(snapshot.world_snapshot);
         self.state = snapshot.state_snapshot;
