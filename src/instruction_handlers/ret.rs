@@ -135,10 +135,12 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
 
     if return_type.is_failure() {
         vm.world.rollback(snapshot);
+    } else {
+        vm.state.current_frame.total_pubdata_spent += total_pubdata_spent;
     }
+
     vm.state.flags = Flags::new(return_type == ReturnType::Panic, false, false);
     vm.state.current_frame.gas += leftover_gas;
-    vm.state.current_frame.total_pubdata_spent += total_pubdata_spent;
 
     match vm.state.current_frame.pc_from_u16(pc) {
         Some(i) => Ok(i),
