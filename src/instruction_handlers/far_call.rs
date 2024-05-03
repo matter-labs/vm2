@@ -8,7 +8,10 @@ use crate::{
     Instruction, Predicate, VirtualMachine,
 };
 use u256::U256;
-use zkevm_opcode_defs::system_params::EVM_SIMULATOR_STIPEND;
+use zkevm_opcode_defs::{
+    system_params::{EVM_SIMULATOR_STIPEND, MSG_VALUE_SIMULATOR_ADDITIVE_COST},
+    ADDRESS_MSG_VALUE,
+};
 
 #[repr(u8)]
 pub enum CallingMode {
@@ -52,9 +55,24 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         abi.is_constructor_call,
     );
 
+    let mandated_gas = if destination_address == ADDRESS_MSG_VALUE.into() {
+        MSG_VALUE_SIMULATOR_ADDITIVE_COST
+    } else {
+        0
+    };
+
+    // mandated gas is passed even if it means transferring more than the 63/64 rule allows
+    if let Some(gas_left) = vm.state.current_frame.gas.checked_sub(mandated_gas) {
+        vm.state.current_frame.gas = gas_left;
+    } else {
+        return panic_from_failed_far_call(vm, exception_handler);
+    };
+
     let maximum_gas = vm.state.current_frame.gas / 64 * 63;
     let new_frame_gas = abi.gas_to_pass.min(maximum_gas);
     vm.state.current_frame.gas -= new_frame_gas;
+
+    let new_frame_gas = new_frame_gas + mandated_gas;
 
     let (Some(calldata), Some((program, is_evm_interpreter))) = (calldata, decommit_result) else {
         return panic_from_failed_far_call(vm, exception_handler);
