@@ -61,8 +61,7 @@ fn sstore(vm: &mut VirtualMachine, instruction: *const Instruction) -> Instructi
 
         // Note, that the diff may be negative, e.g. in case the new write returns to the previous value.
         let diff = (to_pay_by_user as i32) - (prepaid as i32);
-
-        // ^ This is the current pubdata price payed by user
+        vm.state.current_frame.total_pubdata_spent += diff;
 
         vm.world
             .insert_prepaid_for_write(vm.state.current_frame.address, key, to_pay_by_user);
