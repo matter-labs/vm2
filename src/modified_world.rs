@@ -24,6 +24,7 @@ pub struct ModifiedWorld {
     pub(crate) decommitted_hashes: RollbackableSet<U256>,
     read_storage_slots: RollbackableSet<(H160, U256)>,
     written_storage_slots: RollbackableSet<(H160, U256)>,
+    paid_changes: RollbackableMap<(H160, U256), u32>,
 }
 
 pub struct ExternalSnapshot {
@@ -67,6 +68,7 @@ impl ModifiedWorld {
             decommitted_hashes: Default::default(),
             read_storage_slots: Default::default(),
             written_storage_slots: Default::default(),
+            paid_changes: Default::default(),
         }
     }
 
@@ -109,6 +111,18 @@ impl ModifiedWorld {
                 0
             }
         }
+    }
+
+    pub fn prepaid_for_write(&self, address: H160, key: U256) -> u32 {
+        self.paid_changes
+            .as_ref()
+            .get(&(address, key))
+            .cloned()
+            .unwrap_or(0u32)
+    }
+
+    pub fn insert_prepaid_for_write(&mut self, address: H160, key: U256, price: u32) {
+        self.paid_changes.insert((address, key), price)
     }
 
     pub fn get_storage_changes(&self) -> &BTreeMap<(H160, U256), U256> {
@@ -180,6 +194,10 @@ impl ModifiedWorld {
         self.decommitted_hashes.delete_history();
         self.read_storage_slots.delete_history();
         self.written_storage_slots.delete_history();
+    }
+
+    pub(crate) fn is_write_initial(&self, address: H160, key: U256) -> bool {
+        self.read_storage_slots.contains(&(address, key))
     }
 }
 

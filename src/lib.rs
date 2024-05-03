@@ -3,6 +3,7 @@ pub mod addressing_modes;
 mod arbitrary_instruction;
 mod bitset;
 mod callframe;
+mod compression;
 pub mod decode;
 mod decommit;
 mod fat_pointer;

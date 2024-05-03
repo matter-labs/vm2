@@ -40,11 +40,13 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
     let mut return_type = ReturnType::from_u8(RETURN_TYPE);
     let near_call_leftover_gas = vm.state.current_frame.gas;
 
-    let (pc, snapshot, leftover_gas) = if let Some(FrameRemnant {
+    let (pc, snapshot, leftover_gas, total_pubdata_spent) = if let Some(FrameRemnant {
         program_counter,
         exception_handler,
         snapshot,
-    }) = vm.state.current_frame.pop_near_call()
+        total_pubdata_spent,
+    }) =
+        vm.state.current_frame.pop_near_call()
     {
         (
             if TO_LABEL {
@@ -56,6 +58,7 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
             },
             snapshot,
             near_call_leftover_gas,
+            total_pubdata_spent,
         )
     } else {
         let return_value_or_panic = if return_type == ReturnType::Panic {
@@ -84,6 +87,7 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
             program_counter,
             exception_handler,
             snapshot,
+            total_pubdata_spent,
         }) = vm.pop_frame(
             return_value_or_panic
                 .as_ref()
@@ -125,6 +129,7 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
             },
             snapshot,
             leftover_gas,
+            total_pubdata_spent,
         )
     };
 
@@ -133,6 +138,7 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
     }
     vm.state.flags = Flags::new(return_type == ReturnType::Panic, false, false);
     vm.state.current_frame.gas += leftover_gas;
+    vm.state.current_frame.total_pubdata_spent += total_pubdata_spent;
 
     match vm.state.current_frame.pc_from_u16(pc) {
         Some(i) => Ok(i),
