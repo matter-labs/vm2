@@ -92,6 +92,10 @@ impl<T> RollbackableLog<T> {
     pub fn push(&mut self, entry: T) {
         self.entries.push(entry)
     }
+
+    pub(crate) fn logs_after(&self, snapshot: <RollbackableLog<T> as Rollback>::Snapshot) -> &[T] {
+        &self.entries[snapshot..]
+    }
 }
 
 impl<T> AsRef<[T]> for RollbackableLog<T> {
