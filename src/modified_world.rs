@@ -127,6 +127,13 @@ impl ModifiedWorld {
         self.storage_changes.as_ref()
     }
 
+    pub fn get_storage_changes_after(
+        &self,
+        snapshot: &Snapshot,
+    ) -> BTreeMap<(H160, U256), (Option<U256>, U256)> {
+        self.storage_changes.changes_after(snapshot.storage_changes)
+    }
+
     pub(crate) fn record_event(&mut self, event: Event) {
         self.events.push(event);
     }
