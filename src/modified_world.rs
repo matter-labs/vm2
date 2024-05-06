@@ -20,6 +20,7 @@ pub struct ModifiedWorld {
     events: RollbackableLog<Event>,
     l2_to_l1_logs: RollbackableLog<L2ToL1Log>,
     paid_changes: RollbackableMap<(H160, U256), u32>,
+    initial_values: RollbackableMap<(H160, U256), U256>,
 
     // The fields below are only rolled back when the whole VM is rolled back.
     pub(crate) decommitted_hashes: RollbackableSet<U256>,
@@ -65,6 +66,7 @@ impl ModifiedWorld {
             read_storage_slots: Default::default(),
             written_storage_slots: Default::default(),
             paid_changes: Default::default(),
+            initial_values: Default::default(),
         }
     }
 
@@ -119,6 +121,16 @@ impl ModifiedWorld {
 
     pub fn insert_prepaid_for_write(&mut self, address: H160, key: U256, price: u32) {
         self.paid_changes.insert((address, key), price)
+    }
+
+    pub fn set_initial_value(&mut self, address: H160, key: U256, value: U256) {
+        if !self.initial_values.as_ref().contains_key(&(address, key)) {
+            self.initial_values.insert((address, key), value);
+        }
+    }
+
+    pub fn get_initial_value(&self, address: &H160, key: &U256) -> Option<U256> {
+        self.initial_values.as_ref().get(&(*address, *key)).copied()
     }
 
     pub fn get_storage_changes(&self) -> &BTreeMap<(H160, U256), U256> {
