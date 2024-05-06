@@ -20,6 +20,8 @@ pub struct Callframe {
     pub gas: u32,
     pub stipend: u32,
 
+    pub total_pubdata_spent: i32,
+
     near_calls: Vec<NearCallFrame>,
 
     pub(crate) program: Program,
@@ -36,8 +38,6 @@ pub struct Callframe {
     pub(crate) heaps_i_am_keeping_alive: Vec<u32>,
 
     pub(crate) world_before_this_frame: Snapshot,
-
-    pub(crate) total_pubdata_spent: i32,
 }
 
 #[derive(Clone, PartialEq, Debug)]
