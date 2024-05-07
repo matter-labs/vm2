@@ -94,12 +94,6 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
         .insert(ethereum_address.into(), ethereum_hash.into());
 
     let program = initial_decommit(&mut world, main_address);
-    let storage_key_for_eth_balance = U256([
-        4209092924407300373,
-        6927221427678996148,
-        4194905989268492595,
-        15931007429432312239,
-    ]);
 
     let mut vm = VirtualMachine::new(
         Box::new(world),
@@ -112,7 +106,6 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
             default_aa_code_hash: [0; 32],
             evm_interpreter_code_hash: intepreter_hash,
             hook_address: 0,
-            storage_key_for_eth_balance: storage_key_for_eth_balance.into(),
         },
     );
 

@@ -1,5 +1,4 @@
 use proptest::prelude::*;
-use u256::U256;
 use vm2::{
     addressing_modes::{Immediate1, Immediate2, Register, Register1},
     initial_decommit,
@@ -33,12 +32,6 @@ proptest! {
         let address = Address::from_low_u64_be(0x1234567890abcdef);
         let mut world = TestWorld::new(&[(address, program)]);
         let program = initial_decommit(&mut world, address);
-        let storage_key_for_eth_balance = U256([
-            4209092924407300373,
-            6927221427678996148,
-            4194905989268492595,
-            15931007429432312239,
-        ]);
 
         let mut vm = VirtualMachine::new(
             Box::new(world),
@@ -51,7 +44,6 @@ proptest! {
                 default_aa_code_hash: [0; 32],
                 evm_interpreter_code_hash: [0; 32],
                 hook_address: 0,
-                storage_key_for_eth_balance: storage_key_for_eth_balance.into(),
             },
         );
 

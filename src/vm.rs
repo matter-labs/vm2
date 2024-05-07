@@ -14,7 +14,6 @@ use zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND;
 pub struct Settings {
     pub default_aa_code_hash: [u8; 32],
     pub evm_interpreter_code_hash: [u8; 32],
-    pub storage_key_for_eth_balance: [u8; 32],
 
     /// Writing to this address in the bootloader's heap suspends execution
     pub hook_address: u32,
