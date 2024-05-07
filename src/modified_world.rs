@@ -196,10 +196,6 @@ impl ModifiedWorld {
         self.read_storage_slots.delete_history();
         self.written_storage_slots.delete_history();
     }
-
-    pub(crate) fn is_write_initial(&mut self, address: H160, key: U256) -> bool {
-        self.world.is_write_initial(address, key)
-    }
 }
 
 pub(crate) type Snapshot = (

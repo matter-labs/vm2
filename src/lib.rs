@@ -3,7 +3,6 @@ pub mod addressing_modes;
 mod arbitrary_instruction;
 mod bitset;
 mod callframe;
-mod compression;
 pub mod decode;
 mod decommit;
 mod fat_pointer;
@@ -37,5 +36,5 @@ pub trait World {
     /// There is no write_storage; [ModifiedWorld::get_storage_changes] gives a list of all storage changes.
     fn read_storage(&mut self, contract: H160, key: U256) -> U256;
 
-    fn is_write_initial(&mut self, contract: H160, key: U256) -> bool;
+    fn cost_of_writing_storage(&mut self, contract: H160, key: U256, new_value: U256) -> u32;
 }
