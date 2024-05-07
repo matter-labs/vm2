@@ -1,4 +1,5 @@
 use divan::{black_box, Bencher};
+use u256::U256;
 use vm2::{
     addressing_modes::{Immediate1, Immediate2, Register, Register1, Register2},
     initial_decommit,
@@ -24,6 +25,13 @@ fn nested_near_call(bencher: Bencher) {
 
     let address = Address::from_low_u64_be(0xabe123ff);
 
+    let storage_key_for_eth_balance = U256([
+        4209092924407300373,
+        6927221427678996148,
+        4194905989268492595,
+        15931007429432312239,
+    ]);
+
     bencher.bench(|| {
         let mut world = Box::new(TestWorld::new(&[(address, program.clone())]));
         let program = initial_decommit(&mut *world, address);
@@ -38,6 +46,7 @@ fn nested_near_call(bencher: Bencher) {
                 default_aa_code_hash: [0; 32],
                 evm_interpreter_code_hash: [0; 32],
                 hook_address: 0,
+                storage_key_for_eth_balance: storage_key_for_eth_balance.into(),
             },
         );
 
@@ -69,6 +78,13 @@ fn nested_near_call_with_storage_write(bencher: Bencher) {
 
     let address = Address::from_low_u64_be(0xabe123ff);
 
+    let storage_key_for_eth_balance = U256([
+        4209092924407300373,
+        6927221427678996148,
+        4194905989268492595,
+        15931007429432312239,
+    ]);
+
     bencher.bench(|| {
         let mut world = Box::new(TestWorld::new(&[(address, program.clone())]));
         let program = initial_decommit(&mut *world, address);
@@ -83,6 +99,7 @@ fn nested_near_call_with_storage_write(bencher: Bencher) {
                 default_aa_code_hash: [0; 32],
                 evm_interpreter_code_hash: [0; 32],
                 hook_address: 0,
+                storage_key_for_eth_balance: storage_key_for_eth_balance.into(),
             },
         );
 
