@@ -44,11 +44,10 @@ fn get_pubdata_price_bytes(initial_value: U256, final_value: U256, is_initial: b
 }
 
 fn base_price_for_write_query(vm: &mut VirtualMachine, key: U256, new_value: U256) -> u32 {
-    let contract = vm.state.current_frame.address;
     let initial_value = vm
         .world
-        .get_initial_value(&contract, &key)
-        .unwrap_or(vm.world.world.read_storage(contract, key));
+        .world
+        .read_storage(vm.state.current_frame.address, key);
 
     let is_initial = vm
         .world
@@ -65,14 +64,6 @@ fn sstore(vm: &mut VirtualMachine, instruction: *const Instruction) -> Instructi
     instruction_boilerplate_with_panic(vm, instruction, |vm, args, continue_normally| {
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
-
-        let read_value = vm
-            .world
-            .world
-            .read_storage(vm.state.current_frame.address, key);
-
-        vm.world
-            .set_initial_value(vm.state.current_frame.address, key, read_value);
 
         let to_pay_by_user = base_price_for_write_query(vm, key, value);
         let prepaid = vm
@@ -105,9 +96,6 @@ fn sload(vm: &mut VirtualMachine, instruction: *const Instruction) -> Instructio
     instruction_boilerplate(vm, instruction, |vm, args| {
         let key = Register1::get(args, &mut vm.state);
         let (value, refund) = vm.world.read_storage(vm.state.current_frame.address, key);
-
-        vm.world
-            .set_initial_value(vm.state.current_frame.address, key, value);
 
         assert!(refund <= SLOAD_COST);
         vm.state.current_frame.gas += refund;
