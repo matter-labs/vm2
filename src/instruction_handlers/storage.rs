@@ -51,6 +51,7 @@ fn base_price_for_write_query(vm: &mut VirtualMachine, key: U256, new_value: U25
         .get_initial_value(&contract, &key)
         .unwrap_or(vm.world.world.read_storage(contract, key));
 
+    println!(">>> Initial value {initial_value} {new_value}");
     let is_initial = vm
         .world
         .is_write_initial(vm.state.current_frame.address, key);
@@ -107,8 +108,13 @@ fn sstore(vm: &mut VirtualMachine, instruction: *const Instruction) -> Instructi
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
 
+        let read_value = vm
+            .world
+            .world
+            .read_storage(vm.state.current_frame.address, key);
+
         vm.world
-            .set_initial_value(vm.state.current_frame.address, key, value);
+            .set_initial_value(vm.state.current_frame.address, key, read_value);
 
         let to_pay_by_user = base_price_for_write_query(vm, key, value);
         let prepaid = vm
