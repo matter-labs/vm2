@@ -14,10 +14,11 @@ pub struct RollbackableMap<K: Ord, V> {
     old_entries: Vec<(K, Option<V>)>,
 }
 
-impl<K: Ord + Clone, V> RollbackableMap<K, V> {
-    pub fn insert(&mut self, key: K, value: V) {
-        self.old_entries
-            .push((key.clone(), self.map.insert(key, value)));
+impl<K: Ord + Clone, V: Clone> RollbackableMap<K, V> {
+    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+        let old_value = self.map.insert(key.clone(), value);
+        self.old_entries.push((key.clone(), old_value.clone()));
+        old_value
     }
 }
 

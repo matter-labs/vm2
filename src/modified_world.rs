@@ -4,14 +4,10 @@ use crate::{
     rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackableSet},
     World,
 };
-use u256::{H160, H256, U256};
-use zkevm_opcode_defs::{
-    blake2::Blake2s256,
-    sha3::Digest,
-    system_params::{
-        STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST,
-        STORAGE_ACCESS_WARM_READ_COST, STORAGE_ACCESS_WARM_WRITE_COST,
-    },
+use u256::{H160, U256};
+use zkevm_opcode_defs::system_params::{
+    STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST, STORAGE_ACCESS_WARM_READ_COST,
+    STORAGE_ACCESS_WARM_WRITE_COST,
 };
 
 /// The global state including pending modifications that are written only at
@@ -73,7 +69,7 @@ impl ModifiedWorld {
     }
 
     /// Returns the storage slot's value and a refund based on its hot/cold status.
-    pub fn read_storage(&mut self, contract: H160, key: U256) -> (U256, u32) {
+    pub(crate) fn read_storage(&mut self, contract: H160, key: U256) -> (U256, u32) {
         let value = self
             .storage_changes
             .as_ref()
@@ -81,7 +77,7 @@ impl ModifiedWorld {
             .cloned()
             .unwrap_or_else(|| self.world.read_storage(contract, key));
 
-        let refund = if is_storage_key_free(&contract, &key)
+        let refund = if self.world.is_free_storage_slot(&contract, &key)
             || self.read_storage_slots.contains(&(contract, key))
         {
             WARM_READ_REFUND
@@ -93,15 +89,24 @@ impl ModifiedWorld {
         (value, refund)
     }
 
-    /// Returns the refund based the hot/cold status of the storage slot.
-    pub fn write_storage(&mut self, contract: H160, key: U256, value: U256) -> u32 {
+    /// Returns the refund based the hot/cold status of the storage slot and the change in pubdata.
+    pub(crate) fn write_storage(&mut self, contract: H160, key: U256, value: U256) -> (u32, i32) {
         self.storage_changes.insert((contract, key), value);
 
-        if is_storage_key_free(&contract, &key)
-            || self
-                .written_storage_slots
-                .as_ref()
-                .contains_key(&(contract, key))
+        if self.world.is_free_storage_slot(&contract, &key) {
+            return (WARM_WRITE_REFUND, 0);
+        }
+
+        let update_cost = self.world.cost_of_writing_storage(contract, key, value);
+        let prepaid = self
+            .paid_changes
+            .insert((contract, key), update_cost)
+            .unwrap_or(0);
+
+        let refund = if self
+            .written_storage_slots
+            .as_ref()
+            .contains_key(&(contract, key))
         {
             WARM_WRITE_REFUND
         } else {
@@ -113,19 +118,9 @@ impl ModifiedWorld {
                 self.read_storage_slots.add((contract, key));
                 0
             }
-        }
-    }
+        };
 
-    pub fn prepaid_for_write(&self, address: H160, key: U256) -> u32 {
-        self.paid_changes
-            .as_ref()
-            .get(&(address, key))
-            .cloned()
-            .unwrap_or(0u32)
-    }
-
-    pub fn insert_prepaid_for_write(&mut self, address: H160, key: U256, price: u32) {
-        self.paid_changes.insert((address, key), price)
+        (refund, (update_cost as i32) - (prepaid as i32))
     }
 
     pub fn get_storage_changes(&self) -> &BTreeMap<(H160, U256), U256> {
@@ -208,42 +203,3 @@ pub(crate) type Snapshot = (
 const WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST - STORAGE_ACCESS_WARM_READ_COST;
 const WARM_WRITE_REFUND: u32 = STORAGE_ACCESS_COLD_WRITE_COST - STORAGE_ACCESS_WARM_WRITE_COST;
 const COLD_WRITE_AFTER_WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST;
-
-pub(crate) fn is_storage_key_free(address: &H160, key: &U256) -> bool {
-    let storage_key_for_eth_balance = U256([
-        4209092924407300373,
-        6927221427678996148,
-        4194905989268492595,
-        15931007429432312239,
-    ]);
-    if address == &SYSTEM_CONTEXT_ADDRESS {
-        return true;
-    }
-
-    let keyy = U256::from_little_endian(&raw_hashed_key(address, &u256_to_h256(*key)));
-
-    if keyy == storage_key_for_eth_balance {
-        return true;
-    }
-
-    false
-}
-
-pub const SYSTEM_CONTEXT_ADDRESS: H160 = H160([
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x80, 0x0b,
-]);
-
-pub fn u256_to_h256(num: U256) -> H256 {
-    let mut bytes = [0u8; 32];
-    num.to_big_endian(&mut bytes);
-    H256::from_slice(&bytes)
-}
-
-fn raw_hashed_key(address: &H160, key: &H256) -> [u8; 32] {
-    let mut bytes = [0u8; 64];
-    bytes[12..32].copy_from_slice(&address.0);
-    U256::from(key.to_fixed_bytes()).to_big_endian(&mut bytes[32..64]);
-
-    Blake2s256::digest(bytes).into()
-}

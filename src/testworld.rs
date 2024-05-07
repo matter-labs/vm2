@@ -70,4 +70,8 @@ impl World for TestWorld {
     ) -> u32 {
         50
     }
+
+    fn is_free_storage_slot(&self, _contract: &u256::H160, _key: &U256) -> bool {
+        false
+    }
 }

@@ -12,26 +12,21 @@ use crate::{
 
 fn sstore(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, |vm, args, continue_normally| {
-        let key = Register1::get(args, &mut vm.state);
-        let value = Register2::get(args, &mut vm.state);
-        let address = vm.state.current_frame.address;
-
-        let update_cost = vm.world.world.cost_of_writing_storage(address, key, value);
-        let prepaid = vm.world.prepaid_for_write(address, key);
-
-        // Note, that the diff may be negative, e.g. in case the new write returns to the previous value.
-        vm.state.current_frame.total_pubdata_spent += (update_cost as i32) - (prepaid as i32);
-
-        vm.world.insert_prepaid_for_write(address, key, update_cost);
-
         if vm.state.current_frame.is_static {
             return Ok(&PANIC);
         }
 
-        let refund = vm.world.write_storage(address, key, value);
+        let key = Register1::get(args, &mut vm.state);
+        let value = Register2::get(args, &mut vm.state);
+
+        let (refund, pubdata_change) =
+            vm.world
+                .write_storage(vm.state.current_frame.address, key, value);
 
         assert!(refund <= SSTORE_COST);
         vm.state.current_frame.gas += refund;
+
+        vm.state.current_frame.total_pubdata_spent += pubdata_change;
 
         continue_normally
     })
