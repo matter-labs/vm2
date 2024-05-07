@@ -1,5 +1,5 @@
 use crate::{modified_world::ModifiedWorld, program::Program, World};
-use u256::{H160, H256, U256};
+use u256::{H160, U256};
 use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
@@ -99,14 +99,6 @@ pub(crate) fn u256_into_address(source: U256) -> H160 {
     let mut bytes = [0; 32];
     source.to_big_endian(&mut bytes);
     result.assign_from_slice(&bytes[12..]);
-    result
-}
-
-pub(crate) fn u256_into_h256(source: U256) -> H256 {
-    let mut result = H256::zero();
-    let mut bytes = [0; 32];
-    source.to_big_endian(&mut bytes);
-    result.assign_from_slice(&bytes[..]);
     result
 }
 

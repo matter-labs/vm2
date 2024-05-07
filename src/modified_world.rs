@@ -236,7 +236,7 @@ pub(crate) fn is_storage_key_free(address: &H160, key: &U256) -> bool {
         return true;
     }
 
-    let keyy = U256::from_little_endian(&raw_hashed_key(&address, &u256_to_h256(*key)));
+    let keyy = U256::from_little_endian(&raw_hashed_key(address, &u256_to_h256(*key)));
 
     if keyy == storage_key_for_eth_balance {
         return true;

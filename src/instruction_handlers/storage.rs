@@ -10,7 +10,7 @@ use crate::{
     },
     compression::compress_with_best_strategy,
     instruction::InstructionResult,
-    modified_world::{is_storage_key_free, u256_to_h256},
+    modified_world::is_storage_key_free,
     Instruction, Predicate, VirtualMachine,
 };
 
@@ -33,8 +33,6 @@ pub const BYTES_PER_DERIVED_KEY: u8 = 32;
 fn get_pubdata_price_bytes(initial_value: U256, final_value: U256, is_initial: bool) -> u32 {
     // TODO (SMA-1702): take into account the content of the log query, i.e. values that contain mostly zeroes
     // should cost less.
-    println!(">>> > {initial_value} {final_value} {is_initial}");
-
     let compressed_value_size =
         compress_with_best_strategy(initial_value, final_value).len() as u32;
 
@@ -52,7 +50,6 @@ fn base_price_for_write_query(vm: &mut VirtualMachine, key: U256, new_value: U25
         .get_initial_value(&contract, &key)
         .unwrap_or(vm.world.world.read_storage(contract, key));
 
-    println!(">>> Initial value {initial_value} {new_value}");
     let is_initial = vm
         .world
         .is_write_initial(vm.state.current_frame.address, key);
@@ -61,8 +58,7 @@ fn base_price_for_write_query(vm: &mut VirtualMachine, key: U256, new_value: U25
         return 0;
     }
 
-    let ret = get_pubdata_price_bytes(initial_value, new_value, is_initial);
-    ret
+    get_pubdata_price_bytes(initial_value, new_value, is_initial)
 }
 
 fn sstore(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
@@ -85,12 +81,6 @@ fn sstore(vm: &mut VirtualMachine, instruction: *const Instruction) -> Instructi
 
         // Note, that the diff may be negative, e.g. in case the new write returns to the previous value.
         let diff = (to_pay_by_user as i32) - (prepaid as i32);
-        println!(
-            ">>> StorageKey {{ account: AccountTreeId {{ address: {:?} }}, key: {:?} }} {:?} {to_pay_by_user} {prepaid}",
-            vm.state.current_frame.address,
-            u256_to_h256(key),
-            u256_to_h256(value)
-        );
         vm.state.current_frame.total_pubdata_spent += diff;
 
         vm.world
