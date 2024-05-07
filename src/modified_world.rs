@@ -4,10 +4,14 @@ use crate::{
     rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackableSet},
     World,
 };
-use u256::{H160, U256};
-use zkevm_opcode_defs::system_params::{
-    STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST, STORAGE_ACCESS_WARM_READ_COST,
-    STORAGE_ACCESS_WARM_WRITE_COST,
+use u256::{H160, H256, U256};
+use zkevm_opcode_defs::{
+    blake2::Blake2s256,
+    sha3::Digest,
+    system_params::{
+        STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST,
+        STORAGE_ACCESS_WARM_READ_COST, STORAGE_ACCESS_WARM_WRITE_COST,
+    },
 };
 
 /// The global state including pending modifications that are written only at
@@ -79,7 +83,9 @@ impl ModifiedWorld {
             .cloned()
             .unwrap_or_else(|| self.world.read_storage(contract, key));
 
-        let refund = if self.read_storage_slots.contains(&(contract, key)) {
+        let refund = if is_storage_key_free(&contract, &key)
+            || self.read_storage_slots.contains(&(contract, key))
+        {
             WARM_READ_REFUND
         } else {
             self.read_storage_slots.add((contract, key));
@@ -93,10 +99,11 @@ impl ModifiedWorld {
     pub fn write_storage(&mut self, contract: H160, key: U256, value: U256) -> u32 {
         self.storage_changes.insert((contract, key), value);
 
-        if self
-            .written_storage_slots
-            .as_ref()
-            .contains_key(&(contract, key))
+        if is_storage_key_free(&contract, &key)
+            || self
+                .written_storage_slots
+                .as_ref()
+                .contains_key(&(contract, key))
         {
             WARM_WRITE_REFUND
         } else {
@@ -217,3 +224,42 @@ pub(crate) type Snapshot = (
 const WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST - STORAGE_ACCESS_WARM_READ_COST;
 const WARM_WRITE_REFUND: u32 = STORAGE_ACCESS_COLD_WRITE_COST - STORAGE_ACCESS_WARM_WRITE_COST;
 const COLD_WRITE_AFTER_WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST;
+
+pub(crate) fn is_storage_key_free(address: &H160, key: &U256) -> bool {
+    let storage_key_for_eth_balance = U256([
+        4209092924407300373,
+        6927221427678996148,
+        4194905989268492595,
+        15931007429432312239,
+    ]);
+    if address == &SYSTEM_CONTEXT_ADDRESS {
+        return true;
+    }
+
+    let keyy = U256::from_little_endian(&raw_hashed_key(&address, &u256_to_h256(*key)));
+
+    if keyy == storage_key_for_eth_balance {
+        return true;
+    }
+
+    false
+}
+
+pub const SYSTEM_CONTEXT_ADDRESS: H160 = H160([
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x80, 0x0b,
+]);
+
+fn u256_to_h256(num: U256) -> H256 {
+    let mut bytes = [0u8; 32];
+    num.to_big_endian(&mut bytes);
+    H256::from_slice(&bytes)
+}
+
+fn raw_hashed_key(address: &H160, key: &H256) -> [u8; 32] {
+    let mut bytes = [0u8; 64];
+    bytes[12..32].copy_from_slice(&address.0);
+    U256::from(key.to_fixed_bytes()).to_big_endian(&mut bytes[32..64]);
+
+    Blake2s256::digest(bytes).into()
+}
