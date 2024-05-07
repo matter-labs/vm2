@@ -36,4 +36,6 @@ pub trait World {
 
     /// There is no write_storage; [ModifiedWorld::get_storage_changes] gives a list of all storage changes.
     fn read_storage(&mut self, contract: H160, key: U256) -> U256;
+
+    fn is_write_initial(&mut self, contract: H160, key: U256) -> bool;
 }

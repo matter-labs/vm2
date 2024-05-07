@@ -61,4 +61,8 @@ impl World for TestWorld {
             0.into()
         }
     }
+
+    fn is_write_initial(&mut self, contract: u256::H160, key: U256) -> bool {
+        true
+    }
 }

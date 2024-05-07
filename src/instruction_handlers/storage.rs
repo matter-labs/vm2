@@ -10,7 +10,7 @@ use crate::{
     },
     compression::compress_with_best_strategy,
     instruction::InstructionResult,
-    modified_world::is_storage_key_free,
+    modified_world::{is_storage_key_free, u256_to_h256},
     Instruction, Predicate, VirtualMachine,
 };
 
@@ -33,6 +33,7 @@ pub const BYTES_PER_DERIVED_KEY: u8 = 32;
 fn get_pubdata_price_bytes(initial_value: U256, final_value: U256, is_initial: bool) -> u32 {
     // TODO (SMA-1702): take into account the content of the log query, i.e. values that contain mostly zeroes
     // should cost less.
+    println!(">>> > {initial_value} {final_value} {is_initial}");
 
     let compressed_value_size =
         compress_with_best_strategy(initial_value, final_value).len() as u32;

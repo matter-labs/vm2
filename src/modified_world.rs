@@ -209,8 +209,8 @@ impl ModifiedWorld {
         self.written_storage_slots.delete_history();
     }
 
-    pub(crate) fn is_write_initial(&self, address: H160, key: U256) -> bool {
-        self.read_storage_slots.contains(&(address, key))
+    pub(crate) fn is_write_initial(&mut self, address: H160, key: U256) -> bool {
+        self.world.is_write_initial(address, key)
     }
 }
 
@@ -250,7 +250,7 @@ pub const SYSTEM_CONTEXT_ADDRESS: H160 = H160([
     0x00, 0x00, 0x80, 0x0b,
 ]);
 
-fn u256_to_h256(num: U256) -> H256 {
+pub fn u256_to_h256(num: U256) -> H256 {
     let mut bytes = [0u8; 32];
     num.to_big_endian(&mut bytes);
     H256::from_slice(&bytes)
