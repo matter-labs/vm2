@@ -20,6 +20,20 @@ impl<K: Ord + Clone, V: Clone> RollbackableMap<K, V> {
         self.old_entries.push((key.clone(), old_value.clone()));
         old_value
     }
+
+    pub(crate) fn changes_after(
+        &self,
+        snapshot: <Self as Rollback>::Snapshot,
+    ) -> BTreeMap<K, (Option<V>, V)> {
+        let mut changes = BTreeMap::new();
+        for (key, old_value) in self.old_entries[snapshot..].iter().rev() {
+            changes
+                .entry(key.clone())
+                .and_modify(|(old, _): &mut (Option<V>, V)| old.clone_from(old_value))
+                .or_insert((old_value.clone(), self.map.get(key).unwrap().clone()));
+        }
+        changes
+    }
 }
 
 impl<K: Ord, V> Rollback for RollbackableMap<K, V> {
@@ -91,6 +105,10 @@ impl<T> Rollback for RollbackableLog<T> {
 impl<T> RollbackableLog<T> {
     pub fn push(&mut self, entry: T) {
         self.entries.push(entry)
+    }
+
+    pub(crate) fn logs_after(&self, snapshot: <RollbackableLog<T> as Rollback>::Snapshot) -> &[T] {
+        &self.entries[snapshot..]
     }
 }
 

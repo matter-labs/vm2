@@ -127,12 +127,23 @@ impl ModifiedWorld {
         self.storage_changes.as_ref()
     }
 
+    pub fn get_storage_changes_after(
+        &self,
+        snapshot: &Snapshot,
+    ) -> BTreeMap<(H160, U256), (Option<U256>, U256)> {
+        self.storage_changes.changes_after(snapshot.storage_changes)
+    }
+
     pub(crate) fn record_event(&mut self, event: Event) {
         self.events.push(event);
     }
 
     pub fn events(&self) -> &[Event] {
         self.events.as_ref()
+    }
+
+    pub fn events_after(&self, snapshot: &Snapshot) -> &[Event] {
+        self.events.logs_after(snapshot.events)
     }
 
     pub(crate) fn record_l2_to_l1_log(&mut self, log: L2ToL1Log) {
@@ -143,17 +154,32 @@ impl ModifiedWorld {
         self.l2_to_l1_logs.as_ref()
     }
 
-    pub(crate) fn snapshot(&self) -> Snapshot {
-        (
-            self.storage_changes.snapshot(),
-            self.events.snapshot(),
-            self.l2_to_l1_logs.snapshot(),
-            self.paid_changes.snapshot(),
-        )
+    pub fn l2_to_l1_logs_after(&self, snapshot: &Snapshot) -> &[L2ToL1Log] {
+        self.l2_to_l1_logs.logs_after(snapshot.l2_to_l1_logs)
     }
 
-    pub(crate) fn rollback(&mut self, (storage, events, l2_to_l1_logs, paid_changes): Snapshot) {
-        self.storage_changes.rollback(storage);
+    /// Get a snapshot for selecting which logs [Self::events_after] & Co output.
+    /// The snapshot can't be used for rolling back the VM because the method for
+    /// that is private. Use [crate::VirtualMachine::snapshot] for that instead.
+    pub fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            storage_changes: self.storage_changes.snapshot(),
+            events: self.events.snapshot(),
+            l2_to_l1_logs: self.l2_to_l1_logs.snapshot(),
+            paid_changes: self.paid_changes.snapshot(),
+        }
+    }
+
+    pub(crate) fn rollback(
+        &mut self,
+        Snapshot {
+            storage_changes,
+            events,
+            l2_to_l1_logs,
+            paid_changes,
+        }: Snapshot,
+    ) {
+        self.storage_changes.rollback(storage_changes);
         self.events.rollback(events);
         self.l2_to_l1_logs.rollback(l2_to_l1_logs);
         self.paid_changes.rollback(paid_changes);
@@ -193,12 +219,13 @@ impl ModifiedWorld {
     }
 }
 
-pub(crate) type Snapshot = (
-    <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
-    <RollbackableLog<Event> as Rollback>::Snapshot,
-    <RollbackableLog<L2ToL1Log> as Rollback>::Snapshot,
-    <RollbackableMap<(H160, U256), u32> as Rollback>::Snapshot,
-);
+#[derive(Clone, PartialEq, Debug)]
+pub struct Snapshot {
+    storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
+    events: <RollbackableLog<Event> as Rollback>::Snapshot,
+    l2_to_l1_logs: <RollbackableLog<L2ToL1Log> as Rollback>::Snapshot,
+    paid_changes: <RollbackableMap<(H160, U256), u32> as Rollback>::Snapshot,
+}
 
 const WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST - STORAGE_ACCESS_WARM_READ_COST;
 const WARM_WRITE_REFUND: u32 = STORAGE_ACCESS_COLD_WRITE_COST - STORAGE_ACCESS_WARM_WRITE_COST;
