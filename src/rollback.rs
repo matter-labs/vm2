@@ -29,7 +29,7 @@ impl<K: Ord + Clone, V: Clone> RollbackableMap<K, V> {
         for (key, old_value) in self.old_entries[snapshot..].iter().rev() {
             changes
                 .entry(key.clone())
-                .and_modify(|(old, _)| *old = old_value.clone())
+                .and_modify(|(old, _): &mut (Option<V>, V)| old.clone_from(old_value))
                 .or_insert((old_value.clone(), self.map.get(key).unwrap().clone()));
         }
         changes
