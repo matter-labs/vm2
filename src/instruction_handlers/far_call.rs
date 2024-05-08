@@ -227,7 +227,7 @@ impl Instruction {
     ) -> Self {
         Self {
             handler: monomorphize!(far_call [MODE] match_boolean is_static),
-            arguments: Arguments::new(predicate, 182)
+            arguments: Arguments::new(predicate, 183)
                 .write_source(&src1)
                 .write_source(&src2)
                 .write_source(&error_handler),
