@@ -19,6 +19,7 @@ pub struct ModifiedWorld {
     storage_changes: RollbackableMap<(H160, U256), U256>,
     events: RollbackableLog<Event>,
     l2_to_l1_logs: RollbackableLog<L2ToL1Log>,
+    paid_changes: RollbackableMap<(H160, U256), u32>,
 
     // The fields below are only rolled back when the whole VM is rolled back.
     pub(crate) decommitted_hashes: RollbackableSet<U256>,
@@ -27,11 +28,7 @@ pub struct ModifiedWorld {
 }
 
 pub struct ExternalSnapshot {
-    storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
-    events: <RollbackableLog<Event> as Rollback>::Snapshot,
-    l2_to_l1_logs: <RollbackableLog<L2ToL1Log> as Rollback>::Snapshot,
-
-    // The field below are only rolled back when the whole VM is rolled back.
+    internal_snapshot: Snapshot,
     pub(crate) decommitted_hashes: <RollbackableMap<U256, ()> as Rollback>::Snapshot,
     read_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
     written_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
@@ -67,11 +64,12 @@ impl ModifiedWorld {
             decommitted_hashes: Default::default(),
             read_storage_slots: Default::default(),
             written_storage_slots: Default::default(),
+            paid_changes: Default::default(),
         }
     }
 
     /// Returns the storage slot's value and a refund based on its hot/cold status.
-    pub fn read_storage(&mut self, contract: H160, key: U256) -> (U256, u32) {
+    pub(crate) fn read_storage(&mut self, contract: H160, key: U256) -> (U256, u32) {
         let value = self
             .storage_changes
             .as_ref()
@@ -79,7 +77,9 @@ impl ModifiedWorld {
             .cloned()
             .unwrap_or_else(|| self.world.read_storage(contract, key));
 
-        let refund = if self.read_storage_slots.contains(&(contract, key)) {
+        let refund = if self.world.is_free_storage_slot(&contract, &key)
+            || self.read_storage_slots.contains(&(contract, key))
+        {
             WARM_READ_REFUND
         } else {
             self.read_storage_slots.add((contract, key));
@@ -89,11 +89,21 @@ impl ModifiedWorld {
         (value, refund)
     }
 
-    /// Returns the refund based the hot/cold status of the storage slot.
-    pub fn write_storage(&mut self, contract: H160, key: U256, value: U256) -> u32 {
+    /// Returns the refund based the hot/cold status of the storage slot and the change in pubdata.
+    pub(crate) fn write_storage(&mut self, contract: H160, key: U256, value: U256) -> (u32, i32) {
         self.storage_changes.insert((contract, key), value);
 
-        if self
+        if self.world.is_free_storage_slot(&contract, &key) {
+            return (WARM_WRITE_REFUND, 0);
+        }
+
+        let update_cost = self.world.cost_of_writing_storage(contract, key, value);
+        let prepaid = self
+            .paid_changes
+            .insert((contract, key), update_cost)
+            .unwrap_or(0);
+
+        let refund = if self
             .written_storage_slots
             .as_ref()
             .contains_key(&(contract, key))
@@ -108,7 +118,9 @@ impl ModifiedWorld {
                 self.read_storage_slots.add((contract, key));
                 0
             }
-        }
+        };
+
+        (refund, (update_cost as i32) - (prepaid as i32))
     }
 
     pub fn get_storage_changes(&self) -> &BTreeMap<(H160, U256), U256> {
@@ -136,22 +148,22 @@ impl ModifiedWorld {
             self.storage_changes.snapshot(),
             self.events.snapshot(),
             self.l2_to_l1_logs.snapshot(),
+            self.paid_changes.snapshot(),
         )
     }
 
-    pub(crate) fn rollback(&mut self, (storage, events, l2_to_l1_logs): Snapshot) {
+    pub(crate) fn rollback(&mut self, (storage, events, l2_to_l1_logs, paid_changes): Snapshot) {
         self.storage_changes.rollback(storage);
         self.events.rollback(events);
         self.l2_to_l1_logs.rollback(l2_to_l1_logs);
+        self.paid_changes.rollback(paid_changes);
     }
 
     /// This function must only be called during the initial frame
     /// because otherwise internal rollbacks can roll back past the external snapshot.
     pub(crate) fn external_snapshot(&self) -> ExternalSnapshot {
         ExternalSnapshot {
-            storage_changes: self.storage_changes.snapshot(),
-            events: self.events.snapshot(),
-            l2_to_l1_logs: self.l2_to_l1_logs.snapshot(),
+            internal_snapshot: self.snapshot(),
             decommitted_hashes: self.decommitted_hashes.snapshot(),
             read_storage_slots: self.read_storage_slots.snapshot(),
             written_storage_slots: self.written_storage_slots.snapshot(),
@@ -159,9 +171,7 @@ impl ModifiedWorld {
     }
 
     pub(crate) fn external_rollback(&mut self, snapshot: ExternalSnapshot) {
-        self.storage_changes.rollback(snapshot.storage_changes);
-        self.events.rollback(snapshot.events);
-        self.l2_to_l1_logs.rollback(snapshot.l2_to_l1_logs);
+        self.rollback(snapshot.internal_snapshot);
         self.decommitted_hashes
             .rollback(snapshot.decommitted_hashes);
         self.read_storage_slots
@@ -187,6 +197,7 @@ pub(crate) type Snapshot = (
     <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
     <RollbackableLog<Event> as Rollback>::Snapshot,
     <RollbackableLog<L2ToL1Log> as Rollback>::Snapshot,
+    <RollbackableMap<(H160, U256), u32> as Rollback>::Snapshot,
 );
 
 const WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST - STORAGE_ACCESS_WARM_READ_COST;
