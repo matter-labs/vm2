@@ -123,8 +123,12 @@ impl ModifiedWorld {
         (refund, (update_cost as i32) - (prepaid as i32))
     }
 
-    pub fn get_storage_changes(&self) -> &BTreeMap<(H160, U256), U256> {
+    pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
         self.storage_changes.as_ref()
+    }
+
+    pub fn get_storage_changes(&self) -> BTreeMap<(H160, U256), (Option<U256>, U256)> {
+        self.storage_changes.changes_after(0)
     }
 
     pub fn get_storage_changes_after(
