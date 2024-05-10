@@ -162,6 +162,10 @@ impl ModifiedWorld {
         self.l2_to_l1_logs.logs_after(snapshot.l2_to_l1_logs)
     }
 
+    pub fn get_decommitted_hashes(&self) -> &BTreeMap<U256, ()> {
+        self.decommitted_hashes.as_ref()
+    }
+
     /// Get a snapshot for selecting which logs [Self::events_after] & Co output.
     /// The snapshot can't be used for rolling back the VM because the method for
     /// that is private. Use [crate::VirtualMachine::snapshot] for that instead.
