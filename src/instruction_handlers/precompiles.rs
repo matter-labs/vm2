@@ -3,7 +3,7 @@ use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     instruction::InstructionResult,
     state::Heaps,
-    Instruction, Predicate, VirtualMachine,
+    Instruction, VirtualMachine,
 };
 use u256::U256;
 use zk_evm_abstractions::{
@@ -134,10 +134,10 @@ impl Instruction {
         abi: Register1,
         burn: Register2,
         out: Register1,
-        predicate: Predicate,
+        arguments: Arguments,
     ) -> Self {
         Self {
-            arguments: Arguments::new(predicate, 6)
+            arguments: arguments
                 .write_source(&abi)
                 .write_source(&burn)
                 .write_destination(&out),

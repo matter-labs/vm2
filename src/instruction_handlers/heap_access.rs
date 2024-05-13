@@ -9,7 +9,7 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::InstructionResult,
     state::State,
-    ExecutionEnd, Instruction, Predicate, VirtualMachine,
+    ExecutionEnd, Instruction, VirtualMachine,
 };
 use u256::U256;
 use zkevm_opcode_defs::system_params::NEW_KERNEL_FRAME_MEMORY_STIPEND;
@@ -180,11 +180,9 @@ impl Instruction {
         src: RegisterOrImmediate,
         out: Register1,
         incremented_out: Option<Register2>,
-        predicate: Predicate,
+        arguments: Arguments,
     ) -> Self {
-        let mut arguments = Arguments::new(predicate, 7)
-            .write_source(&src)
-            .write_destination(&out);
+        let mut arguments = arguments.write_source(&src).write_destination(&out);
 
         let increment = incremented_out.is_some();
         if let Some(out2) = incremented_out {
@@ -202,13 +200,13 @@ impl Instruction {
         src1: RegisterOrImmediate,
         src2: Register2,
         incremented_out: Option<Register1>,
-        predicate: Predicate,
+        arguments: Arguments,
         should_hook: bool,
     ) -> Self {
         let increment = incremented_out.is_some();
         Self {
             handler: monomorphize!(store [H] match_reg_imm src1 match_boolean increment match_boolean should_hook),
-            arguments: Arguments::new(predicate, 13)
+            arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)
                 .write_destination(&incremented_out),
@@ -220,12 +218,12 @@ impl Instruction {
         src: Register1,
         out: Register1,
         incremented_out: Option<Register2>,
-        predicate: Predicate,
+        arguments: Arguments,
     ) -> Self {
         let increment = incremented_out.is_some();
         Self {
             handler: monomorphize!(load_pointer match_boolean increment),
-            arguments: Arguments::new(predicate, 7)
+            arguments: arguments
                 .write_source(&src)
                 .write_destination(&out)
                 .write_destination(&incremented_out),

@@ -5,7 +5,6 @@ use crate::{
         RelativeStack, Source,
     },
     instruction::{Instruction, InstructionResult},
-    predication::Predicate,
     VirtualMachine,
 };
 
@@ -28,10 +27,10 @@ fn jump<In: Source>(
 use super::monomorphization::*;
 
 impl Instruction {
-    pub fn from_jump(source: AnySource, predicate: Predicate) -> Self {
+    pub fn from_jump(source: AnySource, arguments: Arguments) -> Self {
         Self {
             handler: monomorphize!(jump match_source source),
-            arguments: Arguments::new(predicate, 6).write_source(&source),
+            arguments: arguments.write_source(&source),
         }
     }
 }

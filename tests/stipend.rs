@@ -2,7 +2,7 @@ use u256::U256;
 use vm2::{
     address_into_u256,
     addressing_modes::{
-        CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
+        Arguments, CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
     },
     initial_decommit,
     instruction_handlers::{Add, CallingMode},
@@ -33,7 +33,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
                 Register2(r0),
                 Register1(r1).into(),
                 (),
-                Predicate::Always,
+                Arguments::new(Predicate::Always, 6),
                 false,
                 false,
             ),
@@ -46,7 +46,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
                 Register2(r0),
                 Register1(r2).into(),
                 (),
-                Predicate::Always,
+                Arguments::new(Predicate::Always, 6),
                 false,
                 false,
             ),
@@ -56,9 +56,13 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
                 // crash on error
                 Immediate1(0xFFFF),
                 false,
-                Predicate::Always,
+                Arguments::new(Predicate::Always, 200),
             ),
-            Instruction::from_ret(Register1(Register::new(0)), None, Predicate::Always),
+            Instruction::from_ret(
+                Register1(Register::new(0)),
+                None,
+                Arguments::new(Predicate::Always, 5),
+            ),
         ],
         vec![abi, ethereum_address.into()],
     );
@@ -70,11 +74,15 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
                 Register2(r0),
                 Register1(r0).into(),
                 (),
-                Predicate::Always,
+                Arguments::new(Predicate::Always, 6),
                 false,
                 false,
             ),
-            Instruction::from_ret(Register1(Register::new(0)), None, Predicate::Always),
+            Instruction::from_ret(
+                Register1(Register::new(0)),
+                None,
+                Arguments::new(Predicate::Always, 5),
+            ),
         ],
         vec![],
     );

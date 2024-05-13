@@ -7,7 +7,7 @@ use crate::{
         Arguments, Destination, Register1, Register2, Source, SLOAD_COST, SSTORE_COST,
     },
     instruction::InstructionResult,
-    Instruction, Predicate, VirtualMachine,
+    Instruction, VirtualMachine,
 };
 
 fn sstore(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
@@ -46,24 +46,20 @@ fn sload(vm: &mut VirtualMachine, instruction: *const Instruction) -> Instructio
 
 impl Instruction {
     #[inline(always)]
-    pub fn from_sstore(src1: Register1, src2: Register2, predicate: Predicate) -> Self {
+    pub fn from_sstore(src1: Register1, src2: Register2, arguments: Arguments) -> Self {
         Self {
             handler: sstore,
-            arguments: Arguments::new(predicate, SSTORE_COST)
-                .write_source(&src1)
-                .write_source(&src2),
+            arguments: arguments.write_source(&src1).write_source(&src2),
         }
     }
 }
 
 impl Instruction {
     #[inline(always)]
-    pub fn from_sload(src: Register1, dst: Register1, predicate: Predicate) -> Self {
+    pub fn from_sload(src: Register1, dst: Register1, arguments: Arguments) -> Self {
         Self {
             handler: sload,
-            arguments: Arguments::new(predicate, SLOAD_COST)
-                .write_source(&src)
-                .write_destination(&dst),
+            arguments: arguments.write_source(&src).write_destination(&dst),
         }
     }
 }
