@@ -77,7 +77,9 @@ impl ContextOp for Meta {
             this_shard_id: 0, // TODO properly implement shards
             caller_shard_id: 0,
             code_shard_id: 0,
-            aux_field_0: 0,
+            // This field is actually pubdata!
+            // TODO PLA-893: This should be zero when not in kernel mode
+            aux_field_0: state.current_frame.total_pubdata_spent as u32,
         }
         .to_u256()
     }
