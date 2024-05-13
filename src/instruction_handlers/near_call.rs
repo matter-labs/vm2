@@ -2,7 +2,7 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Source},
     instruction::InstructionResult,
     predication::Flags,
-    Instruction, Predicate, VirtualMachine,
+    Instruction, VirtualMachine,
 };
 
 fn near_call(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
@@ -34,11 +34,11 @@ impl Instruction {
         gas: Register1,
         destination: Immediate1,
         error_handler: Immediate2,
-        predicate: Predicate,
+        arguments: Arguments,
     ) -> Self {
         Self {
             handler: near_call,
-            arguments: Arguments::new(predicate, 25)
+            arguments: arguments
                 .write_source(&gas)
                 .write_source(&destination)
                 .write_source(&error_handler),

@@ -7,7 +7,7 @@ use crate::{
     decommit::address_into_u256,
     instruction::InstructionResult,
     state::State,
-    Instruction, Predicate, VirtualMachine,
+    Instruction, VirtualMachine,
 };
 use u256::U256;
 use zkevm_opcode_defs::VmMetaParameters;
@@ -106,44 +106,44 @@ fn increment_tx_number(
 }
 
 impl Instruction {
-    fn from_context<Op: ContextOp>(out: Register1, predicate: Predicate) -> Self {
+    fn from_context<Op: ContextOp>(out: Register1, arguments: Arguments) -> Self {
         Self {
             handler: context::<Op>,
-            arguments: Arguments::new(predicate, 5).write_destination(&out),
+            arguments: arguments.write_destination(&out),
         }
     }
 
-    pub fn from_this(out: Register1, predicate: Predicate) -> Self {
-        Self::from_context::<This>(out, predicate)
+    pub fn from_this(out: Register1, arguments: Arguments) -> Self {
+        Self::from_context::<This>(out, arguments)
     }
-    pub fn from_caller(out: Register1, predicate: Predicate) -> Self {
-        Self::from_context::<Caller>(out, predicate)
+    pub fn from_caller(out: Register1, arguments: Arguments) -> Self {
+        Self::from_context::<Caller>(out, arguments)
     }
-    pub fn from_code_address(out: Register1, predicate: Predicate) -> Self {
-        Self::from_context::<CodeAddress>(out, predicate)
+    pub fn from_code_address(out: Register1, arguments: Arguments) -> Self {
+        Self::from_context::<CodeAddress>(out, arguments)
     }
-    pub fn from_ergs_left(out: Register1, predicate: Predicate) -> Self {
-        Self::from_context::<ErgsLeft>(out, predicate)
+    pub fn from_ergs_left(out: Register1, arguments: Arguments) -> Self {
+        Self::from_context::<ErgsLeft>(out, arguments)
     }
-    pub fn from_context_u128(out: Register1, predicate: Predicate) -> Self {
-        Self::from_context::<U128>(out, predicate)
+    pub fn from_context_u128(out: Register1, arguments: Arguments) -> Self {
+        Self::from_context::<U128>(out, arguments)
     }
-    pub fn from_context_sp(out: Register1, predicate: Predicate) -> Self {
-        Self::from_context::<SP>(out, predicate)
+    pub fn from_context_sp(out: Register1, arguments: Arguments) -> Self {
+        Self::from_context::<SP>(out, arguments)
     }
-    pub fn from_context_meta(out: Register1, predicate: Predicate) -> Self {
-        Self::from_context::<Meta>(out, predicate)
+    pub fn from_context_meta(out: Register1, arguments: Arguments) -> Self {
+        Self::from_context::<Meta>(out, arguments)
     }
-    pub fn from_set_context_u128(src: Register1, predicate: Predicate) -> Self {
+    pub fn from_set_context_u128(src: Register1, arguments: Arguments) -> Self {
         Self {
             handler: set_context_u128,
-            arguments: Arguments::new(predicate, 5).write_source(&src),
+            arguments: arguments.write_source(&src),
         }
     }
-    pub fn from_increment_tx_number(predicate: Predicate) -> Self {
+    pub fn from_increment_tx_number(arguments: Arguments) -> Self {
         Self {
             handler: increment_tx_number,
-            arguments: Arguments::new(predicate, 5),
+            arguments,
         }
     }
 }

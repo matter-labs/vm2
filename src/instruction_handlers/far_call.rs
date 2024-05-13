@@ -5,7 +5,7 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::InstructionResult,
     predication::Flags,
-    Instruction, Predicate, VirtualMachine,
+    Instruction, VirtualMachine,
 };
 use u256::U256;
 use zkevm_opcode_defs::{
@@ -223,11 +223,11 @@ impl Instruction {
         src2: Register2,
         error_handler: Immediate1,
         is_static: bool,
-        predicate: Predicate,
+        arguments: Arguments,
     ) -> Self {
         Self {
             handler: monomorphize!(far_call [MODE] match_boolean is_static),
-            arguments: Arguments::new(predicate, 183)
+            arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)
                 .write_source(&error_handler),

@@ -3,7 +3,7 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
     instruction::InstructionResult,
     modified_world::{Event, L2ToL1Log},
-    Instruction, Predicate, VirtualMachine,
+    Instruction, VirtualMachine,
 };
 use u256::H160;
 use zkevm_opcode_defs::ADDRESS_EVENT_WRITER;
@@ -58,11 +58,11 @@ impl Instruction {
         key: Register1,
         value: Register2,
         is_first: bool,
-        predicate: Predicate,
+        arguments: Arguments,
     ) -> Self {
         Self {
             handler: event,
-            arguments: Arguments::new(predicate, 34)
+            arguments: arguments
                 .write_source(&key)
                 .write_source(&value)
                 .write_source(&Immediate1(is_first.into())),
@@ -73,11 +73,11 @@ impl Instruction {
         key: Register1,
         value: Register2,
         is_service: bool,
-        predicate: Predicate,
+        arguments: Arguments,
     ) -> Self {
         Self {
             handler: l2_to_l1,
-            arguments: Arguments::new(predicate, 34)
+            arguments: arguments
                 .write_source(&key)
                 .write_source(&value)
                 .write_source(&Immediate1(is_service.into())),
