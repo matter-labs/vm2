@@ -77,7 +77,7 @@ impl Instruction {
     ) -> Self {
         Self {
             handler: l2_to_l1,
-            arguments: Arguments::new(predicate, 34)
+            arguments: Arguments::new(predicate, 109)
                 .write_source(&key)
                 .write_source(&value)
                 .write_source(&Immediate1(is_service.into())),
