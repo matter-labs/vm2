@@ -67,6 +67,7 @@ fn decode(raw: u64, is_bootloader: bool) -> Instruction {
         zkevm_opcode_defs::Condition::Ne => crate::Predicate::IfNotEQ,
         zkevm_opcode_defs::Condition::GtOrLt => crate::Predicate::IfGtOrLT,
     };
+    let arguments = Arguments::new(predicate, parsed.variant.ergs_price());
 
     let stack_in = RegisterAndImmediate {
         immediate: parsed.imm_0,
@@ -112,7 +113,7 @@ fn decode(raw: u64, is_bootloader: bool) -> Instruction {
                 src2,
                 out,
                 $snd,
-                predicate,
+                arguments,
                 parsed.variant.flags[SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES],
                 parsed.variant.flags[SET_FLAGS_FLAG_IDX],
             )
@@ -125,7 +126,7 @@ fn decode(raw: u64, is_bootloader: bool) -> Instruction {
                 src1,
                 src2,
                 out,
-                predicate,
+                arguments,
                 parsed.variant.flags[SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE],
             )
         };
@@ -147,34 +148,34 @@ fn decode(raw: u64, is_bootloader: bool) -> Instruction {
             zkevm_opcode_defs::ShiftOpcode::Rol => binop!(RotateLeft, ()),
             zkevm_opcode_defs::ShiftOpcode::Ror => binop!(RotateRight, ()),
         },
-        zkevm_opcode_defs::Opcode::Jump(_) => Instruction::from_jump(src1, predicate),
+        zkevm_opcode_defs::Opcode::Jump(_) => Instruction::from_jump(src1, arguments),
         zkevm_opcode_defs::Opcode::Context(x) => match x {
             zkevm_opcode_defs::ContextOpcode::This => {
-                Instruction::from_this(out.try_into().unwrap(), predicate)
+                Instruction::from_this(out.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::Caller => {
-                Instruction::from_caller(out.try_into().unwrap(), predicate)
+                Instruction::from_caller(out.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::CodeAddress => {
-                Instruction::from_code_address(out.try_into().unwrap(), predicate)
+                Instruction::from_code_address(out.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::ErgsLeft => {
-                Instruction::from_ergs_left(out.try_into().unwrap(), predicate)
+                Instruction::from_ergs_left(out.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::GetContextU128 => {
-                Instruction::from_context_u128(out.try_into().unwrap(), predicate)
+                Instruction::from_context_u128(out.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::SetContextU128 => {
-                Instruction::from_set_context_u128(src1.try_into().unwrap(), predicate)
+                Instruction::from_set_context_u128(src1.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::Sp => {
-                Instruction::from_context_sp(out.try_into().unwrap(), predicate)
+                Instruction::from_context_sp(out.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::Meta => {
-                Instruction::from_context_meta(out.try_into().unwrap(), predicate)
+                Instruction::from_context_meta(out.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::IncrementTxNumber => {
-                Instruction::from_increment_tx_number(predicate)
+                Instruction::from_increment_tx_number(arguments)
             }
             x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Context(x)),
         },
@@ -188,7 +189,7 @@ fn decode(raw: u64, is_bootloader: bool) -> Instruction {
             Register1(Register::new(parsed.src0_reg_idx)),
             Immediate1(parsed.imm_0),
             Immediate2(parsed.imm_1),
-            predicate,
+            arguments,
         ),
         zkevm_opcode_defs::Opcode::FarCall(kind) => {
             let constructor = match kind {
@@ -207,7 +208,7 @@ fn decode(raw: u64, is_bootloader: bool) -> Instruction {
                 src2,
                 Immediate1(parsed.imm_0),
                 parsed.variant.flags[FAR_CALL_STATIC_FLAG_IDX],
-                predicate,
+                arguments,
             )
         }
         zkevm_opcode_defs::Opcode::Ret(kind) => {
@@ -219,53 +220,53 @@ fn decode(raw: u64, is_bootloader: bool) -> Instruction {
             };
             match kind {
                 zkevm_opcode_defs::RetOpcode::Ok => {
-                    Instruction::from_ret(src1.try_into().unwrap(), label, predicate)
+                    Instruction::from_ret(src1.try_into().unwrap(), label, arguments)
                 }
                 zkevm_opcode_defs::RetOpcode::Revert => {
-                    Instruction::from_revert(src1.try_into().unwrap(), label, predicate)
+                    Instruction::from_revert(src1.try_into().unwrap(), label, arguments)
                 }
-                zkevm_opcode_defs::RetOpcode::Panic => Instruction::from_panic(label, predicate),
+                zkevm_opcode_defs::RetOpcode::Panic => Instruction::from_panic(label, arguments),
             }
         }
         zkevm_opcode_defs::Opcode::Log(x) => match x {
             zkevm_opcode_defs::LogOpcode::StorageRead => Instruction::from_sload(
                 src1.try_into().unwrap(),
                 out.try_into().unwrap(),
-                predicate,
+                arguments,
             ),
             zkevm_opcode_defs::LogOpcode::TransientStorageRead => {
                 Instruction::from_sload_transient(
                     src1.try_into().unwrap(),
                     out.try_into().unwrap(),
-                    predicate,
+                    arguments,
                 )
             }
 
             zkevm_opcode_defs::LogOpcode::StorageWrite => {
-                Instruction::from_sstore(src1.try_into().unwrap(), src2, predicate)
+                Instruction::from_sstore(src1.try_into().unwrap(), src2, arguments)
             }
 
             zkevm_opcode_defs::LogOpcode::TransientStorageWrite => {
-                Instruction::from_sstore_transient(src1.try_into().unwrap(), src2, predicate)
+                Instruction::from_sstore_transient(src1.try_into().unwrap(), src2, arguments)
             }
 
             zkevm_opcode_defs::LogOpcode::ToL1Message => Instruction::from_l2_to_l1_message(
                 src1.try_into().unwrap(),
                 src2,
                 parsed.variant.flags[FIRST_MESSAGE_FLAG_IDX],
-                predicate,
+                arguments,
             ),
             zkevm_opcode_defs::LogOpcode::Event => Instruction::from_event(
                 src1.try_into().unwrap(),
                 src2,
                 parsed.variant.flags[FIRST_MESSAGE_FLAG_IDX],
-                predicate,
+                arguments,
             ),
             zkevm_opcode_defs::LogOpcode::PrecompileCall => Instruction::from_precompile_call(
                 src1.try_into().unwrap(),
                 src2,
                 out.try_into().unwrap(),
-                predicate,
+                arguments,
             ),
             x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Log(x)),
         },
@@ -276,33 +277,33 @@ fn decode(raw: u64, is_bootloader: bool) -> Instruction {
                     src1.try_into().unwrap(),
                     out.try_into().unwrap(),
                     increment.then_some(out2),
-                    predicate,
+                    arguments,
                 ),
                 zkevm_opcode_defs::UMAOpcode::HeapWrite => Instruction::from_store::<Heap>(
                     src1.try_into().unwrap(),
                     src2,
                     increment.then_some(out.try_into().unwrap()),
-                    predicate,
+                    arguments,
                     is_bootloader,
                 ),
                 zkevm_opcode_defs::UMAOpcode::AuxHeapRead => Instruction::from_load::<AuxHeap>(
                     src1.try_into().unwrap(),
                     out.try_into().unwrap(),
                     increment.then_some(out2),
-                    predicate,
+                    arguments,
                 ),
                 zkevm_opcode_defs::UMAOpcode::AuxHeapWrite => Instruction::from_store::<AuxHeap>(
                     src1.try_into().unwrap(),
                     src2,
                     increment.then_some(out.try_into().unwrap()),
-                    predicate,
+                    arguments,
                     false,
                 ),
                 zkevm_opcode_defs::UMAOpcode::FatPointerRead => Instruction::from_load_pointer(
                     src1.try_into().unwrap(),
                     out.try_into().unwrap(),
                     increment.then_some(out2),
-                    predicate,
+                    arguments,
                 ),
                 zkevm_opcode_defs::UMAOpcode::StaticMemoryRead => unimplemented_instruction(
                     zkevm_opcode_defs::Opcode::UMA(zkevm_opcode_defs::UMAOpcode::StaticMemoryRead),
@@ -329,7 +330,7 @@ fn decode(raw: u64, is_bootloader: bool) -> Instruction {
                 } else {
                     no_sp_movement
                 },
-                predicate,
+                arguments,
             )
         }
     }

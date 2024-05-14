@@ -177,6 +177,7 @@ pub const INVALID_INSTRUCTION: Instruction = Instruction {
     arguments: Arguments::new(Predicate::Always, INVALID_INSTRUCTION_COST),
 };
 
+const RETURN_COST: u32 = 5;
 pub const PANIC: Instruction = Instruction {
     handler: ret::<{ ReturnType::Panic as u8 }, false>,
     arguments: Arguments::new(Predicate::Always, RETURN_COST),
@@ -195,37 +196,31 @@ pub(crate) fn free_panic(vm: &mut VirtualMachine) -> InstructionResult {
     ret::<{ ReturnType::Panic as u8 }, false>(vm, &PANIC)
 }
 
-const RETURN_COST: u32 = 5;
-
 use super::monomorphization::*;
 
 impl Instruction {
-    pub fn from_ret(src1: Register1, label: Option<Immediate1>, predicate: Predicate) -> Self {
+    pub fn from_ret(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         const RETURN_TYPE: u8 = ReturnType::Normal as u8;
         Self {
             handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
-            arguments: Arguments::new(predicate, RETURN_COST)
-                .write_source(&src1)
-                .write_source(&label),
+            arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
-    pub fn from_revert(src1: Register1, label: Option<Immediate1>, predicate: Predicate) -> Self {
+    pub fn from_revert(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         const RETURN_TYPE: u8 = ReturnType::Revert as u8;
         Self {
             handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
-            arguments: Arguments::new(predicate, RETURN_COST)
-                .write_source(&src1)
-                .write_source(&label),
+            arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
-    pub fn from_panic(label: Option<Immediate1>, predicate: Predicate) -> Self {
+    pub fn from_panic(label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         const RETURN_TYPE: u8 = ReturnType::Panic as u8;
         Self {
             handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
-            arguments: Arguments::new(predicate, RETURN_COST).write_source(&label),
+            arguments: arguments.write_source(&label),
         }
     }
 

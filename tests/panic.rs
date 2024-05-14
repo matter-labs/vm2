@@ -1,6 +1,6 @@
 use proptest::prelude::*;
 use vm2::{
-    addressing_modes::{Immediate1, Immediate2, Register, Register1},
+    addressing_modes::{Arguments, Immediate1, Immediate2, Register, Register1},
     initial_decommit,
     testworld::TestWorld,
     ExecutionEnd, Instruction, Predicate, Program, VirtualMachine,
@@ -15,15 +15,15 @@ proptest! {
                 Register1(Register::new(0)),
                 Immediate1(1),
                 Immediate2(0xFFFF),
-                Predicate::Always,
+                Arguments::new(Predicate::Always, 25),
             ),
-            Instruction::from_panic(Some(Immediate1(label)), Predicate::Always),
+            Instruction::from_panic(Some(Immediate1(label)), Arguments::new(Predicate::Always, 5)),
         ];
         for _ in 0..98 {
             instructions.push(Instruction::from_ret(
                 Register1(Register::new(0)),
                 None,
-                vm2::Predicate::Always,
+                Arguments::new(Predicate::Always, 5),
             ));
         }
 

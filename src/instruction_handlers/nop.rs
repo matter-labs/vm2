@@ -2,7 +2,7 @@ use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{destination_stack_address, AdvanceStackPointer, Arguments, Source},
     instruction::InstructionResult,
-    Instruction, Predicate, VirtualMachine,
+    Instruction, VirtualMachine,
 };
 
 fn nop(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
@@ -21,13 +21,11 @@ impl Instruction {
     pub fn from_nop(
         pop: AdvanceStackPointer,
         push: AdvanceStackPointer,
-        predicate: Predicate,
+        arguments: Arguments,
     ) -> Self {
         Self {
             handler: nop,
-            arguments: Arguments::new(predicate, 6)
-                .write_source(&pop)
-                .write_destination(&push),
+            arguments: arguments.write_source(&pop).write_destination(&push),
         }
     }
 }

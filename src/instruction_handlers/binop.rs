@@ -6,7 +6,7 @@ use crate::{
         Source,
     },
     instruction::{Instruction, InstructionResult},
-    predication::{Flags, Predicate},
+    predication::Flags,
     VirtualMachine,
 };
 use u256::U256;
@@ -193,7 +193,7 @@ impl Binop for Div {
                 Flags::new(false, quotient.is_zero(), remainder.is_zero()),
             )
         } else {
-            (U256::zero(), U256::zero(), Flags::new(true, false, false)) // TODO check
+            (U256::zero(), U256::zero(), Flags::new(true, false, false))
         }
     }
     type Out2 = U256;
@@ -208,13 +208,13 @@ impl Instruction {
         src2: Register2,
         out: AnyDestination,
         out2: <Op::Out2 as SecondOutput>::Destination,
-        predicate: Predicate,
+        arguments: Arguments,
         swap: bool,
         set_flags: bool,
     ) -> Self {
         Self {
             handler: monomorphize!(binop [Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
-            arguments: Arguments::new(predicate, 6)
+            arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)
                 .write_destination(&out)

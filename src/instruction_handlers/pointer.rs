@@ -6,7 +6,7 @@ use crate::{
     },
     fat_pointer::FatPointer,
     instruction::InstructionResult,
-    Instruction, Predicate, VirtualMachine,
+    Instruction, VirtualMachine,
 };
 use u256::U256;
 
@@ -96,12 +96,12 @@ impl Instruction {
         src1: AnySource,
         src2: Register2,
         out: AnyDestination,
-        predicate: Predicate,
+        arguments: Arguments,
         swap: bool,
     ) -> Self {
         Self {
             handler: monomorphize!(ptr [Op] match_source src1 match_destination out match_boolean swap),
-            arguments: Arguments::new(predicate, 6)
+            arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)
                 .write_destination(&out),
