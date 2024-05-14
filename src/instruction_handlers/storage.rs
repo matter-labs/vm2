@@ -32,6 +32,22 @@ fn sstore(vm: &mut VirtualMachine, instruction: *const Instruction) -> Instructi
     })
 }
 
+fn sstore_transient(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
+    instruction_boilerplate_with_panic(vm, instruction, |vm, args, continue_normally| {
+        if vm.state.current_frame.is_static {
+            return Ok(&PANIC);
+        }
+
+        let key = Register1::get(args, &mut vm.state);
+        let value = Register2::get(args, &mut vm.state);
+
+        vm.world
+            .write_transient_storage(vm.state.current_frame.address, key, value);
+
+        continue_normally
+    })
+}
+
 fn sload(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
     instruction_boilerplate(vm, instruction, |vm, args| {
         let key = Register1::get(args, &mut vm.state);
@@ -58,10 +74,45 @@ impl Instruction {
 
 impl Instruction {
     #[inline(always)]
+    pub fn from_sstore_transient(src1: Register1, src2: Register2, predicate: Predicate) -> Self {
+        Self {
+            handler: sstore_transient,
+            arguments: Arguments::new(predicate, 0)
+                .write_source(&src1)
+                .write_source(&src2),
+        }
+    }
+}
+
+impl Instruction {
+    #[inline(always)]
     pub fn from_sload(src: Register1, dst: Register1, predicate: Predicate) -> Self {
         Self {
             handler: sload,
             arguments: Arguments::new(predicate, SLOAD_COST)
+                .write_source(&src)
+                .write_destination(&dst),
+        }
+    }
+}
+
+fn sload_transient(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
+    instruction_boilerplate(vm, instruction, |vm, args| {
+        let key = Register1::get(args, &mut vm.state);
+        let value = vm
+            .world
+            .read_transient_storage(vm.state.current_frame.address, key);
+
+        Register1::set(args, &mut vm.state, value);
+    })
+}
+
+impl Instruction {
+    #[inline(always)]
+    pub fn from_sload_transient(src: Register1, dst: Register1, predicate: Predicate) -> Self {
+        Self {
+            handler: sload_transient,
+            arguments: Arguments::new(predicate, 0)
                 .write_source(&src)
                 .write_destination(&dst),
         }

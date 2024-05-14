@@ -102,6 +102,7 @@ fn increment_tx_number(
 ) -> InstructionResult {
     instruction_boilerplate(vm, instruction, |vm, _| {
         vm.state.transaction_number = vm.state.transaction_number.wrapping_add(1);
+        vm.start_new_tx();
     })
 }
 
