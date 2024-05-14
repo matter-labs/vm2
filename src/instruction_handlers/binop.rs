@@ -193,7 +193,7 @@ impl Binop for Div {
                 Flags::new(false, quotient.is_zero(), remainder.is_zero()),
             )
         } else {
-            (U256::zero(), U256::zero(), Flags::new(true, false, false)) // TODO check
+            (U256::zero(), U256::zero(), Flags::new(true, false, false))
         }
     }
     type Out2 = U256;
