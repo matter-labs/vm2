@@ -218,20 +218,22 @@ impl ModifiedWorld {
     /// This function must only be called during the initial frame
     /// because otherwise internal rollbacks can roll back past the external snapshot.
     pub(crate) fn external_snapshot(&self) -> ExternalSnapshot {
-        // It is ok not to check the transient storage emptyness here
-        // because the next instruction after the creation of the snapshot
+        // Rolling back to this snapshot will clear transient storage even though it is not empty
+        // after a transaction. This is ok because the next instruction in the bootloader
         // (IncrementTxNumber) clears the transient storage anyway.
+        // This is necessary because clear_transient_storage cannot be undone.
         ExternalSnapshot {
-            internal_snapshot: self.snapshot(),
+            internal_snapshot: Snapshot {
+                transient_storage_changes: 0,
+                ..self.snapshot()
+            },
             decommitted_hashes: self.decommitted_hashes.snapshot(),
             read_storage_slots: self.read_storage_slots.snapshot(),
             written_storage_slots: self.written_storage_slots.snapshot(),
         }
     }
 
-    pub(crate) fn external_rollback(&mut self, mut snapshot: ExternalSnapshot) {
-        snapshot.internal_snapshot.transient_storage_changes = 0;
-
+    pub(crate) fn external_rollback(&mut self, snapshot: ExternalSnapshot) {
         self.rollback(snapshot.internal_snapshot);
         self.decommitted_hashes
             .rollback(snapshot.decommitted_hashes);
