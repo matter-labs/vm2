@@ -234,9 +234,22 @@ fn decode(raw: u64, is_bootloader: bool) -> Instruction {
                 out.try_into().unwrap(),
                 arguments,
             ),
+            zkevm_opcode_defs::LogOpcode::TransientStorageRead => {
+                Instruction::from_sload_transient(
+                    src1.try_into().unwrap(),
+                    out.try_into().unwrap(),
+                    arguments,
+                )
+            }
+
             zkevm_opcode_defs::LogOpcode::StorageWrite => {
                 Instruction::from_sstore(src1.try_into().unwrap(), src2, arguments)
             }
+
+            zkevm_opcode_defs::LogOpcode::TransientStorageWrite => {
+                Instruction::from_sstore_transient(src1.try_into().unwrap(), src2, arguments)
+            }
+
             zkevm_opcode_defs::LogOpcode::ToL1Message => Instruction::from_l2_to_l1_message(
                 src1.try_into().unwrap(),
                 src2,

@@ -17,6 +17,7 @@ pub struct ModifiedWorld {
 
     // These are rolled back on revert or panic (and when the whole VM is rolled back).
     storage_changes: RollbackableMap<(H160, U256), U256>,
+    transient_storage_changes: RollbackableMap<(H160, U256), U256>,
     events: RollbackableLog<Event>,
     l2_to_l1_logs: RollbackableLog<L2ToL1Log>,
     paid_changes: RollbackableMap<(H160, U256), u32>,
@@ -59,6 +60,7 @@ impl ModifiedWorld {
         Self {
             world,
             storage_changes: Default::default(),
+            transient_storage_changes: Default::default(),
             events: Default::default(),
             l2_to_l1_logs: Default::default(),
             decommitted_hashes: Default::default(),
@@ -87,6 +89,22 @@ impl ModifiedWorld {
         };
 
         (value, refund)
+    }
+
+    pub(crate) fn read_transient_storage(&mut self, contract: H160, key: U256) -> U256 {
+        let value = self
+            .transient_storage_changes
+            .as_ref()
+            .get(&(contract, key))
+            .cloned()
+            .unwrap_or_default();
+
+        value
+    }
+
+    pub(crate) fn write_transient_storage(&mut self, contract: H160, key: U256, value: U256) {
+        self.transient_storage_changes
+            .insert((contract, key), value);
     }
 
     /// Returns the refund based the hot/cold status of the storage slot and the change in pubdata.
@@ -175,6 +193,7 @@ impl ModifiedWorld {
             events: self.events.snapshot(),
             l2_to_l1_logs: self.l2_to_l1_logs.snapshot(),
             paid_changes: self.paid_changes.snapshot(),
+            transient_storage_changes: self.transient_storage_changes.snapshot(),
         }
     }
 
@@ -185,19 +204,29 @@ impl ModifiedWorld {
             events,
             l2_to_l1_logs,
             paid_changes,
+            transient_storage_changes,
         }: Snapshot,
     ) {
         self.storage_changes.rollback(storage_changes);
         self.events.rollback(events);
         self.l2_to_l1_logs.rollback(l2_to_l1_logs);
         self.paid_changes.rollback(paid_changes);
+        self.transient_storage_changes
+            .rollback(transient_storage_changes);
     }
 
     /// This function must only be called during the initial frame
     /// because otherwise internal rollbacks can roll back past the external snapshot.
     pub(crate) fn external_snapshot(&self) -> ExternalSnapshot {
+        // Rolling back to this snapshot will clear transient storage even though it is not empty
+        // after a transaction. This is ok because the next instruction in the bootloader
+        // (IncrementTxNumber) clears the transient storage anyway.
+        // This is necessary because clear_transient_storage cannot be undone.
         ExternalSnapshot {
-            internal_snapshot: self.snapshot(),
+            internal_snapshot: Snapshot {
+                transient_storage_changes: 0,
+                ..self.snapshot()
+            },
             decommitted_hashes: self.decommitted_hashes.snapshot(),
             read_storage_slots: self.read_storage_slots.snapshot(),
             written_storage_slots: self.written_storage_slots.snapshot(),
@@ -225,6 +254,10 @@ impl ModifiedWorld {
         self.read_storage_slots.delete_history();
         self.written_storage_slots.delete_history();
     }
+
+    pub(crate) fn clear_transient_storage(&mut self) {
+        self.transient_storage_changes = Default::default();
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -233,6 +266,7 @@ pub struct Snapshot {
     events: <RollbackableLog<Event> as Rollback>::Snapshot,
     l2_to_l1_logs: <RollbackableLog<L2ToL1Log> as Rollback>::Snapshot,
     paid_changes: <RollbackableMap<(H160, U256), u32> as Rollback>::Snapshot,
+    transient_storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
 }
 
 const WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST - STORAGE_ACCESS_WARM_READ_COST;

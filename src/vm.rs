@@ -285,6 +285,11 @@ impl VirtualMachine {
         print!("{}", self.state.current_frame.gas);
         println!();
     }
+
+    pub(crate) fn start_new_tx(&mut self) {
+        self.state.transaction_number = self.state.transaction_number.wrapping_add(1);
+        self.world.clear_transient_storage()
+    }
 }
 
 pub struct VmSnapshot {
