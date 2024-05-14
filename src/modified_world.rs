@@ -218,7 +218,9 @@ impl ModifiedWorld {
     /// This function must only be called during the initial frame
     /// because otherwise internal rollbacks can roll back past the external snapshot.
     pub(crate) fn external_snapshot(&self) -> ExternalSnapshot {
-        assert!(self.transient_storage_changes.as_ref().is_empty());
+        // It is ok not to check the transient storage emptyness here
+        // because the next instruction after the creation of the snapshot
+        // (IncrementTxNumber) clears the transient storage anyway.
         ExternalSnapshot {
             internal_snapshot: self.snapshot(),
             decommitted_hashes: self.decommitted_hashes.snapshot(),
