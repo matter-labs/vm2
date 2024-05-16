@@ -7,7 +7,7 @@ use crate::{
     decommit::address_into_u256,
     instruction::InstructionResult,
     state::State,
-    Instruction, VirtualMachine,
+    Instruction, VirtualMachine, World,
 };
 use u256::U256;
 use zkevm_opcode_defs::VmMetaParameters;
@@ -15,8 +15,9 @@ use zkevm_opcode_defs::VmMetaParameters;
 fn context<Op: ContextOp>(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
+    world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, |vm, args| {
+    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
         let result = Op::get(&vm.state);
         Register1::set(args, &mut vm.state, result)
     })
@@ -85,24 +86,34 @@ impl ContextOp for Meta {
     }
 }
 
-fn set_context_u128(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, |vm, args, continue_normally| {
-        if vm.state.current_frame.is_static {
-            return free_panic(vm);
-        }
+fn set_context_u128(
+    vm: &mut VirtualMachine,
+    instruction: *const Instruction,
+    world: &mut dyn World,
+) -> InstructionResult {
+    instruction_boilerplate_with_panic(
+        vm,
+        instruction,
+        world,
+        |vm, args, world, continue_normally| {
+            if vm.state.current_frame.is_static {
+                return free_panic(vm, world);
+            }
 
-        let value = Register1::get(args, &mut vm.state).low_u128();
-        vm.state.set_context_u128(value);
+            let value = Register1::get(args, &mut vm.state).low_u128();
+            vm.state.set_context_u128(value);
 
-        continue_normally
-    })
+            continue_normally
+        },
+    )
 }
 
 fn increment_tx_number(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
+    world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, |vm, _| {
+    instruction_boilerplate(vm, instruction, world, |vm, _, _| {
         vm.start_new_tx();
     })
 }

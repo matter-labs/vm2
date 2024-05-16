@@ -34,7 +34,6 @@ proptest! {
         let program = initial_decommit(&mut world, address);
 
         let mut vm = VirtualMachine::new(
-            Box::new(world),
             address,
             program,
             Address::zero(),
@@ -47,7 +46,7 @@ proptest! {
             },
         );
 
-        assert_eq!(vm.run(),
+        assert_eq!(vm.run(&mut world),
             if 1 < label && label < 100 {
                 ExecutionEnd::ProgramFinished(vec![])
             } else {

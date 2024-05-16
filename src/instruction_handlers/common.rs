@@ -1,15 +1,16 @@
 use crate::{
-    addressing_modes::Arguments, instruction::InstructionResult, Instruction, VirtualMachine,
+    addressing_modes::Arguments, instruction::InstructionResult, Instruction, VirtualMachine, World,
 };
 
 #[inline(always)]
 pub(crate) fn instruction_boilerplate(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
-    business_logic: impl FnOnce(&mut VirtualMachine, &Arguments),
+    world: &mut dyn World,
+    business_logic: impl FnOnce(&mut VirtualMachine, &Arguments, &mut dyn World),
 ) -> InstructionResult {
     unsafe {
-        business_logic(vm, &(*instruction).arguments);
+        business_logic(vm, &(*instruction).arguments, world);
         Ok(instruction.add(1))
     }
 }
@@ -18,7 +19,13 @@ pub(crate) fn instruction_boilerplate(
 pub(crate) fn instruction_boilerplate_with_panic(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
-    business_logic: impl FnOnce(&mut VirtualMachine, &Arguments, InstructionResult) -> InstructionResult,
+    world: &mut dyn World,
+    business_logic: impl FnOnce(
+        &mut VirtualMachine,
+        &Arguments,
+        &mut dyn World,
+        InstructionResult,
+    ) -> InstructionResult,
 ) -> InstructionResult {
-    unsafe { business_logic(vm, &(*instruction).arguments, Ok(instruction.add(1))) }
+    unsafe { business_logic(vm, &(*instruction).arguments, world, Ok(instruction.add(1))) }
 }

@@ -5,7 +5,7 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::InstructionResult,
     predication::Flags,
-    Instruction, VirtualMachine,
+    Instruction, VirtualMachine, World,
 };
 use u256::U256;
 use zkevm_opcode_defs::{
@@ -33,6 +33,7 @@ pub enum CallingMode {
 fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
+    world: &mut dyn World,
 ) -> InstructionResult {
     let args = unsafe { &(*instruction).arguments };
 
@@ -48,6 +49,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         get_far_call_calldata(raw_abi, Register1::is_fat_pointer(args, &mut vm.state), vm);
 
     let decommit_result = vm.world.decommit(
+        world,
         destination_address,
         vm.settings.default_aa_code_hash,
         vm.settings.evm_interpreter_code_hash,

@@ -7,6 +7,7 @@ use zkevm_opcode_defs::{
 impl ModifiedWorld {
     pub(crate) fn decommit(
         &mut self,
+        world: &mut dyn World,
         address: U256,
         default_aa_code_hash: [u8; 32],
         evm_interpreter_code_hash: [u8; 32],
@@ -19,7 +20,8 @@ impl ModifiedWorld {
         let mut is_evm = false;
 
         let mut code_info = {
-            let (code_info, _) = self.read_storage(deployer_system_contract_address, address);
+            let (code_info, _) =
+                self.read_storage(world, deployer_system_contract_address, address);
             let mut code_info_bytes = [0; 32];
             code_info.to_big_endian(&mut code_info_bytes);
 
@@ -65,7 +67,7 @@ impl ModifiedWorld {
             self.decommitted_hashes.insert(code_key, ());
         };
 
-        let program = self.world.decommit(code_key);
+        let program = world.decommit(code_key);
         Some((program, is_evm))
     }
 }

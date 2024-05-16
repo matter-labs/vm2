@@ -3,7 +3,7 @@ use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     instruction::InstructionResult,
     state::Heaps,
-    Instruction, VirtualMachine,
+    Instruction, VirtualMachine, World,
 };
 use u256::U256;
 use zk_evm_abstractions::{
@@ -23,8 +23,12 @@ use zkevm_opcode_defs::{
     PrecompileAuxData, PrecompileCallABI,
 };
 
-fn precompile_call(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, |vm, args, continue_normally| {
+fn precompile_call(
+    vm: &mut VirtualMachine,
+    instruction: *const Instruction,
+    world: &mut dyn World,
+) -> InstructionResult {
+    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
         // TODO check that we're in a system call
 
         // The user gets to decide how much gas to burn

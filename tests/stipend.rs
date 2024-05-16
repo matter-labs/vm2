@@ -104,7 +104,6 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
     let program = initial_decommit(&mut world, main_address);
 
     let mut vm = VirtualMachine::new(
-        Box::new(world),
         main_address,
         program,
         Address::zero(),
@@ -117,7 +116,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
         },
     );
 
-    let result = vm.run();
+    let result = vm.run(&mut world);
     (result, vm.state.current_frame.gas)
 }
 

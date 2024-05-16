@@ -2,11 +2,15 @@ use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{destination_stack_address, AdvanceStackPointer, Arguments, Source},
     instruction::InstructionResult,
-    Instruction, VirtualMachine,
+    Instruction, VirtualMachine, World,
 };
 
-fn nop(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, |vm, args| {
+fn nop(
+    vm: &mut VirtualMachine,
+    instruction: *const Instruction,
+    world: &mut dyn World,
+) -> InstructionResult {
+    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
         // nop's addressing modes can move the stack pointer!
         AdvanceStackPointer::get(args, &mut vm.state);
         vm.state.current_frame.sp = vm
