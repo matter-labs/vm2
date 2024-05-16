@@ -135,7 +135,7 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
     };
 
     if return_type.is_failure() {
-        vm.world.rollback(snapshot);
+        vm.world_diff.rollback(snapshot);
     } else {
         vm.state.current_frame.total_pubdata_spent += total_pubdata_spent;
     }

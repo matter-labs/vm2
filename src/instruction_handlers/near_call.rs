@@ -25,7 +25,7 @@ fn near_call(
         new_frame_gas,
         instruction,
         error_handler.low_u32() as u16,
-        vm.world.snapshot(),
+        vm.world_diff.snapshot(),
     );
 
     vm.state.flags = Flags::new(false, false, false);

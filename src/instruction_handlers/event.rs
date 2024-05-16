@@ -27,7 +27,7 @@ fn event(
                 let value = Register2::get(args, &mut vm.state);
                 let is_first = Immediate1::get(args, &mut vm.state).low_u32() == 1;
 
-                vm.world.record_event(Event {
+                vm.world_diff.record_event(Event {
                     key,
                     value,
                     is_first,
@@ -58,7 +58,7 @@ fn l2_to_l1(
             let key = Register1::get(args, &mut vm.state);
             let value = Register2::get(args, &mut vm.state);
             let is_service = Immediate1::get(args, &mut vm.state).low_u32() == 1;
-            vm.world.record_l2_to_l1_log(L2ToL1Log {
+            vm.world_diff.record_l2_to_l1_log(L2ToL1Log {
                 key,
                 value,
                 is_service,

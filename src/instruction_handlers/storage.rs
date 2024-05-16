@@ -28,7 +28,7 @@ fn sstore(
             let value = Register2::get(args, &mut vm.state);
 
             let (refund, pubdata_change) =
-                vm.world
+                vm.world_diff
                     .write_storage(world, vm.state.current_frame.address, key, value);
 
             assert!(refund <= SSTORE_COST);
@@ -54,7 +54,7 @@ fn sstore_transient(
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
 
-        vm.world
+        vm.world_diff
             .write_transient_storage(vm.state.current_frame.address, key, value);
 
         continue_normally
@@ -68,9 +68,9 @@ fn sload(
 ) -> InstructionResult {
     instruction_boilerplate(vm, instruction, world, |vm, args, world| {
         let key = Register1::get(args, &mut vm.state);
-        let (value, refund) = vm
-            .world
-            .read_storage(world, vm.state.current_frame.address, key);
+        let (value, refund) =
+            vm.world_diff
+                .read_storage(world, vm.state.current_frame.address, key);
 
         assert!(refund <= SLOAD_COST);
         vm.state.current_frame.gas += refund;
@@ -87,7 +87,7 @@ fn sload_transient(
     instruction_boilerplate(vm, instruction, world, |vm, args, _| {
         let key = Register1::get(args, &mut vm.state);
         let value = vm
-            .world
+            .world_diff
             .read_transient_storage(vm.state.current_frame.address, key);
 
         Register1::set(args, &mut vm.state, value);

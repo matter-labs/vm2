@@ -13,7 +13,7 @@ use zkevm_opcode_defs::system_params::{
 /// The global state including pending modifications that are written only at
 /// the end of a block.
 #[derive(Default)]
-pub struct ModifiedWorld {
+pub struct WorldDiff {
     // These are rolled back on revert or panic (and when the whole VM is rolled back).
     storage_changes: RollbackableMap<(H160, U256), U256>,
     transient_storage_changes: RollbackableMap<(H160, U256), U256>,
@@ -54,7 +54,7 @@ pub struct L2ToL1Log {
     pub tx_number: u16,
 }
 
-impl ModifiedWorld {
+impl WorldDiff {
     /// Returns the storage slot's value and a refund based on its hot/cold status.
     pub(crate) fn read_storage(
         &mut self,

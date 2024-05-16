@@ -1,10 +1,10 @@
-use crate::{modified_world::ModifiedWorld, program::Program, World};
+use crate::{modified_world::WorldDiff, program::Program, World};
 use u256::{H160, U256};
 use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
 
-impl ModifiedWorld {
+impl WorldDiff {
     pub(crate) fn decommit(
         &mut self,
         world: &mut dyn World,

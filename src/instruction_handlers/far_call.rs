@@ -48,7 +48,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     let calldata =
         get_far_call_calldata(raw_abi, Register1::is_fat_pointer(args, &mut vm.state), vm);
 
-    let decommit_result = vm.world.decommit(
+    let decommit_result = vm.world_diff.decommit(
         world,
         destination_address,
         vm.settings.default_aa_code_hash,
@@ -98,7 +98,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         exception_handler,
         IS_STATIC && !is_evm_interpreter,
         calldata.memory_page,
-        vm.world.snapshot(),
+        vm.world_diff.snapshot(),
     );
 
     vm.state.flags = Flags::new(false, false, false);

@@ -3,7 +3,7 @@ use crate::{
     callframe::{Callframe, FrameRemnant},
     decommit::u256_into_address,
     instruction_handlers::{free_panic, CallingMode},
-    modified_world::{ModifiedWorld, Snapshot},
+    modified_world::{Snapshot, WorldDiff},
     stack::StackPool,
     state::State,
     ExecutionEnd, Instruction, Program, World,
@@ -20,7 +20,7 @@ pub struct Settings {
 }
 
 pub struct VirtualMachine {
-    pub world: ModifiedWorld,
+    pub world_diff: WorldDiff,
 
     /// Storing the state in a separate struct is not just cosmetic.
     /// The state couldn't be passed to the world if it was inlined.
@@ -40,12 +40,12 @@ impl VirtualMachine {
         gas: u32,
         settings: Settings,
     ) -> Self {
-        let world = ModifiedWorld::default();
-        let world_before_this_frame = world.snapshot();
+        let world_diff = WorldDiff::default();
+        let world_before_this_frame = world_diff.snapshot();
         let mut stack_pool = StackPool::default();
 
         Self {
-            world,
+            world_diff,
             state: State::new(
                 address,
                 caller,
@@ -154,7 +154,7 @@ impl VirtualMachine {
     pub fn snapshot(&self) -> VmSnapshot {
         assert!(self.state.previous_frames.is_empty());
         VmSnapshot {
-            world_snapshot: self.world.external_snapshot(),
+            world_snapshot: self.world_diff.external_snapshot(),
             state_snapshot: self.state.clone(),
         }
     }
@@ -163,7 +163,7 @@ impl VirtualMachine {
     /// # Panics
     /// Rolling back snapshots in anything but LIFO order may panic.
     pub fn rollback(&mut self, snapshot: VmSnapshot) {
-        self.world.external_rollback(snapshot.world_snapshot);
+        self.world_diff.external_rollback(snapshot.world_snapshot);
         self.state = snapshot.state_snapshot;
     }
 
@@ -288,7 +288,7 @@ impl VirtualMachine {
 
     pub(crate) fn start_new_tx(&mut self) {
         self.state.transaction_number = self.state.transaction_number.wrapping_add(1);
-        self.world.clear_transient_storage()
+        self.world_diff.clear_transient_storage()
     }
 }
 

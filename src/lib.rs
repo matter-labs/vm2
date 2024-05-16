@@ -22,7 +22,7 @@ use u256::{H160, U256};
 pub use decommit::address_into_u256;
 pub use decommit::initial_decommit;
 pub use instruction::{jump_to_beginning, ExecutionEnd, Instruction};
-pub use modified_world::{Event, L2ToL1Log, ModifiedWorld};
+pub use modified_world::{Event, L2ToL1Log, WorldDiff};
 pub use predication::Predicate;
 pub use program::Program;
 pub use state::{State, FIRST_HEAP};
@@ -33,7 +33,7 @@ pub trait World {
     /// the world implementor's job.
     fn decommit(&mut self, hash: U256) -> Program;
 
-    /// There is no write_storage; [ModifiedWorld::get_storage_changes] gives a list of all storage changes.
+    /// There is no write_storage; [WorldDiff::get_storage_changes] gives a list of all storage changes.
     fn read_storage(&mut self, contract: H160, key: U256) -> U256;
 
     /// Computes the cost of writing a storage slot.
