@@ -5,12 +5,13 @@ use crate::{
         RelativeStack, Source,
     },
     instruction::{Instruction, InstructionResult},
-    VirtualMachine,
+    VirtualMachine, World,
 };
 
 fn jump<In: Source>(
     vm: &mut VirtualMachine,
     mut instruction: *const Instruction,
+    _: &mut dyn World,
 ) -> InstructionResult {
     unsafe {
         let target = In::get(&(*instruction).arguments, &mut vm.state).low_u32() as u16 as usize;

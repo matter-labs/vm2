@@ -9,7 +9,7 @@ use crate::{
         Add, And, AuxHeap, CallingMode, Div, Heap, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub,
         RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
     },
-    jump_to_beginning, Instruction, Predicate, VirtualMachine,
+    jump_to_beginning, Instruction, Predicate, VirtualMachine, World,
 };
 use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
@@ -44,6 +44,7 @@ fn unimplemented_instruction(variant: Opcode) -> Instruction {
 fn unimplemented_handler(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
+    _: &mut dyn World,
 ) -> InstructionResult {
     let variant: Opcode = unsafe {
         std::mem::transmute(

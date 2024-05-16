@@ -6,15 +6,16 @@ use crate::{
     },
     fat_pointer::FatPointer,
     instruction::InstructionResult,
-    Instruction, VirtualMachine,
+    Instruction, VirtualMachine, World,
 };
 use u256::U256;
 
 fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
+    world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, |vm, args, continue_normally| {
+    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
         let a = (
             In1::get(args, &mut vm.state),
             In1::is_fat_pointer(args, &mut vm.state),

@@ -32,7 +32,6 @@ fn call_to_invalid_address() {
     let program = initial_decommit(&mut world, address);
 
     let mut vm = VirtualMachine::new(
-        Box::new(world),
         address,
         program,
         Address::zero(),
@@ -44,6 +43,6 @@ fn call_to_invalid_address() {
             hook_address: 0,
         },
     );
-    assert!(matches!(vm.run(), ExecutionEnd::Panicked));
+    assert!(matches!(vm.run(&mut world), ExecutionEnd::Panicked));
     assert_eq!(vm.state.current_frame.gas, 0);
 }

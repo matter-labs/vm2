@@ -25,10 +25,9 @@ fn nested_near_call(bencher: Bencher) {
     let address = Address::from_low_u64_be(0xabe123ff);
 
     bencher.bench(|| {
-        let mut world = Box::new(TestWorld::new(&[(address, program.clone())]));
-        let program = initial_decommit(&mut *world, address);
+        let mut world = TestWorld::new(&[(address, program.clone())]);
+        let program = initial_decommit(&mut world, address);
         let mut vm = vm2::VirtualMachine::new(
-            black_box(world),
             address,
             program,
             Address::zero(),
@@ -41,7 +40,7 @@ fn nested_near_call(bencher: Bencher) {
             },
         );
 
-        vm.run();
+        vm.run(black_box(&mut world));
     });
 }
 
@@ -70,10 +69,9 @@ fn nested_near_call_with_storage_write(bencher: Bencher) {
     let address = Address::from_low_u64_be(0xabe123ff);
 
     bencher.bench(|| {
-        let mut world = Box::new(TestWorld::new(&[(address, program.clone())]));
-        let program = initial_decommit(&mut *world, address);
+        let mut world = TestWorld::new(&[(address, program.clone())]);
+        let program = initial_decommit(&mut world, address);
         let mut vm = vm2::VirtualMachine::new(
-            black_box(world),
             address,
             program,
             Address::zero(),
@@ -86,7 +84,7 @@ fn nested_near_call_with_storage_write(bencher: Bencher) {
             },
         );
 
-        vm.run();
+        vm.run(black_box(&mut world));
     });
 }
 

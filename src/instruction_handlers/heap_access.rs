@@ -9,7 +9,7 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::InstructionResult,
     state::State,
-    ExecutionEnd, Instruction, VirtualMachine,
+    ExecutionEnd, Instruction, VirtualMachine, World,
 };
 use u256::U256;
 use zkevm_opcode_defs::system_params::NEW_KERNEL_FRAME_MEMORY_STIPEND;
@@ -38,8 +38,9 @@ const LAST_ADDRESS: u32 = u32::MAX - 32;
 fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
+    world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, |vm, args, continue_normally| {
+    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
         let pointer = In::get(args, &mut vm.state);
         if In::is_fat_pointer(args, &mut vm.state) {
             return Ok(&PANIC);
@@ -73,8 +74,9 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
 fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENABLED: bool>(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
+    world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, |vm, args, continue_normally| {
+    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
         let pointer = In::get(args, &mut vm.state);
         if In::is_fat_pointer(args, &mut vm.state) {
             return Ok(&PANIC);
@@ -134,8 +136,9 @@ pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<
 fn load_pointer<const INCREMENT: bool>(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
+    world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, |vm, args, continue_normally| {
+    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
         if !Register1::is_fat_pointer(args, &mut vm.state) {
             return Ok(&PANIC);
         }

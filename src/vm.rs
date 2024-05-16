@@ -3,7 +3,7 @@ use crate::{
     callframe::{Callframe, FrameRemnant},
     decommit::u256_into_address,
     instruction_handlers::{free_panic, CallingMode},
-    modified_world::{ModifiedWorld, Snapshot},
+    modified_world::{Snapshot, WorldDiff},
     stack::StackPool,
     state::State,
     ExecutionEnd, Instruction, Program, World,
@@ -20,7 +20,7 @@ pub struct Settings {
 }
 
 pub struct VirtualMachine {
-    pub world: ModifiedWorld,
+    pub world_diff: WorldDiff,
 
     /// Storing the state in a separate struct is not just cosmetic.
     /// The state couldn't be passed to the world if it was inlined.
@@ -33,7 +33,6 @@ pub struct VirtualMachine {
 
 impl VirtualMachine {
     pub fn new(
-        world: Box<dyn World>,
         address: H160,
         program: Program,
         caller: H160,
@@ -41,12 +40,12 @@ impl VirtualMachine {
         gas: u32,
         settings: Settings,
     ) -> Self {
-        let world = ModifiedWorld::new(world);
-        let world_before_this_frame = world.snapshot();
+        let world_diff = WorldDiff::default();
+        let world_before_this_frame = world_diff.snapshot();
         let mut stack_pool = StackPool::default();
 
         Self {
-            world,
+            world_diff,
             state: State::new(
                 address,
                 caller,
@@ -61,11 +60,11 @@ impl VirtualMachine {
         }
     }
 
-    pub fn run(&mut self) -> ExecutionEnd {
-        self.resume_from(0)
+    pub fn run(&mut self, world: &mut dyn World) -> ExecutionEnd {
+        self.resume_from(0, world)
     }
 
-    pub fn resume_from(&mut self, instruction_number: u16) -> ExecutionEnd {
+    pub fn resume_from(&mut self, instruction_number: u16, world: &mut dyn World) -> ExecutionEnd {
         let mut instruction: *const Instruction =
             &self.state.current_frame.program.instructions()[instruction_number as usize];
 
@@ -73,7 +72,7 @@ impl VirtualMachine {
             loop {
                 let args = &(*instruction).arguments;
                 let Ok(_) = self.state.use_gas(args.get_static_gas_cost()) else {
-                    instruction = match free_panic(self) {
+                    instruction = match free_panic(self, world) {
                         Ok(i) => i,
                         Err(e) => return e,
                     };
@@ -84,7 +83,7 @@ impl VirtualMachine {
                 self.print_instruction(instruction);
 
                 if args.predicate.satisfied(&self.state.flags) {
-                    instruction = match ((*instruction).handler)(self, instruction) {
+                    instruction = match ((*instruction).handler)(self, instruction, world) {
                         Ok(n) => n,
                         Err(e) => return e,
                     };
@@ -104,6 +103,7 @@ impl VirtualMachine {
     pub fn resume_with_additional_gas_limit(
         &mut self,
         instruction_number: u16,
+        world: &mut dyn World,
         gas_limit: u32,
     ) -> Option<(u32, ExecutionEnd)> {
         let minimum_gas = self.state.total_unspent_gas().saturating_sub(gas_limit);
@@ -115,7 +115,7 @@ impl VirtualMachine {
             loop {
                 let args = &(*instruction).arguments;
                 let Ok(_) = self.state.use_gas(args.get_static_gas_cost()) else {
-                    instruction = match free_panic(self) {
+                    instruction = match free_panic(self, world) {
                         Ok(i) => i,
                         Err(end) => break end,
                     };
@@ -126,7 +126,7 @@ impl VirtualMachine {
                 self.print_instruction(instruction);
 
                 if args.predicate.satisfied(&self.state.flags) {
-                    instruction = match ((*instruction).handler)(self, instruction) {
+                    instruction = match ((*instruction).handler)(self, instruction, world) {
                         Ok(n) => n,
                         Err(end) => break end,
                     };
@@ -154,7 +154,7 @@ impl VirtualMachine {
     pub fn snapshot(&self) -> VmSnapshot {
         assert!(self.state.previous_frames.is_empty());
         VmSnapshot {
-            world_snapshot: self.world.external_snapshot(),
+            world_snapshot: self.world_diff.external_snapshot(),
             state_snapshot: self.state.clone(),
         }
     }
@@ -163,7 +163,7 @@ impl VirtualMachine {
     /// # Panics
     /// Rolling back snapshots in anything but LIFO order may panic.
     pub fn rollback(&mut self, snapshot: VmSnapshot) {
-        self.world.external_rollback(snapshot.world_snapshot);
+        self.world_diff.external_rollback(snapshot.world_snapshot);
         self.state = snapshot.state_snapshot;
     }
 
@@ -288,7 +288,7 @@ impl VirtualMachine {
 
     pub(crate) fn start_new_tx(&mut self) {
         self.state.transaction_number = self.state.transaction_number.wrapping_add(1);
-        self.world.clear_transient_storage()
+        self.world_diff.clear_transient_storage()
     }
 }
 

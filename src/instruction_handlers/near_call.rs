@@ -2,10 +2,14 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Source},
     instruction::InstructionResult,
     predication::Flags,
-    Instruction, VirtualMachine,
+    Instruction, VirtualMachine, World,
 };
 
-fn near_call(vm: &mut VirtualMachine, instruction: *const Instruction) -> InstructionResult {
+fn near_call(
+    vm: &mut VirtualMachine,
+    instruction: *const Instruction,
+    _: &mut dyn World,
+) -> InstructionResult {
     let args = unsafe { &(*instruction).arguments };
 
     let gas_to_pass = Register1::get(args, &mut vm.state).0[0] as u32;
@@ -21,7 +25,7 @@ fn near_call(vm: &mut VirtualMachine, instruction: *const Instruction) -> Instru
         new_frame_gas,
         instruction,
         error_handler.low_u32() as u16,
-        vm.world.snapshot(),
+        vm.world_diff.snapshot(),
     );
 
     vm.state.flags = Flags::new(false, false, false);

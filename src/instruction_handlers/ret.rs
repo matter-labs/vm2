@@ -4,7 +4,7 @@ use crate::{
     callframe::FrameRemnant,
     instruction::{ExecutionEnd, InstructionResult},
     predication::Flags,
-    Instruction, Predicate, VirtualMachine,
+    Instruction, Predicate, VirtualMachine, World,
 };
 use u256::U256;
 
@@ -34,6 +34,7 @@ impl ReturnType {
 fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
+    _: &mut dyn World,
 ) -> InstructionResult {
     let args = unsafe { &(*instruction).arguments };
 
@@ -134,7 +135,7 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
     };
 
     if return_type.is_failure() {
-        vm.world.rollback(snapshot);
+        vm.world_diff.rollback(snapshot);
     } else {
         vm.state.current_frame.total_pubdata_spent += total_pubdata_spent;
     }
@@ -192,8 +193,8 @@ pub const PANIC: Instruction = Instruction {
 /// - the far call stack overflows
 ///
 /// For all other panics, point the instruction pointer at [PANIC] instead.
-pub(crate) fn free_panic(vm: &mut VirtualMachine) -> InstructionResult {
-    ret::<{ ReturnType::Panic as u8 }, false>(vm, &PANIC)
+pub(crate) fn free_panic(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
+    ret::<{ ReturnType::Panic as u8 }, false>(vm, &PANIC, world)
 }
 
 use super::monomorphization::*;
