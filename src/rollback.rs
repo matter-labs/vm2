@@ -117,3 +117,21 @@ impl<T> AsRef<[T]> for RollbackableLog<T> {
         &self.entries
     }
 }
+
+/// Rollbackable Plain Old Data simply stores copies of itself in snapshots.
+#[derive(Default, Copy, Clone)]
+pub struct RollbackablePod<T: Copy>(pub T);
+
+impl<T: Copy> Rollback for RollbackablePod<T> {
+    type Snapshot = T;
+
+    fn snapshot(&self) -> Self::Snapshot {
+        self.0
+    }
+
+    fn rollback(&mut self, snapshot: Self::Snapshot) {
+        self.0 = snapshot
+    }
+
+    fn delete_history(&mut self) {}
+}

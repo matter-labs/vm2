@@ -240,7 +240,6 @@ impl VirtualMachine {
                     exception_handler,
                     world_before_this_frame,
                     stack,
-                    total_pubdata_spent,
                     ..
                 } = frame;
 
@@ -255,7 +254,6 @@ impl VirtualMachine {
                     program_counter,
                     exception_handler,
                     snapshot: world_before_this_frame,
-                    total_pubdata_spent,
                 }
             })
     }

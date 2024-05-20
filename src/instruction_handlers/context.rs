@@ -69,21 +69,26 @@ impl ContextOp for SP {
     }
 }
 
-struct Meta;
-impl ContextOp for Meta {
-    fn get(state: &State) -> U256 {
-        VmMetaParameters {
-            heap_size: state.current_frame.heap_size,
-            aux_heap_size: state.current_frame.aux_heap_size,
+fn context_meta(
+    vm: &mut VirtualMachine,
+    instruction: *const Instruction,
+    world: &mut dyn World,
+) -> InstructionResult {
+    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
+        let result = VmMetaParameters {
+            heap_size: vm.state.current_frame.heap_size,
+            aux_heap_size: vm.state.current_frame.aux_heap_size,
             this_shard_id: 0, // TODO properly implement shards
             caller_shard_id: 0,
             code_shard_id: 0,
             // This field is actually pubdata!
             // TODO PLA-893: This should be zero when not in kernel mode
-            aux_field_0: state.current_frame.total_pubdata_spent as u32,
+            aux_field_0: vm.world_diff.pubdata.0 as u32,
         }
-        .to_u256()
-    }
+        .to_u256();
+
+        Register1::set(args, &mut vm.state, result);
+    })
 }
 
 fn set_context_u128(
@@ -145,7 +150,10 @@ impl Instruction {
         Self::from_context::<SP>(out, arguments)
     }
     pub fn from_context_meta(out: Register1, arguments: Arguments) -> Self {
-        Self::from_context::<Meta>(out, arguments)
+        Self {
+            handler: context_meta,
+            arguments: arguments.write_destination(&out),
+        }
     }
     pub fn from_set_context_u128(src: Register1, arguments: Arguments) -> Self {
         Self {

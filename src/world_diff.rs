@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackableSet},
+    rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackablePod, RollbackableSet},
     World,
 };
 use u256::{H160, U256};
@@ -20,6 +20,7 @@ pub struct WorldDiff {
     transient_storage_changes: RollbackableMap<(H160, U256), U256>,
     events: RollbackableLog<Event>,
     l2_to_l1_logs: RollbackableLog<L2ToL1Log>,
+    pub pubdata: RollbackablePod<i32>,
 
     // The fields below are only rolled back when the whole VM is rolled back.
     pub(crate) decommitted_hashes: RollbackableSet<U256>,
@@ -81,22 +82,6 @@ impl WorldDiff {
         (value, refund)
     }
 
-    pub(crate) fn read_transient_storage(&mut self, contract: H160, key: U256) -> U256 {
-        let value = self
-            .transient_storage_changes
-            .as_ref()
-            .get(&(contract, key))
-            .cloned()
-            .unwrap_or_default();
-
-        value
-    }
-
-    pub(crate) fn write_transient_storage(&mut self, contract: H160, key: U256, value: U256) {
-        self.transient_storage_changes
-            .insert((contract, key), value);
-    }
-
     /// Returns the refund based the hot/cold status of the storage slot and the change in pubdata.
     pub(crate) fn write_storage(
         &mut self,
@@ -104,11 +89,11 @@ impl WorldDiff {
         contract: H160,
         key: U256,
         value: U256,
-    ) -> (u32, i32) {
+    ) -> u32 {
         self.storage_changes.insert((contract, key), value);
 
         if world.is_free_storage_slot(&contract, &key) {
-            return (WARM_WRITE_REFUND, 0);
+            return WARM_WRITE_REFUND;
         }
 
         let update_cost = world.cost_of_writing_storage(contract, key, value);
@@ -134,7 +119,9 @@ impl WorldDiff {
             }
         };
 
-        (refund, (update_cost as i32) - (prepaid as i32))
+        self.pubdata.0 += (update_cost as i32) - (prepaid as i32);
+
+        refund
     }
 
     pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
@@ -150,6 +137,22 @@ impl WorldDiff {
         snapshot: &Snapshot,
     ) -> BTreeMap<(H160, U256), (Option<U256>, U256)> {
         self.storage_changes.changes_after(snapshot.storage_changes)
+    }
+
+    pub(crate) fn read_transient_storage(&mut self, contract: H160, key: U256) -> U256 {
+        let value = self
+            .transient_storage_changes
+            .as_ref()
+            .get(&(contract, key))
+            .cloned()
+            .unwrap_or_default();
+
+        value
+    }
+
+    pub(crate) fn write_transient_storage(&mut self, contract: H160, key: U256, value: U256) {
+        self.transient_storage_changes
+            .insert((contract, key), value);
     }
 
     pub(crate) fn record_event(&mut self, event: Event) {
@@ -186,10 +189,11 @@ impl WorldDiff {
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
             storage_changes: self.storage_changes.snapshot(),
+            paid_changes: self.paid_changes.snapshot(),
             events: self.events.snapshot(),
             l2_to_l1_logs: self.l2_to_l1_logs.snapshot(),
-            paid_changes: self.paid_changes.snapshot(),
             transient_storage_changes: self.transient_storage_changes.snapshot(),
+            pubdata: self.pubdata.snapshot(),
         }
     }
 
@@ -197,18 +201,20 @@ impl WorldDiff {
         &mut self,
         Snapshot {
             storage_changes,
+            paid_changes,
             events,
             l2_to_l1_logs,
-            paid_changes,
             transient_storage_changes,
+            pubdata,
         }: Snapshot,
     ) {
         self.storage_changes.rollback(storage_changes);
+        self.paid_changes.rollback(paid_changes);
         self.events.rollback(events);
         self.l2_to_l1_logs.rollback(l2_to_l1_logs);
-        self.paid_changes.rollback(paid_changes);
         self.transient_storage_changes
             .rollback(transient_storage_changes);
+        self.pubdata.rollback(pubdata);
     }
 
     /// This function must only be called during the initial frame
@@ -259,10 +265,11 @@ impl WorldDiff {
 #[derive(Clone, PartialEq, Debug)]
 pub struct Snapshot {
     storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
+    paid_changes: <RollbackableMap<(H160, U256), u32> as Rollback>::Snapshot,
     events: <RollbackableLog<Event> as Rollback>::Snapshot,
     l2_to_l1_logs: <RollbackableLog<L2ToL1Log> as Rollback>::Snapshot,
-    paid_changes: <RollbackableMap<(H160, U256), u32> as Rollback>::Snapshot,
     transient_storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
+    pubdata: <RollbackablePod<i32> as Rollback>::Snapshot,
 }
 
 const WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST - STORAGE_ACCESS_WARM_READ_COST;

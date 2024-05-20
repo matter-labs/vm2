@@ -37,7 +37,7 @@ fn precompile_call(
         let Ok(()) = vm.state.use_gas(aux_data.extra_ergs_cost) else {
             return Ok(&PANIC);
         };
-        vm.state.current_frame.total_pubdata_spent += aux_data.extra_pubdata_cost as i32;
+        vm.world_diff.pubdata.0 += aux_data.extra_pubdata_cost as i32;
 
         let mut abi = PrecompileCallABI::from_u256(Register1::get(args, &mut vm.state));
         if abi.memory_page_to_read == 0 {

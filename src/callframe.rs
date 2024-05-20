@@ -21,8 +21,6 @@ pub struct Callframe {
     pub gas: u32,
     pub stipend: u32,
 
-    pub total_pubdata_spent: i32,
-
     near_calls: Vec<NearCallFrame>,
 
     pub(crate) program: Program,
@@ -102,7 +100,6 @@ impl Callframe {
             exception_handler,
             near_calls: vec![],
             world_before_this_frame,
-            total_pubdata_spent: 0,
         }
     }
 
@@ -132,7 +129,6 @@ impl Callframe {
                 program_counter: f.call_instruction,
                 exception_handler: f.exception_handler,
                 snapshot: f.world_before_this_frame,
-                total_pubdata_spent: 0,
             }
         })
     }
@@ -163,5 +159,4 @@ pub(crate) struct FrameRemnant {
     pub(crate) program_counter: u16,
     pub(crate) exception_handler: u16,
     pub(crate) snapshot: Snapshot,
-    pub(crate) total_pubdata_spent: i32,
 }
