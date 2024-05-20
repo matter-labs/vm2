@@ -1,21 +1,19 @@
 use super::{common::instruction_boilerplate_with_panic, PANIC};
 use crate::{
-    address_into_u256,
     addressing_modes::{
         Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
         RegisterOrImmediate, Source,
     },
-    decommit::is_kernel,
     fat_pointer::FatPointer,
     instruction::InstructionResult,
     state::State,
     ExecutionEnd, Instruction, VirtualMachine, World,
 };
 use u256::U256;
-use zkevm_opcode_defs::system_params::NEW_KERNEL_FRAME_MEMORY_STIPEND;
 
 pub trait HeapFromState {
     fn get_heap(state: &mut State) -> &mut Vec<u8>;
+    fn get_heap_size(state: &mut State) -> &mut u32;
 }
 
 pub struct Heap;
@@ -23,12 +21,18 @@ impl HeapFromState for Heap {
     fn get_heap(state: &mut State) -> &mut Vec<u8> {
         &mut state.heaps[state.current_frame.heap]
     }
+    fn get_heap_size(state: &mut State) -> &mut u32 {
+        &mut state.current_frame.heap_size
+    }
 }
 
 pub struct AuxHeap;
 impl HeapFromState for AuxHeap {
     fn get_heap(state: &mut State) -> &mut Vec<u8> {
         &mut state.heaps[state.current_frame.aux_heap]
+    }
+    fn get_heap_size(state: &mut State) -> &mut u32 {
+        &mut state.current_frame.aux_heap_size
     }
 }
 
@@ -119,17 +123,18 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
 }
 
 pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<(), ()> {
-    let heap_length = H::get_heap(state).len() as u32;
-    let already_paid = if is_kernel(address_into_u256(state.current_frame.code_address)) {
-        heap_length.max(NEW_KERNEL_FRAME_MEMORY_STIPEND)
-    } else {
-        heap_length
-    };
-
-    state.use_gas(new_bound.saturating_sub(already_paid))?;
-    if heap_length < new_bound {
-        H::get_heap(state).resize(new_bound as usize, 0);
+    let already_paid = H::get_heap_size(state);
+    if *already_paid < new_bound {
+        let to_pay = new_bound - *already_paid;
+        *already_paid = new_bound;
+        state.use_gas(to_pay)?;
     }
+
+    let heap = H::get_heap(state);
+    if (heap.len() as u32) < new_bound {
+        heap.resize(new_bound as usize, 0);
+    }
+
     Ok(())
 }
 

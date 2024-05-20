@@ -1,5 +1,9 @@
-use crate::{heap::HeapId, modified_world::Snapshot, program::Program, stack::Stack, Instruction};
+use crate::{
+    address_into_u256, decommit::is_kernel, heap::HeapId, modified_world::Snapshot,
+    program::Program, stack::Stack, Instruction,
+};
 use u256::H160;
+use zkevm_opcode_defs::system_params::{NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Callframe {
@@ -28,8 +32,8 @@ pub struct Callframe {
 
     /// The amount of heap that has been paid for. This should always be greater
     /// or equal to the actual size of the heap in memory.
-    //heap_size: u32,
-    //aux_heap_size: u32,
+    pub heap_size: u32,
+    pub aux_heap_size: u32,
 
     /// Returning a pointer to the calldata is illegal because it could result in
     /// the caller's heap being accessible both directly and via the fat pointer.
@@ -72,6 +76,12 @@ impl Callframe {
         is_static: bool,
         world_before_this_frame: Snapshot,
     ) -> Self {
+        let heap_size = if is_kernel(address_into_u256(code_address)) {
+            NEW_KERNEL_FRAME_MEMORY_STIPEND
+        } else {
+            NEW_FRAME_MEMORY_STIPEND
+        };
+
         Self {
             address,
             code_address,
@@ -82,6 +92,8 @@ impl Callframe {
             stack,
             heap,
             aux_heap,
+            heap_size,
+            aux_heap_size: heap_size,
             calldata_heap,
             heaps_i_am_keeping_alive: vec![],
             sp: 1024,
