@@ -1,12 +1,12 @@
 use crate::heap::HeapId;
-use crate::modified_world::ExternalSnapshot;
+use crate::world_diff::ExternalSnapshot;
 use crate::{
     callframe::{Callframe, FrameRemnant},
     decommit::u256_into_address,
     instruction_handlers::{free_panic, CallingMode},
-    modified_world::{Snapshot, WorldDiff},
     stack::StackPool,
     state::State,
+    world_diff::{Snapshot, WorldDiff},
     ExecutionEnd, Instruction, Program, World,
 };
 use u256::H160;

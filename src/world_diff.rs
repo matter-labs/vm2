@@ -10,16 +10,16 @@ use zkevm_opcode_defs::system_params::{
     STORAGE_ACCESS_WARM_WRITE_COST,
 };
 
-/// The global state including pending modifications that are written only at
-/// the end of a block.
+/// Pending modifications to the global state that are executed at the end of a block.
+/// In other words, side effects.
 #[derive(Default)]
 pub struct WorldDiff {
     // These are rolled back on revert or panic (and when the whole VM is rolled back).
     storage_changes: RollbackableMap<(H160, U256), U256>,
+    paid_changes: RollbackableMap<(H160, U256), u32>,
     transient_storage_changes: RollbackableMap<(H160, U256), U256>,
     events: RollbackableLog<Event>,
     l2_to_l1_logs: RollbackableLog<L2ToL1Log>,
-    paid_changes: RollbackableMap<(H160, U256), u32>,
 
     // The fields below are only rolled back when the whole VM is rolled back.
     pub(crate) decommitted_hashes: RollbackableSet<U256>,

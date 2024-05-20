@@ -1,6 +1,6 @@
 use crate::{
-    address_into_u256, decommit::is_kernel, heap::HeapId, modified_world::Snapshot,
-    program::Program, stack::Stack, Instruction,
+    address_into_u256, decommit::is_kernel, heap::HeapId, program::Program, stack::Stack,
+    world_diff::Snapshot, Instruction,
 };
 use u256::H160;
 use zkevm_opcode_defs::system_params::{NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND};

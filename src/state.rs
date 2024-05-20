@@ -4,10 +4,10 @@ use crate::{
     callframe::Callframe,
     fat_pointer::FatPointer,
     heap::{Heaps, CALLDATA_HEAP, FIRST_AUX_HEAP, FIRST_HEAP},
-    modified_world::Snapshot,
     predication::Flags,
     program::Program,
     stack::Stack,
+    world_diff::Snapshot,
 };
 use u256::{H160, U256};
 
