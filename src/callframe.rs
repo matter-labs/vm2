@@ -1,4 +1,4 @@
-use crate::{modified_world::Snapshot, program::Program, stack::Stack, Instruction};
+use crate::{heap::HeapId, modified_world::Snapshot, program::Program, stack::Stack, Instruction};
 use u256::H160;
 
 #[derive(Clone, PartialEq, Debug)]
@@ -12,9 +12,6 @@ pub struct Callframe {
     pub is_static: bool,
 
     pub stack: Box<Stack>,
-
-    pub heap: u32,
-    pub aux_heap: u32,
     pub sp: u16,
 
     pub gas: u32,
@@ -26,16 +23,24 @@ pub struct Callframe {
 
     pub(crate) program: Program,
 
+    pub heap: HeapId,
+    pub aux_heap: HeapId,
+
+    /// The amount of heap that has been paid for. This should always be greater
+    /// or equal to the actual size of the heap in memory.
+    //heap_size: u32,
+    //aux_heap_size: u32,
+
     /// Returning a pointer to the calldata is illegal because it could result in
     /// the caller's heap being accessible both directly and via the fat pointer.
     /// The problem only occurs if the calldata originates from the caller's heap
     /// but this rule is easy to implement.
-    pub(crate) calldata_heap: u32,
+    pub(crate) calldata_heap: HeapId,
 
     /// Because of the above rule we know that heaps returned to this frame only
     /// exist to allow this frame to read from them. Therefore we can deallocate
     /// all of them upon return, except possibly one that we pass on.
-    pub(crate) heaps_i_am_keeping_alive: Vec<u32>,
+    pub(crate) heaps_i_am_keeping_alive: Vec<HeapId>,
 
     pub(crate) world_before_this_frame: Snapshot,
 }
@@ -57,9 +62,9 @@ impl Callframe {
         caller: H160,
         program: Program,
         stack: Box<Stack>,
-        heap: u32,
-        aux_heap: u32,
-        calldata_heap: u32,
+        heap: HeapId,
+        aux_heap: HeapId,
+        calldata_heap: HeapId,
         gas: u32,
         stipend: u32,
         exception_handler: u16,
