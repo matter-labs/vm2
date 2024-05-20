@@ -7,11 +7,11 @@ pub struct HeapId(u32);
 
 impl HeapId {
     /// Only for dealing with external data structures, never use internally.
-    pub(crate) fn from_u32_unchecked(value: u32) -> Self {
+    pub fn from_u32_unchecked(value: u32) -> Self {
         Self(value)
     }
 
-    pub(crate) fn to_u32(self) -> u32 {
+    pub fn to_u32(self) -> u32 {
         self.0
     }
 }

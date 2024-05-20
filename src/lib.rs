@@ -5,7 +5,7 @@ mod bitset;
 mod callframe;
 pub mod decode;
 mod decommit;
-mod fat_pointer;
+pub mod fat_pointer;
 mod heap;
 mod instruction;
 pub mod instruction_handlers;
@@ -22,7 +22,7 @@ use u256::{H160, U256};
 
 pub use decommit::address_into_u256;
 pub use decommit::initial_decommit;
-pub use heap::FIRST_HEAP;
+pub use heap::{HeapId, FIRST_HEAP};
 pub use instruction::{jump_to_beginning, ExecutionEnd, Instruction};
 pub use modified_world::{Event, L2ToL1Log, WorldDiff};
 pub use predication::Predicate;
