@@ -1,5 +1,9 @@
-use crate::{modified_world::Snapshot, program::Program, stack::Stack, Instruction};
+use crate::{
+    address_into_u256, decommit::is_kernel, heap::HeapId, modified_world::Snapshot,
+    program::Program, stack::Stack, Instruction,
+};
 use u256::H160;
+use zkevm_opcode_defs::system_params::{NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Callframe {
@@ -12,9 +16,6 @@ pub struct Callframe {
     pub is_static: bool,
 
     pub stack: Box<Stack>,
-
-    pub heap: u32,
-    pub aux_heap: u32,
     pub sp: u16,
 
     pub gas: u32,
@@ -26,16 +27,24 @@ pub struct Callframe {
 
     pub(crate) program: Program,
 
+    pub heap: HeapId,
+    pub aux_heap: HeapId,
+
+    /// The amount of heap that has been paid for. This should always be greater
+    /// or equal to the actual size of the heap in memory.
+    pub heap_size: u32,
+    pub aux_heap_size: u32,
+
     /// Returning a pointer to the calldata is illegal because it could result in
     /// the caller's heap being accessible both directly and via the fat pointer.
     /// The problem only occurs if the calldata originates from the caller's heap
     /// but this rule is easy to implement.
-    pub(crate) calldata_heap: u32,
+    pub(crate) calldata_heap: HeapId,
 
     /// Because of the above rule we know that heaps returned to this frame only
     /// exist to allow this frame to read from them. Therefore we can deallocate
     /// all of them upon return, except possibly one that we pass on.
-    pub(crate) heaps_i_am_keeping_alive: Vec<u32>,
+    pub(crate) heaps_i_am_keeping_alive: Vec<HeapId>,
 
     pub(crate) world_before_this_frame: Snapshot,
 }
@@ -57,9 +66,9 @@ impl Callframe {
         caller: H160,
         program: Program,
         stack: Box<Stack>,
-        heap: u32,
-        aux_heap: u32,
-        calldata_heap: u32,
+        heap: HeapId,
+        aux_heap: HeapId,
+        calldata_heap: HeapId,
         gas: u32,
         stipend: u32,
         exception_handler: u16,
@@ -67,6 +76,12 @@ impl Callframe {
         is_static: bool,
         world_before_this_frame: Snapshot,
     ) -> Self {
+        let heap_size = if is_kernel(address_into_u256(code_address)) {
+            NEW_KERNEL_FRAME_MEMORY_STIPEND
+        } else {
+            NEW_FRAME_MEMORY_STIPEND
+        };
+
         Self {
             address,
             code_address,
@@ -77,6 +92,8 @@ impl Callframe {
             stack,
             heap,
             aux_heap,
+            heap_size,
+            aux_heap_size: heap_size,
             calldata_heap,
             heaps_i_am_keeping_alive: vec![],
             sp: 1024,

@@ -1,8 +1,8 @@
 use super::{common::instruction_boilerplate_with_panic, PANIC};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
+    heap::{HeapId, Heaps},
     instruction::InstructionResult,
-    state::Heaps,
     Instruction, VirtualMachine, World,
 };
 use u256::U256;
@@ -42,10 +42,10 @@ fn precompile_call(
 
         let mut abi = PrecompileCallABI::from_u256(Register1::get(args, &mut vm.state));
         if abi.memory_page_to_read == 0 {
-            abi.memory_page_to_read = vm.state.current_frame.heap;
+            abi.memory_page_to_read = vm.state.current_frame.heap.to_u32();
         }
         if abi.memory_page_to_write == 0 {
-            abi.memory_page_to_write = vm.state.current_frame.heap;
+            abi.memory_page_to_write = vm.state.current_frame.heap.to_u32();
         }
 
         let query = LogQuery {
@@ -95,7 +95,8 @@ impl Memory for Heaps {
         _monotonic_cycle_counter: u32,
         mut query: zk_evm_abstractions::queries::MemoryQuery,
     ) -> zk_evm_abstractions::queries::MemoryQuery {
-        let page = query.location.page.0;
+        let page = HeapId::from_u32_unchecked(query.location.page.0);
+
         let start = query.location.index.0 as usize * 32;
         let range = start..start + 32;
         if query.rw_flag {
