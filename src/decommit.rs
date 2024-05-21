@@ -1,4 +1,4 @@
-use crate::{modified_world::WorldDiff, program::Program, World};
+use crate::{program::Program, world_diff::WorldDiff, World};
 use u256::{H160, U256};
 use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,

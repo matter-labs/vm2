@@ -27,14 +27,12 @@ fn sstore(
             let key = Register1::get(args, &mut vm.state);
             let value = Register2::get(args, &mut vm.state);
 
-            let (refund, pubdata_change) =
+            let refund =
                 vm.world_diff
                     .write_storage(world, vm.state.current_frame.address, key, value);
 
             assert!(refund <= SSTORE_COST);
             vm.state.current_frame.gas += refund;
-
-            vm.state.current_frame.total_pubdata_spent += pubdata_change;
 
             continue_normally
         },

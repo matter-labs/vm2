@@ -1,12 +1,12 @@
 use crate::heap::HeapId;
-use crate::modified_world::ExternalSnapshot;
+use crate::world_diff::ExternalSnapshot;
 use crate::{
     callframe::{Callframe, FrameRemnant},
     decommit::u256_into_address,
     instruction_handlers::{free_panic, CallingMode},
-    modified_world::{Snapshot, WorldDiff},
     stack::StackPool,
     state::State,
+    world_diff::{Snapshot, WorldDiff},
     ExecutionEnd, Instruction, Program, World,
 };
 use u256::H160;
@@ -240,7 +240,6 @@ impl VirtualMachine {
                     exception_handler,
                     world_before_this_frame,
                     stack,
-                    total_pubdata_spent,
                     ..
                 } = frame;
 
@@ -255,7 +254,6 @@ impl VirtualMachine {
                     program_counter,
                     exception_handler,
                     snapshot: world_before_this_frame,
-                    total_pubdata_spent,
                 }
             })
     }
