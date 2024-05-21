@@ -23,7 +23,6 @@ fuzz_target!(|data: &[u8]| {
     let program = vm2::initial_decommit(&mut world, address);
 
     let mut state = VirtualMachine::new(
-        Box::new(world),
         address,
         program,
         H160::zero(),
@@ -35,5 +34,5 @@ fuzz_target!(|data: &[u8]| {
             hook_address: 0,
         },
     );
-    state.run();
+    state.run(&mut world);
 });
