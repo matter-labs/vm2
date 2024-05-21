@@ -15,7 +15,7 @@ use zkevm_opcode_defs::system_params::{
 #[derive(Default)]
 pub struct WorldDiff {
     // These are rolled back on revert or panic (and when the whole VM is rolled back).
-    storage_changes: RollbackableMap<(H160, U256), U256>,
+    storage_changes: RollbackableMap<(H160, U256), (u16, U256)>,
     paid_changes: RollbackableMap<(H160, U256), u32>,
     transient_storage_changes: RollbackableMap<(H160, U256), U256>,
     events: RollbackableLog<Event>,
@@ -68,6 +68,7 @@ impl WorldDiff {
             .as_ref()
             .get(&(contract, key))
             .cloned()
+            .map(|v| v.1)
             .unwrap_or_else(|| world.read_storage(contract, key));
 
         let refund = if world.is_free_storage_slot(&contract, &key)
@@ -89,8 +90,10 @@ impl WorldDiff {
         contract: H160,
         key: U256,
         value: U256,
+        tx_number_in_block: u16,
     ) -> u32 {
-        self.storage_changes.insert((contract, key), value);
+        self.storage_changes
+            .insert((contract, key), (tx_number_in_block, value));
 
         if world.is_free_storage_slot(&contract, &key) {
             return WARM_WRITE_REFUND;
@@ -124,18 +127,20 @@ impl WorldDiff {
         refund
     }
 
-    pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
+    pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), (u16, U256)> {
         self.storage_changes.as_ref()
     }
 
-    pub fn get_storage_changes(&self) -> BTreeMap<(H160, U256), (Option<U256>, U256)> {
+    pub fn get_storage_changes(
+        &self,
+    ) -> BTreeMap<(H160, U256), (Option<(u16, U256)>, (u16, U256))> {
         self.storage_changes.changes_after(0)
     }
 
     pub fn get_storage_changes_after(
         &self,
         snapshot: &Snapshot,
-    ) -> BTreeMap<(H160, U256), (Option<U256>, U256)> {
+    ) -> BTreeMap<(H160, U256), (Option<(u16, U256)>, (u16, U256))> {
         self.storage_changes.changes_after(snapshot.storage_changes)
     }
 
