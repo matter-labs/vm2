@@ -1,8 +1,14 @@
 use crate::{
-    addressing_modes::Addressable, bitset::Bitset, callframe::Callframe, fat_pointer::FatPointer,
-    modified_world::Snapshot, predication::Flags, program::Program, stack::Stack,
+    addressing_modes::Addressable,
+    bitset::Bitset,
+    callframe::Callframe,
+    fat_pointer::FatPointer,
+    heap::{Heaps, CALLDATA_HEAP, FIRST_AUX_HEAP, FIRST_HEAP},
+    predication::Flags,
+    program::Program,
+    stack::Stack,
+    world_diff::Snapshot,
 };
-use std::ops::{Index, IndexMut};
 use u256::{H160, U256};
 
 #[derive(Clone, PartialEq, Debug)]
@@ -25,8 +31,6 @@ pub struct State {
     pub(crate) context_u128: u128,
 }
 
-pub const FIRST_HEAP: u32 = 2;
-
 impl State {
     pub(crate) fn new(
         address: H160,
@@ -39,7 +43,7 @@ impl State {
     ) -> Self {
         let mut registers: [U256; 16] = Default::default();
         registers[1] = FatPointer {
-            memory_page: 1,
+            memory_page: CALLDATA_HEAP,
             offset: 0,
             start: 0,
             length: calldata.len() as u32,
@@ -57,8 +61,8 @@ impl State {
                 program,
                 stack,
                 FIRST_HEAP,
-                3,
-                1,
+                FIRST_AUX_HEAP,
+                CALLDATA_HEAP,
                 gas,
                 0,
                 0,
@@ -68,9 +72,7 @@ impl State {
             ),
             previous_frames: vec![],
 
-            // The first heap can never be used because heap zero
-            // means the current heap in precompile calls
-            heaps: Heaps(vec![vec![], calldata, vec![], vec![]]),
+            heaps: Heaps::new(calldata),
 
             transaction_number: 0,
             context_u128: 0,
@@ -129,39 +131,5 @@ impl Addressable for State {
     }
     fn code_page(&self) -> &[U256] {
         self.current_frame.program.code_page()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Heaps(pub(crate) Vec<Vec<u8>>);
-
-impl Heaps {
-    pub(crate) fn deallocate(&mut self, heap: u32) {
-        self.0[heap as usize] = vec![];
-    }
-}
-
-impl Index<u32> for Heaps {
-    type Output = Vec<u8>;
-
-    fn index(&self, index: u32) -> &Self::Output {
-        &self.0[index as usize]
-    }
-}
-
-impl IndexMut<u32> for Heaps {
-    fn index_mut(&mut self, index: u32) -> &mut Self::Output {
-        &mut self.0[index as usize]
-    }
-}
-
-impl PartialEq for Heaps {
-    fn eq(&self, other: &Self) -> bool {
-        for i in 0..self.0.len().max(other.0.len()) {
-            if self.0.get(i).unwrap_or(&vec![]) != other.0.get(i).unwrap_or(&vec![]) {
-                return false;
-            }
-        }
-        true
     }
 }

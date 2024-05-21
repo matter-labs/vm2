@@ -2,7 +2,7 @@ use super::{common::instruction_boilerplate_with_panic, free_panic};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
     instruction::InstructionResult,
-    modified_world::{Event, L2ToL1Log},
+    world_diff::{Event, L2ToL1Log},
     Instruction, VirtualMachine, World,
 };
 use u256::H160;

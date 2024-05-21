@@ -5,10 +5,10 @@ mod bitset;
 mod callframe;
 pub mod decode;
 mod decommit;
-mod fat_pointer;
+pub mod fat_pointer;
+mod heap;
 mod instruction;
 pub mod instruction_handlers;
-mod modified_world;
 mod predication;
 mod program;
 mod rollback;
@@ -16,17 +16,19 @@ mod stack;
 mod state;
 pub mod testworld;
 mod vm;
+mod world_diff;
 
 use u256::{H160, U256};
 
 pub use decommit::address_into_u256;
 pub use decommit::initial_decommit;
+pub use heap::{HeapId, FIRST_HEAP};
 pub use instruction::{jump_to_beginning, ExecutionEnd, Instruction};
-pub use modified_world::{Event, L2ToL1Log, WorldDiff};
 pub use predication::Predicate;
 pub use program::Program;
-pub use state::{State, FIRST_HEAP};
+pub use state::State;
 pub use vm::{Settings, VirtualMachine, VmSnapshot as Snapshot};
+pub use world_diff::{Event, L2ToL1Log, WorldDiff};
 
 pub trait World {
     /// This will be called *every* time a contract is called. Caching and decoding is
