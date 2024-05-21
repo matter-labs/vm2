@@ -1,3 +1,4 @@
+use crate::heap::HeapId;
 use crate::modified_world::ExternalSnapshot;
 use crate::{
     callframe::{Callframe, FrameRemnant},
@@ -9,7 +10,6 @@ use crate::{
     ExecutionEnd, Instruction, Program, World,
 };
 use u256::H160;
-use zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND;
 
 pub struct Settings {
     pub default_aa_code_hash: [u8; 32],
@@ -177,16 +177,9 @@ impl VirtualMachine {
         stipend: u32,
         exception_handler: u16,
         is_static: bool,
-        calldata_heap: u32,
+        calldata_heap: HeapId,
         world_before_this_frame: Snapshot,
     ) {
-        let new_heap = self.state.heaps.0.len() as u32;
-
-        self.state.heaps.0.extend([
-            vec![0; NEW_FRAME_MEMORY_STIPEND as usize],
-            vec![0; NEW_FRAME_MEMORY_STIPEND as usize],
-        ]);
-
         let mut new_frame = Callframe::new(
             if CALLING_MODE == CallingMode::Delegate as u8 {
                 self.state.current_frame.address
@@ -204,8 +197,8 @@ impl VirtualMachine {
             },
             program,
             self.stack_pool.get(),
-            new_heap,
-            new_heap + 1,
+            self.state.heaps.allocate(),
+            self.state.heaps.allocate(),
             calldata_heap,
             gas,
             stipend,
@@ -225,7 +218,7 @@ impl VirtualMachine {
         self.state.previous_frames.push((old_pc, new_frame));
     }
 
-    pub(crate) fn pop_frame(&mut self, heap_to_keep: Option<u32>) -> Option<FrameRemnant> {
+    pub(crate) fn pop_frame(&mut self, heap_to_keep: Option<HeapId>) -> Option<FrameRemnant> {
         self.state
             .previous_frames
             .pop()
