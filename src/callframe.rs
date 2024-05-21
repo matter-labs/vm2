@@ -74,7 +74,7 @@ impl Callframe {
         is_static: bool,
         world_before_this_frame: Snapshot,
     ) -> Self {
-        let heap_size = if is_kernel(address_into_u256(code_address)) {
+        let heap_size = if is_kernel(address_into_u256(address)) {
             NEW_KERNEL_FRAME_MEMORY_STIPEND
         } else {
             NEW_FRAME_MEMORY_STIPEND

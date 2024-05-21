@@ -44,8 +44,8 @@ impl WorldDiff {
                     evm_interpreter_code_hash
                 }
 
-                // Implements Ethereum-like behavior of calls to EOAs returning successfully
-                // and address aliasing when called from the bootloader.
+                // The address aliasing contract implements Ethereum-like behavior of calls to EOAs
+                // returning successfully (and address aliasing when called from the bootloader).
                 _ if code_info == U256::zero() && !is_kernel(address) => default_aa_code_hash,
 
                 _ => return None,
