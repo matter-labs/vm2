@@ -78,8 +78,9 @@ impl WorldDiff {
 pub fn initial_decommit(world: &mut impl World, address: H160) -> Program {
     let deployer_system_contract_address =
         Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
-    let code_info =
-        world.read_storage(deployer_system_contract_address, address_into_u256(address));
+    let code_info = world
+        .read_storage(deployer_system_contract_address, address_into_u256(address))
+        .unwrap_or_default();
 
     let mut code_info_bytes = [0; 32];
     code_info.to_big_endian(&mut code_info_bytes);
