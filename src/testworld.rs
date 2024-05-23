@@ -48,17 +48,19 @@ impl World for TestWorld {
         }
     }
 
-    fn read_storage(&mut self, contract: u256::H160, key: u256::U256) -> u256::U256 {
+    fn read_storage(&mut self, contract: u256::H160, key: u256::U256) -> Option<U256> {
         let deployer_system_contract_address =
             Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
 
         if contract == deployer_system_contract_address {
-            self.address_to_hash
-                .get(&key)
-                .copied()
-                .unwrap_or(U256::zero())
+            Some(
+                self.address_to_hash
+                    .get(&key)
+                    .copied()
+                    .unwrap_or(U256::zero()),
+            )
         } else {
-            0.into()
+            None
         }
     }
 
@@ -66,6 +68,7 @@ impl World for TestWorld {
         &mut self,
         _contract: u256::H160,
         _key: U256,
+        _initial_value: Option<U256>,
         _new_value: U256,
     ) -> u32 {
         50

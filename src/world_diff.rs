@@ -26,6 +26,9 @@ pub struct WorldDiff {
     pub(crate) decommitted_hashes: RollbackableSet<U256>,
     read_storage_slots: RollbackableSet<(H160, U256)>,
     written_storage_slots: RollbackableSet<(H160, U256)>,
+
+    // This is never rolled back. It is just a cache to avoid asking these from DB every time.
+    storage_initial_values: BTreeMap<(H160, U256), Option<U256>>,
 }
 
 pub struct ExternalSnapshot {
@@ -69,7 +72,7 @@ impl WorldDiff {
             .get(&(contract, key))
             .cloned()
             .map(|v| v.1)
-            .unwrap_or_else(|| world.read_storage(contract, key));
+            .unwrap_or_else(|| world.read_storage(contract, key).unwrap_or_default());
 
         let refund = if world.is_free_storage_slot(&contract, &key)
             || self.read_storage_slots.contains(&(contract, key))
@@ -99,7 +102,12 @@ impl WorldDiff {
             return WARM_WRITE_REFUND;
         }
 
-        let update_cost = world.cost_of_writing_storage(contract, key, value);
+        let initial_value = self
+            .storage_initial_values
+            .entry((contract, key))
+            .or_insert_with(|| world.read_storage(contract, key));
+
+        let update_cost = world.cost_of_writing_storage(contract, key, *initial_value, value);
         let prepaid = self
             .paid_changes
             .insert((contract, key), update_cost)
@@ -131,19 +139,34 @@ impl WorldDiff {
         self.storage_changes.as_ref()
     }
 
-    #[allow(clippy::type_complexity)]
-    pub fn get_storage_changes(
-        &self,
-    ) -> BTreeMap<(H160, U256), (Option<(u16, U256)>, (u16, U256))> {
-        self.storage_changes.changes_after(0)
+    pub fn get_storage_changes(&self) -> BTreeMap<(H160, U256), (u16, Option<U256>, U256)> {
+        let mut result = BTreeMap::new();
+        for (key, &(tx_number, value)) in self.storage_changes.as_ref() {
+            if self.storage_initial_values[key] != Some(value) {
+                result.insert(*key, (tx_number, self.storage_initial_values[key], value));
+            }
+        }
+        result
     }
 
-    #[allow(clippy::type_complexity)]
     pub fn get_storage_changes_after(
         &self,
         snapshot: &Snapshot,
-    ) -> BTreeMap<(H160, U256), (Option<(u16, U256)>, (u16, U256))> {
-        self.storage_changes.changes_after(snapshot.storage_changes)
+    ) -> BTreeMap<(H160, U256), (u16, Option<U256>, U256)> {
+        self.storage_changes
+            .changes_after(snapshot.storage_changes)
+            .into_iter()
+            .map(|(key, (before, (tx_id, after)))| {
+                (
+                    key,
+                    (
+                        tx_id,
+                        before.map(|x| x.1).or(self.storage_initial_values[&key]),
+                        after,
+                    ),
+                )
+            })
+            .collect()
     }
 
     pub(crate) fn read_transient_storage(&mut self, contract: H160, key: U256) -> U256 {
