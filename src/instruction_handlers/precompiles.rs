@@ -50,7 +50,7 @@ fn precompile_call(
         let query = LogQuery {
             timestamp: Timestamp(0),
             key: abi.to_u256(),
-            tx_number_in_block: Default::default(),
+            tx_number_in_block: vm.state.transaction_number,
             aux_byte: Default::default(),
             shard_id: Default::default(),
             address: Default::default(),
