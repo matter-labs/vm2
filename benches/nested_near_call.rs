@@ -48,19 +48,19 @@ fn nested_near_call(bencher: Bencher) {
 fn nested_near_call_with_storage_write(bencher: Bencher) {
     let program = Program::new(
         vec![
-            Instruction::from_ergs_left(Register1(Register::new(1)), Arguments::new(Always, 0)),
+            Instruction::from_ergs_left(Register1(Register::new(1)), Arguments::new(Always, 5)),
             Instruction::from_sstore(
                 // always use same storage slot to get a warm write discount
                 Register1(Register::new(0)),
                 Register2(Register::new(1)),
-                Arguments::new(Always, 0),
+                Arguments::new(Always, 5511), // need to use actual cost to not create free gas from refunds
             ),
             Instruction::from_near_call(
                 // zero means pass all gas
                 Register1(Register::new(0)),
                 Immediate1(0),
                 Immediate2(0),
-                Arguments::new(Always, 10),
+                Arguments::new(Always, 25),
             ),
         ],
         vec![],
@@ -76,7 +76,7 @@ fn nested_near_call_with_storage_write(bencher: Bencher) {
             program,
             Address::zero(),
             vec![],
-            10_000_000,
+            80_000_000,
             vm2::Settings {
                 default_aa_code_hash: [0; 32],
                 evm_interpreter_code_hash: [0; 32],
