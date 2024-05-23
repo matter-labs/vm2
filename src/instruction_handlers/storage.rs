@@ -27,9 +27,13 @@ fn sstore(
             let key = Register1::get(args, &mut vm.state);
             let value = Register2::get(args, &mut vm.state);
 
-            let refund =
-                vm.world_diff
-                    .write_storage(world, vm.state.current_frame.address, key, value);
+            let refund = vm.world_diff.write_storage(
+                world,
+                vm.state.current_frame.address,
+                key,
+                value,
+                vm.state.transaction_number,
+            );
 
             assert!(refund <= SSTORE_COST);
             vm.state.current_frame.gas += refund;

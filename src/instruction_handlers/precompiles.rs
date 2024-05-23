@@ -50,6 +50,7 @@ fn precompile_call(
         let query = LogQuery {
             timestamp: Timestamp(0),
             key: abi.to_u256(),
+            // only two first fields are read by the precompile
             tx_number_in_block: Default::default(),
             aux_byte: Default::default(),
             shard_id: Default::default(),
