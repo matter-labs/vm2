@@ -131,12 +131,14 @@ impl WorldDiff {
         self.storage_changes.as_ref()
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn get_storage_changes(
         &self,
     ) -> BTreeMap<(H160, U256), (Option<(u16, U256)>, (u16, U256))> {
         self.storage_changes.changes_after(0)
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn get_storage_changes_after(
         &self,
         snapshot: &Snapshot,
