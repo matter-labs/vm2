@@ -39,13 +39,7 @@ pub trait World {
     fn read_storage(&mut self, contract: H160, key: U256) -> Option<U256>;
 
     /// Computes the cost of writing a storage slot.
-    fn cost_of_writing_storage(
-        &mut self,
-        contract: H160,
-        key: U256,
-        initial_value: Option<U256>,
-        new_value: U256,
-    ) -> u32;
+    fn cost_of_writing_storage(&mut self, initial_value: Option<U256>, new_value: U256) -> u32;
 
     /// Returns if the storage slot is free both in terms of gas and pubdata.
     fn is_free_storage_slot(&self, contract: &H160, key: &U256) -> bool;

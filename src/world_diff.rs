@@ -98,16 +98,16 @@ impl WorldDiff {
         self.storage_changes
             .insert((contract, key), (tx_number, value));
 
-        if world.is_free_storage_slot(&contract, &key) {
-            return WARM_WRITE_REFUND;
-        }
-
         let initial_value = self
             .storage_initial_values
             .entry((contract, key))
             .or_insert_with(|| world.read_storage(contract, key));
 
-        let update_cost = world.cost_of_writing_storage(contract, key, *initial_value, value);
+        if world.is_free_storage_slot(&contract, &key) {
+            return WARM_WRITE_REFUND;
+        }
+
+        let update_cost = world.cost_of_writing_storage(*initial_value, value);
         let prepaid = self
             .paid_changes
             .insert((contract, key), update_cost)
@@ -152,18 +152,20 @@ impl WorldDiff {
     pub fn get_storage_changes_after(
         &self,
         snapshot: &Snapshot,
-    ) -> BTreeMap<(H160, U256), (u16, Option<U256>, U256)> {
+    ) -> BTreeMap<(H160, U256), StorageChange> {
         self.storage_changes
             .changes_after(snapshot.storage_changes)
             .into_iter()
             .map(|(key, (before, (tx_id, after)))| {
+                let initial = self.storage_initial_values[&key];
                 (
                     key,
-                    (
-                        tx_id,
-                        before.map(|x| x.1).or(self.storage_initial_values[&key]),
+                    StorageChange {
+                        before: before.map(|x| x.1).or(initial),
                         after,
-                    ),
+                        tx_number: tx_id,
+                        is_initial: initial.is_none(),
+                    },
                 )
             })
             .collect()
@@ -300,6 +302,15 @@ pub struct Snapshot {
     l2_to_l1_logs: <RollbackableLog<L2ToL1Log> as Rollback>::Snapshot,
     transient_storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
     pubdata: <RollbackablePod<i32> as Rollback>::Snapshot,
+}
+
+pub struct StorageChange {
+    pub before: Option<U256>,
+    pub after: U256,
+    pub tx_number: u16,
+    /// `true` if the slot is not set in the World.
+    /// A write may be initial even if it isn't the first write to a slot!
+    pub is_initial: bool,
 }
 
 const WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST - STORAGE_ACCESS_WARM_READ_COST;
