@@ -139,20 +139,25 @@ impl WorldDiff {
         self.storage_changes.as_ref()
     }
 
-    pub fn get_storage_changes(&self) -> BTreeMap<(H160, U256), (u16, Option<U256>, U256)> {
-        let mut result = BTreeMap::new();
-        for (key, &(tx_number, value)) in self.storage_changes.as_ref() {
-            if self.storage_initial_values[key] != Some(value) {
-                result.insert(*key, (tx_number, self.storage_initial_values[key], value));
-            }
-        }
-        result
+    pub fn get_storage_changes(
+        &self,
+    ) -> impl Iterator<Item = ((H160, U256), (u16, Option<U256>, U256))> + '_ {
+        self.storage_changes
+            .as_ref()
+            .iter()
+            .filter_map(|(key, &(tx_number, value))| {
+                if self.storage_initial_values[key] == Some(value) {
+                    None
+                } else {
+                    Some((*key, (tx_number, self.storage_initial_values[key], value)))
+                }
+            })
     }
 
     pub fn get_storage_changes_after(
         &self,
         snapshot: &Snapshot,
-    ) -> BTreeMap<(H160, U256), StorageChange> {
+    ) -> impl Iterator<Item = ((H160, U256), StorageChange)> + '_ {
         self.storage_changes
             .changes_after(snapshot.storage_changes)
             .into_iter()
@@ -168,7 +173,6 @@ impl WorldDiff {
                     },
                 )
             })
-            .collect()
     }
 
     pub(crate) fn read_transient_storage(&mut self, contract: H160, key: U256) -> U256 {
