@@ -64,13 +64,7 @@ impl World for TestWorld {
         }
     }
 
-    fn cost_of_writing_storage(
-        &mut self,
-        _contract: u256::H160,
-        _key: U256,
-        _initial_value: Option<U256>,
-        _new_value: U256,
-    ) -> u32 {
+    fn cost_of_writing_storage(&mut self, _initial_value: Option<U256>, _new_value: U256) -> u32 {
         50
     }
 
