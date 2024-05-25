@@ -55,7 +55,7 @@ fn unimplemented_handler(
     Err(ExecutionEnd::Panicked)
 }
 
-fn decode(raw: u64, is_bootloader: bool) -> Instruction {
+pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
     let (parsed, _) = EncodingModeProduction::parse_preliminary_variant_and_absolute_number(raw);
 
     let predicate = match parsed.condition {

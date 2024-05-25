@@ -123,7 +123,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
 
     vm.state.registers[2] = call_type.into();
 
-    Ok(&vm.state.current_frame.program.instructions()[0])
+    Ok(vm.state.current_frame.program.instruction(0).unwrap())
 }
 
 pub(crate) struct FarCallABI {

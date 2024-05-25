@@ -14,8 +14,8 @@ fn jump<In: Source>(
     _: &mut dyn World,
 ) -> InstructionResult {
     unsafe {
-        let target = In::get(&(*instruction).arguments, &mut vm.state).low_u32() as u16 as usize;
-        if let Some(i) = vm.state.current_frame.program.instructions().get(target) {
+        let target = In::get(&(*instruction).arguments, &mut vm.state).low_u32() as u16;
+        if let Some(i) = vm.state.current_frame.program.instruction(target) {
             instruction = i;
         } else {
             return Ok(&INVALID_INSTRUCTION);

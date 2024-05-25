@@ -1,6 +1,5 @@
 use crate::{
     addressing_modes::Addressable,
-    bitset::Bitset,
     callframe::Callframe,
     fat_pointer::FatPointer,
     heap::{Heaps, CALLDATA_HEAP, FIRST_AUX_HEAP, FIRST_HEAP},
@@ -123,12 +122,20 @@ impl Addressable for State {
     fn write_stack(&mut self, slot: u16, value: U256) {
         self.current_frame.stack.set(slot, value)
     }
-    fn stack_pointer_flags(&mut self) -> &mut Bitset {
-        &mut self.current_frame.stack.pointer_flags
-    }
     fn stack_pointer(&mut self) -> &mut u16 {
         &mut self.current_frame.sp
     }
+
+    fn read_stack_pointer_flag(&mut self, slot: u16) -> bool {
+        self.current_frame.stack.get_pointer_flag(slot)
+    }
+    fn set_stack_pointer_flag(&mut self, slot: u16) {
+        self.current_frame.stack.set_pointer_flag(slot)
+    }
+    fn clear_stack_pointer_flag(&mut self, slot: u16) {
+        self.current_frame.stack.clear_pointer_flag(slot)
+    }
+
     fn code_page(&self) -> &[U256] {
         self.current_frame.program.code_page()
     }

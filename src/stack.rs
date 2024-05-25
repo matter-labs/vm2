@@ -5,7 +5,7 @@ use u256::U256;
 #[derive(PartialEq, Debug)]
 pub struct Stack {
     /// set of slots that may be interpreted as [crate::fat_pointer::FatPointer].
-    pub pointer_flags: Bitset,
+    pointer_flags: Bitset,
     dirty_areas: u64,
     slots: [U256; 1 << 16],
 }
@@ -40,6 +40,18 @@ impl Stack {
 
         self.dirty_areas = 0;
         self.pointer_flags = Default::default();
+    }
+
+    pub(crate) fn get_pointer_flag(&self, slot: u16) -> bool {
+        self.pointer_flags.get(slot)
+    }
+
+    pub(crate) fn set_pointer_flag(&mut self, slot: u16) {
+        self.pointer_flags.set(slot);
+    }
+
+    pub(crate) fn clear_pointer_flag(&mut self, slot: u16) {
+        self.pointer_flags.clear(slot);
     }
 }
 

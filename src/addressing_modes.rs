@@ -1,4 +1,4 @@
-use crate::{bitset::Bitset, predication::Predicate};
+use crate::predication::Predicate;
 #[cfg(feature = "arbitrary")]
 use arbitrary::{Arbitrary, Unstructured};
 use enum_dispatch::enum_dispatch;
@@ -24,8 +24,11 @@ pub trait Addressable {
 
     fn read_stack(&mut self, slot: u16) -> U256;
     fn write_stack(&mut self, slot: u16, value: U256);
-    fn stack_pointer_flags(&mut self) -> &mut Bitset;
     fn stack_pointer(&mut self) -> &mut u16;
+
+    fn read_stack_pointer_flag(&mut self, slot: u16) -> bool;
+    fn set_stack_pointer_flag(&mut self, slot: u16);
+    fn clear_stack_pointer_flag(&mut self, slot: u16);
 
     fn code_page(&self) -> &[U256];
 }
@@ -272,7 +275,7 @@ impl<T: StackAddressing> Source for T {
 
     fn is_fat_pointer(args: &Arguments, state: &mut impl Addressable) -> bool {
         let address = Self::address_for_get(args, state);
-        state.stack_pointer_flags().get(address)
+        state.read_stack_pointer_flag(address)
     }
 }
 
@@ -280,13 +283,13 @@ impl<T: StackAddressing> Destination for T {
     fn set(args: &Arguments, state: &mut impl Addressable, value: U256) {
         let address = Self::address_for_set(args, state);
         state.write_stack(address, value);
-        state.stack_pointer_flags().clear(address);
+        state.clear_stack_pointer_flag(address);
     }
 
     fn set_fat_ptr(args: &Arguments, state: &mut impl Addressable, value: U256) {
         let address = Self::address_for_set(args, state);
         state.write_stack(address, value);
-        state.stack_pointer_flags().set(address);
+        state.set_stack_pointer_flag(address);
     }
 }
 

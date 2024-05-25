@@ -41,6 +41,6 @@ fn jump_to_beginning_handler(
     _: *const Instruction,
     _: &mut dyn World,
 ) -> InstructionResult {
-    let first_instruction = &vm.state.current_frame.program.instructions()[0];
+    let first_instruction = vm.state.current_frame.program.instruction(0).unwrap();
     Ok(first_instruction)
 }

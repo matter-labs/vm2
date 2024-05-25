@@ -21,7 +21,7 @@ pub struct Callframe {
     pub gas: u32,
     pub stipend: u32,
 
-    near_calls: Vec<NearCallFrame>,
+    pub(crate) near_calls: Vec<NearCallFrame>,
 
     pub(crate) program: Program,
 
@@ -48,7 +48,7 @@ pub struct Callframe {
 }
 
 #[derive(Clone, PartialEq, Debug)]
-struct NearCallFrame {
+pub(crate) struct NearCallFrame {
     call_instruction: u16,
     exception_handler: u16,
     previous_frame_sp: u16,
@@ -134,13 +134,12 @@ impl Callframe {
     }
 
     pub(crate) fn pc_to_u16(&self, pc: *const Instruction) -> u16 {
-        unsafe { pc.offset_from(&self.program.instructions()[0]) as u16 }
+        unsafe { pc.offset_from(self.program.instruction(0).unwrap()) as u16 }
     }
 
     pub(crate) fn pc_from_u16(&self, index: u16) -> Option<*const Instruction> {
         self.program
-            .instructions()
-            .get(index as usize)
+            .instruction(index)
             .map(|p| p as *const Instruction)
     }
 

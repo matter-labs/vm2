@@ -21,8 +21,8 @@ impl Program {
         }
     }
 
-    pub fn instructions(&self) -> &Arc<[Instruction]> {
-        &self.instructions
+    pub fn instruction(&self, n: u16) -> Option<&Instruction> {
+        self.instructions.get::<usize>(n.into())
     }
 
     pub fn code_page(&self) -> &Arc<[U256]> {
