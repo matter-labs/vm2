@@ -34,6 +34,12 @@ impl VirtualMachine {
     pub fn is_in_valid_state(&self) -> bool {
         self.state.is_valid()
     }
+
+    pub fn instruction_is_not_precompile_call(&self) -> bool {
+        // Precompilecall is not allowed because it accesses memory multiple times
+        // and only needs to work as used by trusted code
+        self.state.current_frame.program.raw_first_instruction & 0x7FF != 1056u64
+    }
 }
 
 impl<'a> Arbitrary<'a> for VirtualMachine {
