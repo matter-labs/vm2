@@ -6,8 +6,8 @@ use u256::U256;
 
 #[derive(Debug, Clone)]
 pub struct Heap {
-    read: MockRead<u32, [u8; 32]>,
-    write: Option<(u32, U256)>,
+    pub(crate) read: MockRead<u32, [u8; 32]>,
+    pub(crate) write: Option<(u32, U256)>,
 }
 
 impl HeapInterface for Heap {
@@ -47,7 +47,7 @@ impl<'a> Arbitrary<'a> for Heap {
 
 #[derive(Debug, Clone, Arbitrary)]
 pub struct Heaps {
-    read: MockRead<HeapId, Heap>,
+    pub(crate) read: MockRead<HeapId, Heap>,
 }
 
 pub(crate) const CALLDATA_HEAP: HeapId = HeapId(1);

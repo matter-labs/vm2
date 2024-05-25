@@ -24,7 +24,9 @@ fn main() {
     println!("{}", parsed);
     let _ = vm.run_single_instruction(&mut world);
 
-    println!("{:?}", vm.state);
+    println!("Mocks that have been touched:");
+    vm.print_mock_info();
+
     assert!(vm.is_in_valid_state());
 }
 

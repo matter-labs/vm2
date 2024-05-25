@@ -8,6 +8,7 @@
 mod callframe;
 pub mod heap;
 mod mock_array;
+mod print_mock_info;
 pub mod program;
 pub mod stack;
 mod validation;
