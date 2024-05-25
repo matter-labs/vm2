@@ -1,21 +1,53 @@
 use super::mock_array::MockRead;
+use crate::instruction_handlers::HeapInterface;
 use arbitrary::Arbitrary;
 use std::ops::{Index, IndexMut};
-
-//#[derive(Debug, Clone)]
-type Heap = Vec<u8>;
+use u256::U256;
 
 #[derive(Debug, Clone)]
-pub struct Heaps {
-    read: MockRead<HeapId, Heap>,
+pub struct Heap {
+    read: MockRead<u32, [u8; 32]>,
+    write: Option<(u32, U256)>,
 }
 
-impl<'a> Arbitrary<'a> for Heaps {
+impl HeapInterface for Heap {
+    fn read_u256(&self, start_address: u32) -> U256 {
+        assert!(self.write.is_none());
+        U256::from_little_endian(self.read.get(start_address))
+    }
+
+    fn read_u256_partially(&self, range: std::ops::Range<u32>) -> U256 {
+        assert!(self.write.is_none());
+        let mut result = *self.read.get(range.start);
+        for byte in &mut result[0..range.len()] {
+            *byte = 0;
+        }
+        U256::from_little_endian(&result)
+    }
+
+    fn write_u256(&mut self, start_address: u32, value: U256) {
+        assert!(self.write.is_none());
+        self.write = Some((start_address, value));
+    }
+
+    fn read_range_big_endian(&self, _: std::ops::Range<u32>) -> Vec<u8> {
+        // This is wrong, but this method is only used to get the final return value.
+        vec![]
+    }
+}
+
+impl<'a> Arbitrary<'a> for Heap {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         Ok(Self {
-            read: MockRead::new(vec![u.arbitrary()?; 1]),
+            read: u.arbitrary()?,
+            write: None,
         })
     }
+}
+
+#[derive(Debug, Clone, Arbitrary)]
+pub struct Heaps {
+    read: MockRead<HeapId, Heap>,
 }
 
 pub(crate) const CALLDATA_HEAP: HeapId = HeapId(1);

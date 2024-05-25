@@ -1,4 +1,4 @@
-use super::far_call::get_far_call_calldata;
+use super::{far_call::get_far_call_calldata, HeapInterface};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     callframe::FrameRemnant,
@@ -94,8 +94,10 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
             // these would break were the initial frame to be rolled back.
 
             return if let Some(return_value) = return_value_or_panic {
-                let output = vm.state.heaps[return_value.memory_page][return_value.start as usize
-                    ..(return_value.start + return_value.length) as usize]
+                let output = vm.state.heaps[return_value.memory_page]
+                    .read_range_big_endian(
+                        return_value.start..return_value.start + return_value.length,
+                    )
                     .to_vec();
                 if return_type == ReturnType::Revert {
                     Err(ExecutionEnd::Reverted(output))

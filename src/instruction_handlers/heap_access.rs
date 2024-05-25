@@ -9,16 +9,24 @@ use crate::{
     state::State,
     ExecutionEnd, Instruction, VirtualMachine, World,
 };
+use std::ops::Range;
 use u256::U256;
 
+pub trait HeapInterface {
+    fn read_u256(&self, start_address: u32) -> U256;
+    fn read_u256_partially(&self, range: Range<u32>) -> U256;
+    fn write_u256(&mut self, start_address: u32, value: U256);
+    fn read_range_big_endian(&self, range: Range<u32>) -> Vec<u8>;
+}
+
 pub trait HeapFromState {
-    fn get_heap(state: &mut State) -> &mut Vec<u8>;
+    fn get_heap(state: &mut State) -> &mut impl HeapInterface;
     fn get_heap_size(state: &mut State) -> &mut u32;
 }
 
 pub struct Heap;
 impl HeapFromState for Heap {
-    fn get_heap(state: &mut State) -> &mut Vec<u8> {
+    fn get_heap(state: &mut State) -> &mut impl HeapInterface {
         &mut state.heaps[state.current_frame.heap]
     }
     fn get_heap_size(state: &mut State) -> &mut u32 {
@@ -28,7 +36,7 @@ impl HeapFromState for Heap {
 
 pub struct AuxHeap;
 impl HeapFromState for AuxHeap {
-    fn get_heap(state: &mut State) -> &mut Vec<u8> {
+    fn get_heap(state: &mut State) -> &mut impl HeapInterface {
         &mut state.heaps[state.current_frame.aux_heap]
     }
     fn get_heap_size(state: &mut State) -> &mut u32 {
@@ -63,8 +71,7 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
             return Ok(&PANIC);
         };
 
-        let heap = H::get_heap(&mut vm.state);
-        let value = U256::from_big_endian(&heap[address as usize..new_bound as usize]);
+        let value = H::get_heap(&mut vm.state).read_u256(address);
         Register1::set(args, &mut vm.state, value);
 
         if INCREMENT {
@@ -100,8 +107,7 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
             return Ok(&PANIC);
         }
 
-        let heap = H::get_heap(&mut vm.state);
-        value.to_big_endian(&mut heap[address as usize..new_bound as usize]);
+        H::get_heap(&mut vm.state).write_u256(address, value);
 
         if INCREMENT {
             Register1::set(args, &mut vm.state, pointer + 32)
@@ -130,11 +136,6 @@ pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<
         state.use_gas(to_pay)?;
     }
 
-    let heap = H::get_heap(state);
-    if (heap.len() as u32) < new_bound {
-        heap.resize(new_bound as usize, 0);
-    }
-
     Ok(())
 }
 
@@ -150,8 +151,6 @@ fn load_pointer<const INCREMENT: bool>(
         }
         let pointer = FatPointer::from(input);
 
-        let heap = &vm.state.heaps[pointer.memory_page];
-
         // Usually, we just read zeroes instead of out-of-bounds bytes
         // but if offset + 32 is not representable, we panic, even if we could've read some bytes.
         // This is not a bug, this is how it must work to be backwards compatible.
@@ -159,17 +158,11 @@ fn load_pointer<const INCREMENT: bool>(
             return Ok(&PANIC);
         };
 
-        let mut buffer = [0; 32];
-        if pointer.offset < pointer.length {
-            let start = pointer.start + pointer.offset;
-            let end = start.saturating_add(32).min(pointer.start + pointer.length);
+        let start = pointer.start + pointer.offset.min(pointer.length);
+        let end = start.saturating_add(32).min(pointer.start + pointer.length);
 
-            for (i, addr) in (start..end).enumerate() {
-                buffer[i] = heap[addr as usize];
-            }
-        }
-
-        Register1::set(args, &mut vm.state, U256::from_big_endian(&buffer));
+        let value = vm.state.heaps[pointer.memory_page].read_u256_partially(start..end);
+        Register1::set(args, &mut vm.state, value);
 
         if INCREMENT {
             // This addition does not overflow because we checked that the offset is small enough above.

@@ -1,11 +1,10 @@
-use super::{common::instruction_boilerplate_with_panic, PANIC};
+use super::{common::instruction_boilerplate_with_panic, HeapInterface, PANIC};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     heap::{HeapId, Heaps},
     instruction::InstructionResult,
     Instruction, VirtualMachine, World,
 };
-use u256::U256;
 use zk_evm_abstractions::{
     aux::Timestamp,
     precompiles::{
@@ -97,21 +96,11 @@ impl Memory for Heaps {
     ) -> zk_evm_abstractions::queries::MemoryQuery {
         let page = HeapId::from_u32_unchecked(query.location.page.0);
 
-        let start = query.location.index.0 as usize * 32;
-        let range = start..start + 32;
+        let start = query.location.index.0 * 32;
         if query.rw_flag {
-            if range.end > self[page].len() {
-                self[page].resize(range.end, 0);
-            }
-            query.value.to_big_endian(&mut self[page][range]);
+            self[page].write_u256(start, query.value);
         } else {
-            let mut buffer = [0; 32];
-            for (i, page_index) in range.enumerate() {
-                if let Some(byte) = self[page].get(page_index) {
-                    buffer[i] = *byte;
-                }
-            }
-            query.value = U256::from_big_endian(&buffer);
+            query.value = self[page].read_u256(start);
             query.value_is_pointer = false;
         }
         query
