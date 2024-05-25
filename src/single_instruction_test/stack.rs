@@ -1,7 +1,6 @@
+use super::{mock_array::MockRead, validation::is_valid_tagged_value};
 use arbitrary::Arbitrary;
 use u256::U256;
-
-use super::mock_array::MockRead;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Stack {
@@ -60,6 +59,12 @@ impl Stack {
     pub fn write_that_happened(&self) -> Option<(u16, (U256, bool))> {
         self.slot_written
             .map(|slot| (slot, (self.value_written, self.pointer_tag_written)))
+    }
+
+    pub fn is_valid(&self) -> bool {
+        is_valid_tagged_value(self.read.value_read)
+            && (self.slot_written.is_none()
+                || is_valid_tagged_value((self.value_written, self.pointer_tag_written)))
     }
 }
 

@@ -10,6 +10,7 @@ pub mod heap;
 mod mock_array;
 pub mod program;
 pub mod stack;
+mod validation;
 mod vm;
 mod world;
 

@@ -5,7 +5,10 @@ fn main() {
     afl::fuzz!(|data: &[u8]| {
         if let Ok(VmAndWorld { mut vm, mut world }) = arbitrary::Unstructured::new(data).arbitrary()
         {
-            let _ = vm.run_single_instruction(&mut world);
+            if vm.is_in_valid_state() {
+                let _ = vm.run_single_instruction(&mut world);
+                assert!(vm.is_in_valid_state());
+            }
         }
     });
 }

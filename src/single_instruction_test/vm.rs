@@ -28,6 +28,10 @@ impl VirtualMachine {
             }
         }
     }
+
+    pub fn is_in_valid_state(&self) -> bool {
+        self.state.current_frame.stack.is_valid()
+    }
 }
 
 impl<'a> Arbitrary<'a> for VirtualMachine {

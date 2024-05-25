@@ -44,6 +44,8 @@ use single_instruction_test::program;
 use single_instruction_test::stack;
 #[cfg(feature = "single_instruction_test")]
 pub use single_instruction_test::MockWorld;
+#[cfg(feature = "single_instruction_test")]
+pub use zkevm_opcode_defs;
 
 pub trait World {
     /// This will be called *every* time a contract is called. Caching and decoding is

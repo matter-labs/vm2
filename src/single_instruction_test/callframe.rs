@@ -32,3 +32,9 @@ impl<'a> Arbitrary<'a> for Callframe {
         })
     }
 }
+
+impl Callframe {
+    pub fn raw_first_instruction(&self) -> u64 {
+        self.program.raw_first_instruction
+    }
+}

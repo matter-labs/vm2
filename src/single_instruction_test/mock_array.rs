@@ -4,7 +4,7 @@ use std::fmt::Debug;
 
 #[derive(Clone, Debug)]
 pub struct MockRead<I: Copy, T> {
-    value_read: T,
+    pub(crate) value_read: T,
     index_read: Cell<Option<I>>,
 }
 
