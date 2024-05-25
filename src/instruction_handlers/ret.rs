@@ -62,12 +62,9 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
         let return_value_or_panic = if return_type == ReturnType::Panic {
             None
         } else {
-            let result = get_far_call_calldata(
-                Register1::get(args, &mut vm.state),
-                Register1::is_fat_pointer(args, &mut vm.state),
-                vm,
-            )
-            .filter(|pointer| pointer.memory_page != vm.state.current_frame.calldata_heap);
+            let (raw_abi, is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
+            let result = get_far_call_calldata(raw_abi, is_pointer, vm)
+                .filter(|pointer| pointer.memory_page != vm.state.current_frame.calldata_heap);
 
             if result.is_none() {
                 return_type = ReturnType::Panic;

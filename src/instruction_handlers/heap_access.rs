@@ -45,8 +45,8 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
     world: &mut dyn World,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
-        let pointer = In::get(args, &mut vm.state);
-        if In::is_fat_pointer(args, &mut vm.state) {
+        let (pointer, is_fat_pointer) = In::get_with_pointer_flag(args, &mut vm.state);
+        if is_fat_pointer {
             return Ok(&PANIC);
         }
         if pointer > LAST_ADDRESS.into() {
@@ -81,8 +81,8 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
     world: &mut dyn World,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
-        let pointer = In::get(args, &mut vm.state);
-        if In::is_fat_pointer(args, &mut vm.state) {
+        let (pointer, is_fat_pointer) = In::get_with_pointer_flag(args, &mut vm.state);
+        if is_fat_pointer {
             return Ok(&PANIC);
         }
         if pointer > LAST_ADDRESS.into() {
@@ -144,10 +144,10 @@ fn load_pointer<const INCREMENT: bool>(
     world: &mut dyn World,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
-        if !Register1::is_fat_pointer(args, &mut vm.state) {
+        let (input, input_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
+        if !input_is_pointer {
             return Ok(&PANIC);
         }
-        let input = Register1::get(args, &mut vm.state);
         let pointer = FatPointer::from(input);
 
         let heap = &vm.state.heaps[pointer.memory_page];
