@@ -1,0 +1,1 @@
+RUST_BACKTRACE=1 cargo run --bin show_testcase out/default/crashes/$(ls out/default/crashes/ | tail -n 1)
