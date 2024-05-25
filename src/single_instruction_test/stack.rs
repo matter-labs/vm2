@@ -23,10 +23,12 @@ impl<'a> Arbitrary<'a> for Stack {
 
 impl Stack {
     pub(crate) fn get(&self, slot: u16) -> U256 {
+        assert!(self.slot_written.is_none());
         self.read.get(slot).0
     }
 
     pub(crate) fn get_pointer_flag(&self, slot: u16) -> bool {
+        assert!(self.slot_written.is_none());
         self.read.get(slot).1
     }
 
@@ -68,12 +70,19 @@ impl Stack {
     }
 }
 
-#[derive(Default, Debug, Arbitrary)]
-pub struct StackPool(Option<Stack>);
+#[derive(Default, Debug)]
+pub struct StackPool;
 
 impl StackPool {
     pub fn get(&mut self) -> Box<Stack> {
-        Box::new(self.0.take().unwrap())
+        // A single instruction shouldn't be able to touch a new stack
+        // but the stack is set to already written just in case.
+        Box::new(Stack {
+            read: MockRead::new((U256::zero(), false)),
+            slot_written: Some(45678),
+            value_written: U256::zero(),
+            pointer_tag_written: false,
+        })
     }
 
     pub fn recycle(&mut self, _: Box<Stack>) {}

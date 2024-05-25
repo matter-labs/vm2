@@ -7,6 +7,8 @@ use crate::{
     VirtualMachine, World,
 };
 
+use super::stack::StackPool;
+
 impl VirtualMachine {
     fn get_first_instruction(&self) -> *const Instruction {
         self.state.current_frame.program.instruction(0).unwrap()
@@ -49,7 +51,7 @@ impl<'a> Arbitrary<'a> for VirtualMachine {
             },
             settings: u.arbitrary()?,
             world_diff: Default::default(),
-            stack_pool: u.arbitrary()?,
+            stack_pool: StackPool,
         })
     }
 }

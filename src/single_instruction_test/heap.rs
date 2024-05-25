@@ -60,7 +60,7 @@ impl Heaps {
     }
 
     pub(crate) fn allocate(&mut self) -> HeapId {
-        todo!()
+        HeapId(0)
     }
 
     pub(crate) fn deallocate(&mut self, _: HeapId) {}
