@@ -1,5 +1,5 @@
 use super::mock_array::MockRead;
-use crate::World;
+use crate::{Program, World};
 use arbitrary::Arbitrary;
 use u256::{H160, U256};
 
@@ -9,8 +9,8 @@ pub struct MockWorld {
 }
 
 impl World for MockWorld {
-    fn decommit(&mut self, _hash: U256) -> crate::Program {
-        todo!()
+    fn decommit(&mut self, _hash: U256) -> Program {
+        Program::for_decommit()
     }
 
     fn read_storage(&mut self, contract: H160, key: U256) -> Option<U256> {

@@ -53,6 +53,22 @@ impl Program {
     pub fn code_page(&self) -> &Arc<[U256]> {
         &self.code_page
     }
+
+    pub fn for_decommit() -> Self {
+        Self {
+            raw_first_instruction: 0,
+            raw_other_instruction: 0,
+            first_instruction: MockRead::new(Rc::new([
+                Instruction::from_invalid(),
+                Instruction::from_invalid(),
+            ])),
+            other_instruction: MockRead::new(Rc::new(Some([
+                Instruction::from_invalid(),
+                Instruction::from_invalid(),
+            ]))),
+            code_page: Arc::new([U256::zero(); 1]),
+        }
+    }
 }
 
 impl PartialEq for Program {
