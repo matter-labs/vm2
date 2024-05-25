@@ -38,7 +38,7 @@ impl Index<HeapId> for Heaps {
     type Output = Heap;
 
     fn index(&self, index: HeapId) -> &Self::Output {
-        &self.read.get(index)
+        self.read.get(index)
     }
 }
 

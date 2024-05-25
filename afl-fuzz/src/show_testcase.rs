@@ -17,8 +17,7 @@ fn main() {
 
     println!("{:?}", vm.state);
 
-    let instruction = vm.get_first_instruction();
-    vm.run_single_instruction(instruction, &mut world);
+    let _ = vm.run_single_instruction(&mut world);
 }
 
 #[derive(Arbitrary, Debug)]

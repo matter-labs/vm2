@@ -8,26 +8,24 @@ use crate::{
 };
 
 impl VirtualMachine {
-    pub fn get_first_instruction(&self) -> *const Instruction {
+    fn get_first_instruction(&self) -> *const Instruction {
         self.state.current_frame.program.instruction(0).unwrap()
     }
 
-    pub fn run_single_instruction(
-        &mut self,
-        instruction: *const Instruction,
-        world: &mut dyn World,
-    ) -> InstructionResult {
+    pub fn run_single_instruction(&mut self, world: &mut dyn World) -> InstructionResult {
+        let instruction = self.get_first_instruction();
+
         unsafe {
             let args = &(*instruction).arguments;
             let Ok(_) = self.state.use_gas(args.get_static_gas_cost()) else {
                 return free_panic(self, world);
             };
 
-            return if args.predicate.satisfied(&self.state.flags) {
+            if args.predicate.satisfied(&self.state.flags) {
                 ((*instruction).handler)(self, instruction, world)
             } else {
                 Ok(instruction.add(1))
-            };
+            }
         }
     }
 }

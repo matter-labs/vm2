@@ -7,6 +7,8 @@ use super::mock_array::MockRead;
 pub struct Stack {
     read: MockRead<u16, (U256, bool)>,
     slot_written: Option<u16>,
+    value_written: U256,
+    pointer_tag_written: bool,
 }
 
 impl<'a> Arbitrary<'a> for Stack {
@@ -14,6 +16,8 @@ impl<'a> Arbitrary<'a> for Stack {
         Ok(Self {
             read: u.arbitrary()?,
             slot_written: None,
+            value_written: 0.into(),
+            pointer_tag_written: false,
         })
     }
 }
@@ -23,20 +27,39 @@ impl Stack {
         self.read.get(slot).0
     }
 
-    pub(crate) fn set(&mut self, slot: u16, _: U256) {
-        self.slot_written = Some(slot);
-    }
-
     pub(crate) fn get_pointer_flag(&self, slot: u16) -> bool {
         self.read.get(slot).1
     }
 
+    pub(crate) fn set(&mut self, slot: u16, value: U256) {
+        self.assert_write_to_same_slot(slot);
+        self.value_written = value;
+    }
+
     pub(crate) fn set_pointer_flag(&mut self, slot: u16) {
-        self.slot_written = Some(slot);
+        self.assert_write_to_same_slot(slot);
+        self.pointer_tag_written = true;
     }
 
     pub(crate) fn clear_pointer_flag(&mut self, slot: u16) {
+        self.assert_write_to_same_slot(slot);
+        self.pointer_tag_written = false;
+    }
+
+    fn assert_write_to_same_slot(&mut self, slot: u16) {
+        if let Some(last_slot) = self.slot_written {
+            assert!(last_slot == slot);
+        }
         self.slot_written = Some(slot);
+    }
+
+    pub fn read_that_happened(&self) -> Option<(u16, (U256, bool))> {
+        self.read.read_that_happened()
+    }
+
+    pub fn write_that_happened(&self) -> Option<(u16, (U256, bool))> {
+        self.slot_written
+            .map(|slot| (slot, (self.value_written, self.pointer_tag_written)))
     }
 }
 
