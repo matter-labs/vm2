@@ -58,7 +58,7 @@ impl<'a> Arbitrary<'a> for VirtualMachine {
             },
             settings: u.arbitrary()?,
             world_diff: Default::default(),
-            stack_pool: StackPool,
+            stack_pool: StackPool {},
         })
     }
 }

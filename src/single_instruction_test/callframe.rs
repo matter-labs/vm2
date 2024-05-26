@@ -57,7 +57,7 @@ impl Callframe {
             exception_handler: 0,
             context_u128: 0,
             is_static: false,
-            stack: StackPool.get(),
+            stack: StackPool {}.get(),
             sp: 0,
             gas: 0,
             stipend: 0,

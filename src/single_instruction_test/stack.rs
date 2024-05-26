@@ -71,7 +71,7 @@ impl Stack {
 }
 
 #[derive(Default, Debug)]
-pub struct StackPool;
+pub struct StackPool {}
 
 impl StackPool {
     pub fn get(&mut self) -> Box<Stack> {
