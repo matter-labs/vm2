@@ -13,6 +13,10 @@ pub(crate) fn is_valid_tagged_value((value, is_pointer): (U256, bool)) -> bool {
 impl State {
     pub(crate) fn is_valid(&self) -> bool {
         self.current_frame.stack.is_valid()
+            && self
+                .previous_frames
+                .iter()
+                .all(|(_, frame)| frame.stack.is_valid())
             && (0..16).all(|i| {
                 is_valid_tagged_value((
                     self.registers[i as usize],
