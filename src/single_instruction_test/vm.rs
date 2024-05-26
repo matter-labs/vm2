@@ -1,13 +1,10 @@
-use std::fmt::Debug;
-
-use arbitrary::Arbitrary;
-
-use crate::{
-    instruction::InstructionResult, instruction_handlers::free_panic, Instruction, State,
-    VirtualMachine, World,
-};
-
 use super::stack::StackPool;
+use crate::{
+    callframe::Callframe, instruction::InstructionResult, instruction_handlers::free_panic,
+    Instruction, State, VirtualMachine, World,
+};
+use arbitrary::Arbitrary;
+use std::fmt::Debug;
 
 impl VirtualMachine {
     fn get_first_instruction(&self) -> *const Instruction {
@@ -50,7 +47,11 @@ impl<'a> Arbitrary<'a> for VirtualMachine {
                 register_pointer_flags: u.arbitrary()?,
                 flags: u.arbitrary()?,
                 current_frame: u.arbitrary()?,
-                previous_frames: vec![], // TODO
+                previous_frames: if u.arbitrary()? {
+                    vec![(0, Callframe::dummy())]
+                } else {
+                    vec![]
+                },
                 heaps: u.arbitrary()?,
                 transaction_number: u.arbitrary()?,
                 context_u128: u.arbitrary()?,
