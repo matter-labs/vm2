@@ -14,3 +14,7 @@ features = ["single_instruction_test"]
 [[bin]]
 name = "show_testcase"
 path = "src/show_testcase.rs"
+
+[[bin]]
+name = "check_input_size"
+path = "src/check_input_size.rs"

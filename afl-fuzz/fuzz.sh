@@ -1,1 +1,2 @@
-cargo afl build --release && cargo afl fuzz -i in -o out ../target/release/afl-fuzz -g 10k
+export AFL_AUTORESUME=1
+cargo afl build --release && cargo afl fuzz -i in -o out -g $(cargo run --bin check_input_size) ../target/release/afl-fuzz
