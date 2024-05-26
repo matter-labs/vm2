@@ -9,7 +9,6 @@ impl VirtualMachine {
 
 impl State {
     pub fn print_mock_info(&self) {
-        self.current_frame.print_mock_info();
         if let Some(heap) = self.heaps.read.read_that_happened() {
             println!("Heap: {:?}", heap);
         }
@@ -33,10 +32,10 @@ impl State {
 impl Callframe {
     pub fn print_mock_info(&self) {
         if let Some((address, (value, tag))) = self.stack.read_that_happened() {
-            println!("{value:?} (is_pointer: {tag}) read from stack address {address}",);
+            println!("  {value:?} (is_pointer: {tag}) read from stack address {address}",);
         }
         if let Some((address, (value, tag))) = self.stack.write_that_happened() {
-            println!("{value:?} (is_pointer: {tag}) written to stack address {address}",);
+            println!("  {value:?} (is_pointer: {tag}) written to stack address {address}",);
         }
     }
 }
