@@ -321,3 +321,75 @@ pub struct StorageChange {
 const WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST - STORAGE_ACCESS_WARM_READ_COST;
 const WARM_WRITE_REFUND: u32 = STORAGE_ACCESS_COLD_WRITE_COST - STORAGE_ACCESS_WARM_WRITE_COST;
 const COLD_WRITE_AFTER_WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn test_storage_changes(initial_values: Vec<(([u8; 20], [u8; 32]), [u8; 32])>, first_changes: Vec<(([u8; 20], [u8; 32]), [u8; 32])>, second_changes: Vec<(([u8; 20], [u8; 32]), [u8; 32])>) {
+            let mut world_diff = WorldDiff::default();
+            let initial_map: BTreeMap<_, _> = to_primitive_types(initial_values.clone()).collect();
+            world_diff.storage_initial_values = to_primitive_types(initial_values).map(|(key, value)| (key, Some(value))).collect();
+
+            let first_changes_map: BTreeMap<_, _> = to_primitive_types(first_changes.clone()).collect();
+            let before1 = world_diff.snapshot();
+            for (key, value) in to_primitive_types(first_changes) {
+                world_diff.write_storage(&mut NoWorld, key.0, key.1, value, 0);
+            }
+            for (key, change) in world_diff.get_storage_changes_after(&before1) {
+                assert_eq!(change.before, initial_map.get(&key).copied());
+                assert_eq!(change.after, *first_changes_map.get(&key).unwrap());
+                assert_eq!(change.is_initial, initial_map.get(&key).is_none());
+                assert_eq!(change.tx_number, 0);
+            }
+
+            let second_changes_map: BTreeMap<_, _> = to_primitive_types(second_changes.clone()).collect();
+            let before2 = world_diff.snapshot();
+            for (key, value) in to_primitive_types(second_changes) {
+                world_diff.write_storage(&mut NoWorld, key.0, key.1, value, 1);
+            }
+            for (key, change) in world_diff.get_storage_changes_after(&before2) {
+                assert_eq!(change.before, first_changes_map.get(&key).or(initial_map.get(&key)).copied());
+                assert_eq!(change.after, *second_changes_map.get(&key).unwrap());
+                assert_eq!(change.is_initial, initial_map.get(&key).is_none());
+                assert_eq!(change.tx_number, 1);
+            }
+
+            for (key, (tx_number, before, after)) in world_diff.get_storage_changes() {
+                assert!(tx_number == 0 || tx_number == 1);
+                assert_eq!(before, initial_map.get(&key).copied());
+                assert_eq!(after, *second_changes_map.get(&key).or(first_changes_map.get(&key)).unwrap());
+            }
+        }
+    }
+
+    fn to_primitive_types(
+        values: Vec<(([u8; 20], [u8; 32]), [u8; 32])>,
+    ) -> impl Iterator<Item = ((H160, U256), U256)> {
+        values.into_iter().map(|((contract, key), value)| {
+            ((H160::from(contract), U256::from(key)), U256::from(value))
+        })
+    }
+
+    struct NoWorld;
+    impl World for NoWorld {
+        fn decommit(&mut self, hash: U256) -> crate::Program {
+            todo!()
+        }
+
+        fn read_storage(&mut self, contract: H160, key: U256) -> Option<U256> {
+            None
+        }
+
+        fn cost_of_writing_storage(&mut self, initial_value: Option<U256>, new_value: U256) -> u32 {
+            0
+        }
+
+        fn is_free_storage_slot(&self, contract: &H160, key: &U256) -> bool {
+            false
+        }
+    }
+}
