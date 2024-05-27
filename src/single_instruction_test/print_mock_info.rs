@@ -2,8 +2,13 @@ use crate::{callframe::Callframe, State, VirtualMachine};
 
 impl VirtualMachine {
     pub fn print_mock_info(&self) {
-        // TODO world_diff
         self.state.print_mock_info();
+        println!("Events: {:?}", self.world_diff.events());
+        println!("Logs: {:?}", self.world_diff.l2_to_l1_logs());
+        println!(
+            "Storage changes: {:?}",
+            self.world_diff.get_storage_changes().collect::<Vec<_>>()
+        );
     }
 }
 
