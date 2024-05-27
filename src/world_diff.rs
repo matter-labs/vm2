@@ -146,7 +146,7 @@ impl WorldDiff {
             .as_ref()
             .iter()
             .filter_map(|(key, &(tx_number, value))| {
-                if self.storage_initial_values[key] == Some(value) {
+                if self.storage_initial_values[key].unwrap_or_default() == value {
                     None
                 } else {
                     Some((*key, (tx_number, self.storage_initial_values[key], value)))
