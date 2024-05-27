@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-afl = "*"
-arbitrary = "*"
+afl = "0.15"
+arbitrary = "1"
 
 [dependencies.vm2]
 path = ".."

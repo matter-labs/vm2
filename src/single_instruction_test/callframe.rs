@@ -29,8 +29,8 @@ impl<'a> Arbitrary<'a> for Callframe {
             heap_size: u.arbitrary()?,
             aux_heap_size: u.arbitrary()?,
             calldata_heap: u.arbitrary()?,
-            heaps_i_am_keeping_alive: vec![], // TODO
-            world_before_this_frame: WorldDiff::default().snapshot(), // TODO
+            heaps_i_am_keeping_alive: vec![],
+            world_before_this_frame: WorldDiff::default().snapshot(),
         };
         if u.arbitrary()? {
             me.push_near_call(
