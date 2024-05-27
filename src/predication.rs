@@ -40,3 +40,14 @@ impl Default for Predicate {
         Self::Always
     }
 }
+
+#[cfg(feature = "single_instruction_test")]
+impl From<&Flags> for zk_evm::flags::Flags {
+    fn from(flags: &Flags) -> Self {
+        zk_evm::flags::Flags {
+            overflow_or_less_than_flag: flags.0 & LT_BIT != 0,
+            equality_flag: flags.0 & EQ_BIT != 0,
+            greater_than_flag: flags.0 & GT_BIT != 0,
+        }
+    }
+}

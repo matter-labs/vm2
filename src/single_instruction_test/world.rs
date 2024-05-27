@@ -3,7 +3,7 @@ use crate::{Program, World};
 use arbitrary::Arbitrary;
 use u256::{H160, U256};
 
-#[derive(Debug, Arbitrary)]
+#[derive(Debug, Arbitrary, Clone)]
 pub struct MockWorld {
     storage_slot: MockRead<(H160, U256), Option<U256>>,
 }

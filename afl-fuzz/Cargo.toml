@@ -1,5 +1,5 @@
 [package]
-name = "afl-fuzz"
+name = "differential_fuzzing"
 version = "0.1.0"
 edition = "2021"
 

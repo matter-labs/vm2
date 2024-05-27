@@ -1,9 +1,7 @@
-use arbitrary::Arbitrary;
+use differential_fuzzing::VmAndWorld;
 use std::env;
 use std::fs;
 use vm2::zkevm_opcode_defs::decoding::{EncodingModeProduction, VmEncodingMode};
-use vm2::MockWorld;
-use vm2::VirtualMachine;
 
 fn main() {
     let filename = env::args()
@@ -28,10 +26,4 @@ fn main() {
     vm.print_mock_info();
 
     assert!(vm.is_in_valid_state());
-}
-
-#[derive(Arbitrary, Debug)]
-struct VmAndWorld {
-    vm: VirtualMachine,
-    world: MockWorld,
 }

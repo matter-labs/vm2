@@ -35,15 +35,13 @@ pub use vm::{Settings, VirtualMachine, VmSnapshot as Snapshot};
 pub use world_diff::{Event, L2ToL1Log, WorldDiff};
 
 #[cfg(feature = "single_instruction_test")]
-mod single_instruction_test;
+pub mod single_instruction_test;
 #[cfg(feature = "single_instruction_test")]
 use single_instruction_test::heap;
 #[cfg(feature = "single_instruction_test")]
 use single_instruction_test::program;
 #[cfg(feature = "single_instruction_test")]
 use single_instruction_test::stack;
-#[cfg(feature = "single_instruction_test")]
-pub use single_instruction_test::MockWorld;
 #[cfg(feature = "single_instruction_test")]
 pub use zkevm_opcode_defs;
 

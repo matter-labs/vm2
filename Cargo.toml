@@ -13,6 +13,8 @@ zk_evm_abstractions = {git = "https://github.com/matter-labs/era-zk_evm_abstract
 u256 = { package = "primitive-types", version = "0.12.1" }
 enum_dispatch = "0.3"
 arbitrary = { version = "1", features = ["derive"], optional = true }
+zk_evm = { git = "https://github.com/matter-labs/era-zk_evm.git", branch = "v1.5.0", optional = true }
+anyhow = { optional = true }
 
 [dev-dependencies]
 divan = "0.1"
@@ -23,4 +25,4 @@ name = "nested_near_call"
 harness = false
 
 [features]
-single_instruction_test = ["arbitrary", "u256/arbitrary"]
+single_instruction_test = ["arbitrary", "u256/arbitrary", "zk_evm", "anyhow"]
