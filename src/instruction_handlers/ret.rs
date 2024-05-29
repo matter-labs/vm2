@@ -1,4 +1,4 @@
-use super::far_call::get_far_call_calldata;
+use super::{far_call::get_far_call_calldata, HeapInterface};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     callframe::FrameRemnant,
@@ -62,12 +62,9 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
         let return_value_or_panic = if return_type == ReturnType::Panic {
             None
         } else {
-            let result = get_far_call_calldata(
-                Register1::get(args, &mut vm.state),
-                Register1::is_fat_pointer(args, &mut vm.state),
-                vm,
-            )
-            .filter(|pointer| pointer.memory_page != vm.state.current_frame.calldata_heap);
+            let (raw_abi, is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
+            let result = get_far_call_calldata(raw_abi, is_pointer, vm)
+                .filter(|pointer| pointer.memory_page != vm.state.current_frame.calldata_heap);
 
             if result.is_none() {
                 return_type = ReturnType::Panic;
@@ -97,8 +94,10 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
             // these would break were the initial frame to be rolled back.
 
             return if let Some(return_value) = return_value_or_panic {
-                let output = vm.state.heaps[return_value.memory_page][return_value.start as usize
-                    ..(return_value.start + return_value.length) as usize]
+                let output = vm.state.heaps[return_value.memory_page]
+                    .read_range_big_endian(
+                        return_value.start..return_value.start + return_value.length,
+                    )
                     .to_vec();
                 if return_type == ReturnType::Revert {
                     Err(ExecutionEnd::Reverted(output))

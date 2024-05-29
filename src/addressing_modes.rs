@@ -1,12 +1,16 @@
-use crate::{bitset::Bitset, predication::Predicate};
+use crate::predication::Predicate;
 #[cfg(feature = "arbitrary")]
 use arbitrary::{Arbitrary, Unstructured};
 use enum_dispatch::enum_dispatch;
 use u256::U256;
 
 pub(crate) trait Source {
-    fn get(args: &Arguments, state: &mut impl Addressable) -> U256;
-    fn is_fat_pointer(args: &Arguments, state: &mut impl Addressable) -> bool;
+    fn get(args: &Arguments, state: &mut impl Addressable) -> U256 {
+        Self::get_with_pointer_flag(args, state).0
+    }
+    fn get_with_pointer_flag(args: &Arguments, state: &mut impl Addressable) -> (U256, bool) {
+        (Self::get(args, state), false)
+    }
 }
 
 pub(crate) trait Destination {
@@ -24,8 +28,11 @@ pub trait Addressable {
 
     fn read_stack(&mut self, slot: u16) -> U256;
     fn write_stack(&mut self, slot: u16, value: U256);
-    fn stack_pointer_flags(&mut self) -> &mut Bitset;
     fn stack_pointer(&mut self) -> &mut u16;
+
+    fn read_stack_pointer_flag(&mut self, slot: u16) -> bool;
+    fn set_stack_pointer_flag(&mut self, slot: u16);
+    fn clear_stack_pointer_flag(&mut self, slot: u16);
 
     fn code_page(&self) -> &[U256];
 }
@@ -130,12 +137,9 @@ pub struct Register1(pub Register);
 pub struct Register2(pub Register);
 
 impl Source for Register1 {
-    fn get(args: &Arguments, state: &mut impl Addressable) -> U256 {
-        args.source_registers.register1().value(state)
-    }
-
-    fn is_fat_pointer(args: &Arguments, state: &mut impl Addressable) -> bool {
-        args.source_registers.register1().pointer_flag(state)
+    fn get_with_pointer_flag(args: &Arguments, state: &mut impl Addressable) -> (U256, bool) {
+        let register = args.source_registers.register1();
+        (register.value(state), register.pointer_flag(state))
     }
 }
 
@@ -146,12 +150,9 @@ impl SourceWriter for Register1 {
 }
 
 impl Source for Register2 {
-    fn get(args: &Arguments, state: &mut impl Addressable) -> U256 {
-        args.source_registers.register2().value(state)
-    }
-
-    fn is_fat_pointer(args: &Arguments, state: &mut impl Addressable) -> bool {
-        args.source_registers.register2().pointer_flag(state)
+    fn get_with_pointer_flag(args: &Arguments, state: &mut impl Addressable) -> (U256, bool) {
+        let register = args.source_registers.register2();
+        (register.value(state), register.pointer_flag(state))
     }
 }
 
@@ -203,10 +204,6 @@ impl Source for Immediate1 {
     fn get(args: &Arguments, _state: &mut impl Addressable) -> U256 {
         U256([args.immediate1 as u64, 0, 0, 0])
     }
-
-    fn is_fat_pointer(_: &Arguments, _: &mut impl Addressable) -> bool {
-        false
-    }
 }
 
 impl SourceWriter for Immediate1 {
@@ -218,10 +215,6 @@ impl SourceWriter for Immediate1 {
 impl Source for Immediate2 {
     fn get(args: &Arguments, _state: &mut impl Addressable) -> U256 {
         U256([args.immediate2 as u64, 0, 0, 0])
-    }
-
-    fn is_fat_pointer(_: &Arguments, _: &mut impl Addressable) -> bool {
-        false
     }
 }
 
@@ -265,14 +258,12 @@ trait StackAddressing {
 }
 
 impl<T: StackAddressing> Source for T {
-    fn get(args: &Arguments, state: &mut impl Addressable) -> U256 {
+    fn get_with_pointer_flag(args: &Arguments, state: &mut impl Addressable) -> (U256, bool) {
         let address = Self::address_for_get(args, state);
-        state.read_stack(address)
-    }
-
-    fn is_fat_pointer(args: &Arguments, state: &mut impl Addressable) -> bool {
-        let address = Self::address_for_get(args, state);
-        state.stack_pointer_flags().get(address)
+        (
+            state.read_stack(address),
+            state.read_stack_pointer_flag(address),
+        )
     }
 }
 
@@ -280,13 +271,13 @@ impl<T: StackAddressing> Destination for T {
     fn set(args: &Arguments, state: &mut impl Addressable, value: U256) {
         let address = Self::address_for_set(args, state);
         state.write_stack(address, value);
-        state.stack_pointer_flags().clear(address);
+        state.clear_stack_pointer_flag(address);
     }
 
     fn set_fat_ptr(args: &Arguments, state: &mut impl Addressable, value: U256) {
         let address = Self::address_for_set(args, state);
         state.write_stack(address, value);
-        state.stack_pointer_flags().set(address);
+        state.set_stack_pointer_flag(address);
     }
 }
 
@@ -394,10 +385,6 @@ impl Source for CodePage {
             .get(address as usize)
             .cloned()
             .unwrap_or(U256::zero())
-    }
-
-    fn is_fat_pointer(_: &Arguments, _: &mut impl Addressable) -> bool {
-        false
     }
 }
 

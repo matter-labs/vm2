@@ -1,3 +1,4 @@
+workspace = { members = ["afl-fuzz"] }
 [package]
 name = "vm2"
 version = "0.1.0"
@@ -20,3 +21,6 @@ proptest = "1.4"
 [[bench]]
 name = "nested_near_call"
 harness = false
+
+[features]
+single_instruction_test = ["arbitrary", "u256/arbitrary"]

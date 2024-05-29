@@ -16,14 +16,8 @@ fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     world: &mut dyn World,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
-        let a = (
-            In1::get(args, &mut vm.state),
-            In1::is_fat_pointer(args, &mut vm.state),
-        );
-        let b = (
-            Register2::get(args, &mut vm.state),
-            Register2::is_fat_pointer(args, &mut vm.state),
-        );
+        let a = In1::get_with_pointer_flag(args, &mut vm.state);
+        let b = Register2::get_with_pointer_flag(args, &mut vm.state);
         let (a, b) = if SWAP { (b, a) } else { (a, b) };
         let (a, a_is_pointer) = a;
         let (b, b_is_pointer) = b;

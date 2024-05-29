@@ -17,10 +17,10 @@ impl TestWorld {
     pub fn new(contracts: &[(Address, Program)]) -> Self {
         let mut address_to_hash = BTreeMap::new();
         let mut hash_to_contract = BTreeMap::new();
-        for (address, code) in contracts {
-            // The hash is actually computed from the code page but tests may leave it blank, so let's not.
+        for (i, (address, code)) in contracts.iter().enumerate() {
+            // We add the index to the hash because tests may leave the code page blank.
             let mut hasher = DefaultHasher::new();
-            code.instructions().hash(&mut hasher);
+            i.hash(&mut hasher);
             code.code_page().hash(&mut hasher);
 
             let mut code_info_bytes = [0; 32];

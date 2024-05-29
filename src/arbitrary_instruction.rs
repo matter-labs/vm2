@@ -15,7 +15,7 @@ impl<'a> Arbitrary<'a> for Instruction {
         };
 
         // 1 to 4 are reserved gas costs and also skip 0
-        let gas_cost = u.arbitrary::<u8>()?.checked_add(5).unwrap_or(255);
+        let gas_cost = u.arbitrary::<u8>()?.saturating_add(5);
         let arguments = Arguments::new(predicate, gas_cost as u32);
 
         Ok(match u.choose_index(23)? {

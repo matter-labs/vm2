@@ -1,0 +1,20 @@
+[package]
+name = "afl-fuzz"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+afl = "0.15"
+arbitrary = "1"
+
+[dependencies.vm2]
+path = ".."
+features = ["single_instruction_test"]
+
+[[bin]]
+name = "show_testcase"
+path = "src/show_testcase.rs"
+
+[[bin]]
+name = "check_input_size"
+path = "src/check_input_size.rs"

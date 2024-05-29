@@ -1,17 +1,21 @@
 pub mod addressing_modes;
 #[cfg(feature = "arbitrary")]
 mod arbitrary_instruction;
+#[cfg(not(feature = "single_instruction_test"))]
 mod bitset;
 mod callframe;
 pub mod decode;
 mod decommit;
 pub mod fat_pointer;
+#[cfg(not(feature = "single_instruction_test"))]
 mod heap;
 mod instruction;
 pub mod instruction_handlers;
 mod predication;
+#[cfg(not(feature = "single_instruction_test"))]
 mod program;
 mod rollback;
+#[cfg(not(feature = "single_instruction_test"))]
 mod stack;
 mod state;
 pub mod testworld;
@@ -29,6 +33,19 @@ pub use program::Program;
 pub use state::State;
 pub use vm::{Settings, VirtualMachine, VmSnapshot as Snapshot};
 pub use world_diff::{Event, L2ToL1Log, WorldDiff};
+
+#[cfg(feature = "single_instruction_test")]
+mod single_instruction_test;
+#[cfg(feature = "single_instruction_test")]
+use single_instruction_test::heap;
+#[cfg(feature = "single_instruction_test")]
+use single_instruction_test::program;
+#[cfg(feature = "single_instruction_test")]
+use single_instruction_test::stack;
+#[cfg(feature = "single_instruction_test")]
+pub use single_instruction_test::MockWorld;
+#[cfg(feature = "single_instruction_test")]
+pub use zkevm_opcode_defs;
 
 pub trait World {
     /// This will be called *every* time a contract is called. Caching and decoding is

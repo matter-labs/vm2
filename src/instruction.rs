@@ -1,9 +1,16 @@
+use std::fmt::{self, Debug, Formatter};
+
 use crate::{addressing_modes::Arguments, vm::VirtualMachine, Predicate, World};
 
-#[derive(Hash, Debug)]
 pub struct Instruction {
     pub(crate) handler: Handler,
     pub(crate) arguments: Arguments,
+}
+
+impl Debug for Instruction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "Some handler with args {:?}", self.arguments)
+    }
 }
 
 pub(crate) type Handler =
@@ -34,6 +41,6 @@ fn jump_to_beginning_handler(
     _: *const Instruction,
     _: &mut dyn World,
 ) -> InstructionResult {
-    let first_instruction = &vm.state.current_frame.program.instructions()[0];
+    let first_instruction = vm.state.current_frame.program.instruction(0).unwrap();
     Ok(first_instruction)
 }

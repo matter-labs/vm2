@@ -39,14 +39,13 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
 
     let address_mask: U256 = U256::MAX >> (256 - 160);
 
-    let raw_abi = Register1::get(args, &mut vm.state);
+    let (raw_abi, raw_abi_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
     let destination_address = Register2::get(args, &mut vm.state) & address_mask;
     let exception_handler = Immediate1::get(args, &mut vm.state).low_u32() as u16;
 
     let abi = get_far_call_arguments(raw_abi);
 
-    let calldata =
-        get_far_call_calldata(raw_abi, Register1::is_fat_pointer(args, &mut vm.state), vm);
+    let calldata = get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm);
 
     let decommit_result = vm.world_diff.decommit(
         world,
@@ -123,7 +122,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
 
     vm.state.registers[2] = call_type.into();
 
-    Ok(&vm.state.current_frame.program.instructions()[0])
+    Ok(vm.state.current_frame.program.instruction(0).unwrap())
 }
 
 pub(crate) struct FarCallABI {

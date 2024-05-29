@@ -49,6 +49,7 @@ pub struct Event {
     pub tx_number: u16,
 }
 
+#[derive(Debug)]
 pub struct L2ToL1Log {
     pub key: U256,
     pub value: U256,

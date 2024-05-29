@@ -11,6 +11,8 @@ use crate::{
 };
 use u256::H160;
 
+#[derive(Debug)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct Settings {
     pub default_aa_code_hash: [u8; 32],
     pub evm_interpreter_code_hash: [u8; 32],
@@ -65,8 +67,12 @@ impl VirtualMachine {
     }
 
     pub fn resume_from(&mut self, instruction_number: u16, world: &mut dyn World) -> ExecutionEnd {
-        let mut instruction: *const Instruction =
-            &self.state.current_frame.program.instructions()[instruction_number as usize];
+        let mut instruction: *const Instruction = self
+            .state
+            .current_frame
+            .program
+            .instruction(instruction_number)
+            .unwrap();
 
         unsafe {
             loop {
@@ -108,8 +114,12 @@ impl VirtualMachine {
     ) -> Option<(u32, ExecutionEnd)> {
         let minimum_gas = self.state.total_unspent_gas().saturating_sub(gas_limit);
 
-        let mut instruction: *const Instruction =
-            &self.state.current_frame.program.instructions()[instruction_number as usize];
+        let mut instruction: *const Instruction = self
+            .state
+            .current_frame
+            .program
+            .instruction(instruction_number)
+            .unwrap();
 
         let end = unsafe {
             loop {
