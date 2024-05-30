@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::{
     mock_array::MockRead, stack::Stack, state_to_zk_evm::vm2_state_to_zk_evm_state, MockWorld,
 };
@@ -35,12 +37,7 @@ pub fn vm2_to_zk_evm(
         },
         storage: MockWorldWrapper(world),
         memory: MockMemory {
-            instruction_to_read: MockRead::new(U256([
-                0,
-                0,
-                0,
-                vm.state.current_frame.program.raw_first_instruction,
-            ])),
+            code_page: vm.state.current_frame.program.code_page().clone(),
             stack: *vm.state.current_frame.stack.clone(),
         },
         event_sink: InMemoryEventSink::new(),
@@ -52,7 +49,7 @@ pub fn vm2_to_zk_evm(
 
 #[derive(Debug)]
 pub struct MockMemory {
-    instruction_to_read: MockRead<MemoryLocation, U256>,
+    code_page: Arc<[U256]>,
     stack: Stack,
 }
 
@@ -95,7 +92,12 @@ impl Memory for MockMemory {
         _: u32,
         mut query: zk_evm::aux_structures::MemoryQuery,
     ) -> zk_evm::aux_structures::MemoryQuery {
-        query.value = *self.instruction_to_read.get(query.location);
+        // Code page read, instruction reads don't happen because the code word cache has been set up
+        query.value = self
+            .code_page
+            .get(query.location.index.0 as usize)
+            .cloned()
+            .unwrap_or_default();
         query
     }
 }

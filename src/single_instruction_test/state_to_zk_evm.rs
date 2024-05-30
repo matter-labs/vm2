@@ -1,3 +1,4 @@
+use u256::U256;
 use zk_evm::{
     aux_structures::{MemoryPage, PubdataCost},
     vm_state::{execution_stack::CallStackEntry, Callstack, PrimitiveValue, VmLocalState},
@@ -10,8 +11,7 @@ pub(crate) fn vm2_state_to_zk_evm_state(
     state: &crate::State,
 ) -> VmLocalState<8, EncodingModeProduction> {
     VmLocalState {
-        // To ensure that this field is not read, we make previous_super_pc != super_pc
-        previous_code_word: 0.into(),
+        previous_code_word: U256([0, 0, 0, state.current_frame.raw_first_instruction()]),
         previous_code_memory_page: MemoryPage(0),
         registers: state
             .registers
@@ -33,7 +33,7 @@ pub(crate) fn vm2_state_to_zk_evm_state(
         absolute_execution_step: 0,
         tx_number_in_block: state.transaction_number,
         pending_exception: false,
-        previous_super_pc: 13, // Current pc is zero so anything else is fine
+        previous_super_pc: 0, // Same as current pc so the instruction is read from previous_code_word
         context_u128_register: state.context_u128,
         callstack: Callstack {
             current: (&state.current_frame).into(),
