@@ -1,5 +1,5 @@
 use differential_fuzzing::VmAndWorld;
-use vm2::single_instruction_test::{vm2_to_zk_evm, zk_evm_equal, NoTracer};
+use vm2::single_instruction_test::{vm2_to_zk_evm, NoTracer, UniversalVmState};
 
 fn main() {
     afl::fuzz!(|data: &[u8]| {
@@ -15,7 +15,10 @@ fn main() {
                 assert!(vm.is_in_valid_state());
 
                 let _ = zk_evm.cycle(&mut NoTracer);
-                assert!(zk_evm_equal(&zk_evm, &vm2_to_zk_evm(&vm, world.clone())));
+                assert_eq!(
+                    UniversalVmState::from(zk_evm),
+                    vm2_to_zk_evm(&vm, world.clone()).into()
+                );
                 // TODO compare emitted events, storage changes and pubdata
             }
         }

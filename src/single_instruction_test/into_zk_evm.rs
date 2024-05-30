@@ -1,11 +1,11 @@
 use super::{
-    state_to_zk_evm::{vm2_state_to_zk_evm_state, zk_evm_state_equal},
-    MockWorld,
+    mock_array::MockRead, stack::Stack, state_to_zk_evm::vm2_state_to_zk_evm_state, MockWorld,
 };
 use crate::{zkevm_opcode_defs::decoding::EncodingModeProduction, VirtualMachine};
 use u256::U256;
 use zk_evm::{
     abstractions::{DecommittmentProcessor, Memory, PrecompilesProcessor, Storage},
+    aux_structures::MemoryLocation,
     block_properties::BlockProperties,
     reference_impls::event_sink::InMemoryEventSink,
     tracing::Tracer,
@@ -34,7 +34,15 @@ pub fn vm2_to_zk_evm(
             zkporter_is_available: false,
         },
         storage: MockWorldWrapper(world),
-        memory: MockMemory,
+        memory: MockMemory {
+            instruction_to_read: MockRead::new(U256([
+                0,
+                0,
+                0,
+                vm.state.current_frame.program.raw_first_instruction,
+            ])),
+            stack: *vm.state.current_frame.stack.clone(),
+        },
         event_sink: InMemoryEventSink::new(),
         precompiles_processor: NoOracle,
         decommittment_processor: MockDecommitter,
@@ -42,46 +50,41 @@ pub fn vm2_to_zk_evm(
     }
 }
 
-pub fn zk_evm_equal(
-    vm1: &VmState<
-        MockWorldWrapper,
-        MockMemory,
-        InMemoryEventSink,
-        NoOracle,
-        MockDecommitter,
-        NoOracle,
-        8,
-        EncodingModeProduction,
-    >,
-    vm2: &VmState<
-        MockWorldWrapper,
-        MockMemory,
-        InMemoryEventSink,
-        NoOracle,
-        MockDecommitter,
-        NoOracle,
-        8,
-        EncodingModeProduction,
-    >,
-) -> bool {
-    zk_evm_state_equal(&vm1.local_state, &vm2.local_state)
-}
-
 #[derive(Debug)]
-pub struct MockMemory;
+pub struct MockMemory {
+    instruction_to_read: MockRead<MemoryLocation, U256>,
+    stack: Stack,
+}
 
 impl Memory for MockMemory {
     fn execute_partial_query(
         &mut self,
-        monotonic_cycle_counter: u32,
-        query: zk_evm::aux_structures::MemoryQuery,
+        _: u32,
+        mut query: zk_evm::aux_structures::MemoryQuery,
     ) -> zk_evm::aux_structures::MemoryQuery {
-        todo!()
+        match query.location.memory_type {
+            zk_evm::abstractions::MemoryType::Stack => {
+                let slot = query.location.index.0 as u16;
+                if query.rw_flag {
+                    self.stack.set(slot, query.value);
+                    if query.value_is_pointer {
+                        self.stack.set_pointer_flag(slot);
+                    } else {
+                        self.stack.clear_pointer_flag(slot);
+                    }
+                } else {
+                    query.value = self.stack.get(slot);
+                    query.value_is_pointer = self.stack.get_pointer_flag(slot);
+                }
+                query
+            }
+            _ => todo!(),
+        }
     }
 
     fn specialized_code_query(
         &mut self,
-        monotonic_cycle_counter: u32,
+        _: u32,
         query: zk_evm::aux_structures::MemoryQuery,
     ) -> zk_evm::aux_structures::MemoryQuery {
         todo!()
@@ -89,10 +92,11 @@ impl Memory for MockMemory {
 
     fn read_code_query(
         &self,
-        monotonic_cycle_counter: u32,
-        query: zk_evm::aux_structures::MemoryQuery,
+        _: u32,
+        mut query: zk_evm::aux_structures::MemoryQuery,
     ) -> zk_evm::aux_structures::MemoryQuery {
-        todo!()
+        query.value = *self.instruction_to_read.get(query.location);
+        query
     }
 }
 
@@ -102,7 +106,7 @@ pub struct MockWorldWrapper(MockWorld);
 impl Storage for MockWorldWrapper {
     fn get_access_refund(
         &mut self, // to avoid any hacks inside, like prefetch
-        monotonic_cycle_counter: u32,
+        _: u32,
         partial_query: &zk_evm::aux_structures::LogQuery,
     ) -> zk_evm::abstractions::StorageAccessRefund {
         todo!()
@@ -110,7 +114,7 @@ impl Storage for MockWorldWrapper {
 
     fn execute_partial_query(
         &mut self,
-        monotonic_cycle_counter: u32,
+        _: u32,
         query: zk_evm::aux_structures::LogQuery,
     ) -> (
         zk_evm::aux_structures::LogQuery,
@@ -119,15 +123,15 @@ impl Storage for MockWorldWrapper {
         todo!()
     }
 
-    fn start_frame(&mut self, timestamp: zk_evm::aux_structures::Timestamp) {
+    fn start_frame(&mut self, _: zk_evm::aux_structures::Timestamp) {
         todo!()
     }
 
-    fn finish_frame(&mut self, timestamp: zk_evm::aux_structures::Timestamp, panicked: bool) {
+    fn finish_frame(&mut self, _: zk_evm::aux_structures::Timestamp, panicked: bool) {
         todo!()
     }
 
-    fn start_new_tx(&mut self, timestamp: zk_evm::aux_structures::Timestamp) {
+    fn start_new_tx(&mut self, _: zk_evm::aux_structures::Timestamp) {
         todo!()
     }
 }
@@ -138,7 +142,7 @@ pub struct MockDecommitter;
 impl DecommittmentProcessor for MockDecommitter {
     fn prepare_to_decommit(
         &mut self,
-        monotonic_cycle_counter: u32,
+        _: u32,
         partial_query: zk_evm::aux_structures::DecommittmentQuery,
     ) -> anyhow::Result<zk_evm::aux_structures::DecommittmentQuery> {
         todo!()
@@ -146,7 +150,7 @@ impl DecommittmentProcessor for MockDecommitter {
 
     fn decommit_into_memory<M: zk_evm::abstractions::Memory>(
         &mut self,
-        monotonic_cycle_counter: u32,
+        _: u32,
         partial_query: zk_evm::aux_structures::DecommittmentQuery,
         memory: &mut M,
     ) -> anyhow::Result<Option<Vec<zk_evm::ethereum_types::U256>>> {

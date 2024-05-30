@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 afl = "0.15"
 arbitrary = "1"
+pretty_assertions = "1.4.0"
 
 [dependencies.vm2]
 path = ".."

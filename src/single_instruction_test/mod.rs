@@ -13,9 +13,11 @@ mod print_mock_info;
 pub mod program;
 pub mod stack;
 mod state_to_zk_evm;
+mod universal_state;
 mod validation;
 mod vm;
 mod world;
 
-pub use into_zk_evm::{vm2_to_zk_evm, zk_evm_equal, NoTracer};
+pub use into_zk_evm::{vm2_to_zk_evm, NoTracer};
+pub use universal_state::UniversalVmState;
 pub use world::MockWorld;

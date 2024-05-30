@@ -1,10 +1,11 @@
 use super::stack::StackPool;
 use crate::{
     callframe::Callframe, instruction::InstructionResult, instruction_handlers::free_panic,
-    Instruction, State, VirtualMachine, World,
+    Instruction, Settings, State, VirtualMachine, World,
 };
 use arbitrary::Arbitrary;
 use std::fmt::Debug;
+use u256::U256;
 
 impl VirtualMachine {
     fn get_first_instruction(&self) -> *const Instruction {
@@ -41,10 +42,15 @@ impl VirtualMachine {
 
 impl<'a> Arbitrary<'a> for VirtualMachine {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        let mut registers: [U256; 16] = u.arbitrary()?;
+        registers[0] = U256::zero();
+        let mut register_pointer_flags = u.arbitrary()?;
+        register_pointer_flags &= !1;
+
         Ok(Self {
             state: State {
-                registers: u.arbitrary()?,
-                register_pointer_flags: u.arbitrary()?,
+                registers,
+                register_pointer_flags,
                 flags: u.arbitrary()?,
                 current_frame: u.arbitrary()?,
                 previous_frames: if u.arbitrary()? {
@@ -59,6 +65,25 @@ impl<'a> Arbitrary<'a> for VirtualMachine {
             settings: u.arbitrary()?,
             world_diff: Default::default(),
             stack_pool: StackPool {},
+        })
+    }
+}
+
+impl<'a> Arbitrary<'a> for Settings {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        // Only contract hashes that begin 1, 0 are valid
+        let mut default_aa_code_hash = [0u8; 32];
+        default_aa_code_hash[0] = 1;
+        u.fill_buffer(&mut default_aa_code_hash[2..])?;
+
+        let mut evm_interpreter_code_hash = [0u8; 32];
+        evm_interpreter_code_hash[0] = 1;
+        u.fill_buffer(&mut evm_interpreter_code_hash[2..])?;
+
+        Ok(Self {
+            default_aa_code_hash,
+            evm_interpreter_code_hash,
+            hook_address: 0, // Doesn't matter; we don't decode in bootloader mode
         })
     }
 }

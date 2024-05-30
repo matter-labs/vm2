@@ -37,10 +37,9 @@ pub(crate) fn vm2_state_to_zk_evm_state(
         context_u128_register: state.context_u128,
         callstack: Callstack {
             current: (&state.current_frame).into(),
-            inner: state
-                .previous_frames
-                .iter()
-                .map(|(_, frame)| frame.into())
+            // zk_evm requires an unused bottom frame
+            inner: std::iter::once(CallStackEntry::empty_context())
+                .chain(state.previous_frames.iter().map(|(_, frame)| frame.into()))
                 .collect(),
         },
         pubdata_revert_counter: PubdataCost(0),
@@ -71,36 +70,4 @@ impl From<&Callframe> for CallStackEntry {
             stipend: frame.stipend,
         }
     }
-}
-
-pub(crate) fn zk_evm_state_equal(
-    vm1: &VmLocalState<8, EncodingModeProduction>,
-    vm2: &VmLocalState<8, EncodingModeProduction>,
-) -> bool {
-    vm1.registers == vm2.registers
-        && vm1.flags == vm2.flags
-        && vm1.tx_number_in_block == vm2.tx_number_in_block
-        && vm1.context_u128_register == vm2.context_u128_register
-        && zk_evm_callframe_equal(&vm1.callstack.current, &vm2.callstack.current)
-        && vm1
-            .callstack
-            .inner
-            .iter()
-            .zip(vm2.callstack.inner.iter())
-            .all(|(frame1, frame2)| zk_evm_callframe_equal(frame1, frame2))
-}
-
-fn zk_evm_callframe_equal(frame1: &CallStackEntry, frame2: &CallStackEntry) -> bool {
-    frame1.this_address == frame2.this_address
-        && frame1.msg_sender == frame2.msg_sender
-        && frame1.code_address == frame2.code_address
-        && frame1.sp == frame2.sp
-        && frame1.exception_handler_location == frame2.exception_handler_location
-        && frame1.ergs_remaining == frame2.ergs_remaining
-        && frame1.is_static == frame2.is_static
-        && frame1.is_local_frame == frame2.is_local_frame
-        && frame1.context_u128_value == frame2.context_u128_value
-        && frame1.heap_bound == frame2.heap_bound
-        && frame1.aux_heap_bound == frame2.aux_heap_bound
-        && frame1.stipend == frame2.stipend
 }
