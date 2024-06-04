@@ -53,11 +53,9 @@ impl<'a> Arbitrary<'a> for VirtualMachine {
                 register_pointer_flags,
                 flags: u.arbitrary()?,
                 current_frame: u.arbitrary()?,
-                previous_frames: if u.arbitrary()? {
-                    vec![(0, Callframe::dummy())]
-                } else {
-                    vec![]
-                },
+                // Exiting the final frame is different in vm2 on purpose,
+                // so always generate two frames to avoid that.
+                previous_frames: vec![(0, Callframe::dummy())],
                 heaps: u.arbitrary()?,
                 transaction_number: u.arbitrary()?,
                 context_u128: u.arbitrary()?,
