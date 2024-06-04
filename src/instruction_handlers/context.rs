@@ -82,8 +82,11 @@ fn context_meta(
             caller_shard_id: 0,
             code_shard_id: 0,
             // This field is actually pubdata!
-            // TODO PLA-893: This should be zero when not in kernel mode
-            aux_field_0: vm.world_diff.pubdata.0 as u32,
+            aux_field_0: if vm.state.current_frame.is_kernel {
+                vm.world_diff.pubdata.0 as u32
+            } else {
+                0
+            },
         }
         .to_u256();
 
