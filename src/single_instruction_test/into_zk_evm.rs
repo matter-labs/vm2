@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use super::{stack::Stack, state_to_zk_evm::vm2_state_to_zk_evm_state, MockWorld};
-use crate::{zkevm_opcode_defs::decoding::EncodingModeProduction, VirtualMachine};
+use crate::{zkevm_opcode_defs::decoding::EncodingModeProduction, VirtualMachine, World};
 use u256::U256;
 use zk_evm::{
     abstractions::{DecommittmentProcessor, Memory, PrecompilesProcessor, Storage},
+    aux_structures::PubdataCost,
     block_properties::BlockProperties,
     reference_impls::event_sink::InMemoryEventSink,
     tracing::Tracer,
@@ -114,12 +115,20 @@ impl Storage for MockWorldWrapper {
     fn execute_partial_query(
         &mut self,
         _: u32,
-        _query: zk_evm::aux_structures::LogQuery,
+        mut query: zk_evm::aux_structures::LogQuery,
     ) -> (
         zk_evm::aux_structures::LogQuery,
         zk_evm::aux_structures::PubdataCost,
     ) {
-        todo!()
+        if query.rw_flag {
+            todo!()
+        } else {
+            query.read_value = self
+                .0
+                .read_storage(query.address, query.key)
+                .unwrap_or_default();
+            (query, PubdataCost(0))
+        }
     }
 
     fn start_frame(&mut self, _: zk_evm::aux_structures::Timestamp) {
