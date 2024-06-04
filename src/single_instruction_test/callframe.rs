@@ -1,5 +1,5 @@
 use super::{heap::FIRST_AUX_HEAP, stack::StackPool};
-use crate::{callframe::Callframe, predication::Flags, Program, WorldDiff};
+use crate::{callframe::Callframe, decommit::is_kernel, predication::Flags, Program, WorldDiff};
 use arbitrary::Arbitrary;
 use u256::H160;
 
@@ -11,14 +11,15 @@ impl<'a> Arbitrary<'a> for Flags {
 
 impl<'a> Arbitrary<'a> for Callframe {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        let address = u.arbitrary()?;
         let mut me = Self {
-            address: u.arbitrary()?,
+            address,
             code_address: u.arbitrary()?,
             caller: u.arbitrary()?,
             exception_handler: u.arbitrary()?,
             context_u128: u.arbitrary()?,
             is_static: u.arbitrary()?,
-            is_kernel: u.arbitrary()?,
+            is_kernel: is_kernel(address),
             stack: u.arbitrary()?,
             sp: u.arbitrary()?,
             gas: u.arbitrary()?,
