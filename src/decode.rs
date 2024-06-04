@@ -178,7 +178,9 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
             zkevm_opcode_defs::ContextOpcode::IncrementTxNumber => {
                 Instruction::from_increment_tx_number(arguments)
             }
-            x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Context(x)),
+            zkevm_opcode_defs::ContextOpcode::AuxMutating0 => {
+                Instruction::from_aux_mutating(arguments)
+            }
         },
         zkevm_opcode_defs::Opcode::Ptr(x) => match x {
             zkevm_opcode_defs::PtrOpcode::Add => ptr!(PtrAdd),

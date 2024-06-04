@@ -132,6 +132,22 @@ fn increment_tx_number(
     })
 }
 
+fn aux_mutating(
+    vm: &mut VirtualMachine,
+    instruction: *const Instruction,
+    world: &mut dyn World,
+) -> InstructionResult {
+    instruction_boilerplate_with_panic(vm, instruction, world, |vm, _, world, continue_normally| {
+        if vm.state.current_frame.is_static || !vm.state.current_frame.is_kernel {
+            return free_panic(vm, world);
+        }
+
+        // This instruction just crashes or nops
+
+        continue_normally
+    })
+}
+
 impl Instruction {
     fn from_context<Op: ContextOp>(out: Register1, arguments: Arguments) -> Self {
         Self {
@@ -173,6 +189,12 @@ impl Instruction {
     pub fn from_increment_tx_number(arguments: Arguments) -> Self {
         Self {
             handler: increment_tx_number,
+            arguments,
+        }
+    }
+    pub fn from_aux_mutating(arguments: Arguments) -> Self {
+        Self {
+            handler: aux_mutating,
             arguments,
         }
     }
