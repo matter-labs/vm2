@@ -12,6 +12,7 @@ use zk_evm::{
     vm_state::VmState,
     witness_trace::VmWitnessTracer,
 };
+use zk_evm_abstractions::vm::EventSink;
 
 pub fn vm2_to_zk_evm(
     vm: &VirtualMachine,
@@ -26,6 +27,9 @@ pub fn vm2_to_zk_evm(
     8,
     EncodingModeProduction,
 > {
+    let mut event_sink = InMemoryEventSink::new();
+    event_sink.start_frame(zk_evm::aux_structures::Timestamp(0));
+
     VmState {
         local_state: vm2_state_to_zk_evm_state(&vm.state),
         block_properties: BlockProperties {
@@ -38,7 +42,7 @@ pub fn vm2_to_zk_evm(
             code_page: vm.state.current_frame.program.code_page().clone(),
             stack: *vm.state.current_frame.stack.clone(),
         },
-        event_sink: InMemoryEventSink::new(),
+        event_sink,
         precompiles_processor: NoOracle,
         decommittment_processor: MockDecommitter,
         witness_tracer: NoOracle,
@@ -131,13 +135,9 @@ impl Storage for MockWorldWrapper {
         }
     }
 
-    fn start_frame(&mut self, _: zk_evm::aux_structures::Timestamp) {
-        todo!()
-    }
+    fn start_frame(&mut self, _: zk_evm::aux_structures::Timestamp) {}
 
-    fn finish_frame(&mut self, _: zk_evm::aux_structures::Timestamp, _panicked: bool) {
-        todo!()
-    }
+    fn finish_frame(&mut self, _: zk_evm::aux_structures::Timestamp, _panicked: bool) {}
 
     fn start_new_tx(&mut self, _: zk_evm::aux_structures::Timestamp) {
         todo!()
@@ -221,13 +221,9 @@ impl PrecompilesProcessor for NoOracle {
         unimplemented!()
     }
 
-    fn start_frame(&mut self) {
-        unimplemented!()
-    }
+    fn start_frame(&mut self) {}
 
-    fn finish_frame(&mut self, _: bool) {
-        unimplemented!()
-    }
+    fn finish_frame(&mut self, _: bool) {}
 }
 
 impl VmWitnessTracer<8, EncodingModeProduction> for NoOracle {
