@@ -1,6 +1,7 @@
 # AFL++ based differential fuzzing
 
 Compares behaviour of two VM implementations by running one instruction from an arbitrary start state.
+Finds divergences and instructions that put vm2 in an invalid state.
 
 Setup: `cargo install cargo-afl`
 
