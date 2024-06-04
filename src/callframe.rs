@@ -50,10 +50,10 @@ pub struct Callframe {
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct NearCallFrame {
-    call_instruction: u16,
-    exception_handler: u16,
-    previous_frame_sp: u16,
-    previous_frame_gas: u32,
+    pub(crate) call_instruction: u16,
+    pub(crate) exception_handler: u16,
+    pub(crate) previous_frame_sp: u16,
+    pub(crate) previous_frame_gas: u32,
     world_before_this_frame: Snapshot,
 }
 
