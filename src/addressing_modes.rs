@@ -71,6 +71,7 @@ pub struct Arguments {
     immediate2: u16,
     pub predicate: Predicate,
     static_gas_cost: u8,
+    requires_kernel_mode: bool,
 }
 
 pub(crate) const L1_MESSAGE_COST: u32 = 156250;
@@ -79,7 +80,7 @@ pub(crate) const SLOAD_COST: u32 = 2008;
 pub(crate) const INVALID_INSTRUCTION_COST: u32 = 4294967295;
 
 impl Arguments {
-    pub const fn new(predicate: Predicate, gas_cost: u32) -> Self {
+    pub const fn new(predicate: Predicate, gas_cost: u32, requires_kernel_mode: bool) -> Self {
         Self {
             source_registers: PackedRegisters(0),
             destination_registers: PackedRegisters(0),
@@ -87,6 +88,7 @@ impl Arguments {
             immediate2: 0,
             predicate,
             static_gas_cost: Self::encode_static_gas_cost(gas_cost),
+            requires_kernel_mode,
         }
     }
 

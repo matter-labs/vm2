@@ -167,13 +167,13 @@ pub(crate) fn panic_from_failed_far_call(
 /// Panics, burning all available gas.
 pub const INVALID_INSTRUCTION: Instruction = Instruction {
     handler: ret::<{ ReturnType::Panic as u8 }, false>,
-    arguments: Arguments::new(Predicate::Always, INVALID_INSTRUCTION_COST),
+    arguments: Arguments::new(Predicate::Always, INVALID_INSTRUCTION_COST, false),
 };
 
 const RETURN_COST: u32 = 5;
 pub const PANIC: Instruction = Instruction {
     handler: ret::<{ ReturnType::Panic as u8 }, false>,
-    arguments: Arguments::new(Predicate::Always, RETURN_COST),
+    arguments: Arguments::new(Predicate::Always, RETURN_COST, false),
 };
 
 /// Turn the current instruction into a panic at no extra cost. (Great value, I know.)

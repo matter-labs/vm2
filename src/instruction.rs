@@ -33,7 +33,7 @@ pub enum ExecutionEnd {
 pub fn jump_to_beginning() -> Instruction {
     Instruction {
         handler: jump_to_beginning_handler,
-        arguments: Arguments::new(Predicate::Always, 0),
+        arguments: Arguments::new(Predicate::Always, 0, false),
     }
 }
 fn jump_to_beginning_handler(

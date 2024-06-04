@@ -33,7 +33,7 @@ pub fn decode_program(raw: &[u64], is_bootloader: bool) -> Vec<Instruction> {
 }
 
 fn unimplemented_instruction(variant: Opcode) -> Instruction {
-    let mut arguments = Arguments::new(Predicate::Always, 0);
+    let mut arguments = Arguments::new(Predicate::Always, 0, false);
     let variant_as_number: u16 = unsafe { std::mem::transmute(variant) };
     Immediate1(variant_as_number).write_source(&mut arguments);
     Instruction {
@@ -68,7 +68,11 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
         zkevm_opcode_defs::Condition::Ne => crate::Predicate::IfNotEQ,
         zkevm_opcode_defs::Condition::GtOrLt => crate::Predicate::IfGtOrLT,
     };
-    let arguments = Arguments::new(predicate, parsed.variant.ergs_price());
+    let arguments = Arguments::new(
+        predicate,
+        parsed.variant.ergs_price(),
+        parsed.variant.requires_kernel_mode(),
+    );
 
     let stack_in = RegisterAndImmediate {
         immediate: parsed.imm_0,

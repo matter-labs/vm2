@@ -152,6 +152,16 @@ impl Callframe {
                 .map(|f| f.previous_frame_gas)
                 .sum::<u32>()
     }
+
+    pub fn is_kernel_mode(&self) -> bool {
+        address_is_kernel(&self.address)
+    }
+}
+
+pub fn address_is_kernel(address: &H160) -> bool {
+    // address < 2^16
+    let address_bytes = address.as_fixed_bytes();
+    address_bytes[0..18].iter().all(|&el| el == 0u8)
 }
 
 pub(crate) struct FrameRemnant {

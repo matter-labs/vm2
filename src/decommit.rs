@@ -76,6 +76,11 @@ impl WorldDiff {
 /// Doesn't check for any errors.
 /// Doesn't cost anything but also doesn't make the code free in future decommits.
 pub fn initial_decommit(world: &mut impl World, address: H160) -> Program {
+    let code_key = code_hash(world, address);
+    world.decommit(code_key)
+}
+
+pub fn code_hash(world: &mut dyn World, address: H160) -> U256 {
     let deployer_system_contract_address =
         Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
     let code_info = world
@@ -86,9 +91,7 @@ pub fn initial_decommit(world: &mut impl World, address: H160) -> Program {
     code_info.to_big_endian(&mut code_info_bytes);
 
     code_info_bytes[1] = 0;
-    let code_key: U256 = U256::from_big_endian(&code_info_bytes);
-
-    world.decommit(code_key)
+    U256::from_big_endian(&code_info_bytes)
 }
 
 pub fn address_into_u256(address: H160) -> U256 {

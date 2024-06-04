@@ -50,6 +50,7 @@ pub struct Heaps {
     pub(crate) read: MockRead<HeapId, Heap>,
 }
 
+pub const EMPTY_HEAP: HeapId = HeapId(0);
 pub(crate) const CALLDATA_HEAP: HeapId = HeapId(1);
 pub const FIRST_HEAP: HeapId = HeapId(2);
 pub(crate) const FIRST_AUX_HEAP: HeapId = HeapId(3);
