@@ -360,7 +360,7 @@ mod tests {
                             tx_number: 0,
                         }
                     ))
-                    .collect::<BTreeMap<_, _>>()
+                    .collect()
             );
 
             let checkpoint2 = world_diff.snapshot();
@@ -382,20 +382,26 @@ mod tests {
                             tx_number: 1,
                         }
                     ))
-                    .collect::<BTreeMap<_, _>>()
+                    .collect()
             );
 
-            for (key, (tx_number, before, after)) in world_diff.get_storage_changes() {
-                assert!(tx_number == 0 || tx_number == 1);
-                assert_eq!(before, initial_values.get(&key).copied());
-                assert_eq!(
-                    after,
-                    *second_changes
-                        .get(&key)
-                        .or(first_changes.get(&key))
-                        .unwrap()
-                );
+            let mut combined = first_changes
+                .into_iter()
+                .filter_map(|(key, value)| {
+                    let initial = initial_values.get(&key).copied();
+                    (initial.unwrap_or_default() != value).then_some((key, (0, initial, value)))
+                })
+                .collect::<BTreeMap<_, _>>();
+            for (key, value) in second_changes {
+                let initial = initial_values.get(&key).copied();
+                if initial.unwrap_or_default() != value {
+                    combined.insert(key, (1, initial, value));
+                } else {
+                    combined.remove(&key);
+                }
             }
+
+            assert_eq!(combined, world_diff.get_storage_changes().collect());
         }
     }
 
