@@ -1,13 +1,10 @@
 use std::sync::Arc;
 
-use super::{
-    mock_array::MockRead, stack::Stack, state_to_zk_evm::vm2_state_to_zk_evm_state, MockWorld,
-};
+use super::{stack::Stack, state_to_zk_evm::vm2_state_to_zk_evm_state, MockWorld};
 use crate::{zkevm_opcode_defs::decoding::EncodingModeProduction, VirtualMachine};
 use u256::U256;
 use zk_evm::{
     abstractions::{DecommittmentProcessor, Memory, PrecompilesProcessor, Storage},
-    aux_structures::MemoryLocation,
     block_properties::BlockProperties,
     reference_impls::event_sink::InMemoryEventSink,
     tracing::Tracer,
@@ -82,7 +79,7 @@ impl Memory for MockMemory {
     fn specialized_code_query(
         &mut self,
         _: u32,
-        query: zk_evm::aux_structures::MemoryQuery,
+        _query: zk_evm::aux_structures::MemoryQuery,
     ) -> zk_evm::aux_structures::MemoryQuery {
         todo!()
     }
@@ -109,7 +106,7 @@ impl Storage for MockWorldWrapper {
     fn get_access_refund(
         &mut self, // to avoid any hacks inside, like prefetch
         _: u32,
-        partial_query: &zk_evm::aux_structures::LogQuery,
+        _partial_query: &zk_evm::aux_structures::LogQuery,
     ) -> zk_evm::abstractions::StorageAccessRefund {
         todo!()
     }
@@ -117,7 +114,7 @@ impl Storage for MockWorldWrapper {
     fn execute_partial_query(
         &mut self,
         _: u32,
-        query: zk_evm::aux_structures::LogQuery,
+        _query: zk_evm::aux_structures::LogQuery,
     ) -> (
         zk_evm::aux_structures::LogQuery,
         zk_evm::aux_structures::PubdataCost,
@@ -129,7 +126,7 @@ impl Storage for MockWorldWrapper {
         todo!()
     }
 
-    fn finish_frame(&mut self, _: zk_evm::aux_structures::Timestamp, panicked: bool) {
+    fn finish_frame(&mut self, _: zk_evm::aux_structures::Timestamp, _panicked: bool) {
         todo!()
     }
 
@@ -145,7 +142,7 @@ impl DecommittmentProcessor for MockDecommitter {
     fn prepare_to_decommit(
         &mut self,
         _: u32,
-        partial_query: zk_evm::aux_structures::DecommittmentQuery,
+        _partial_query: zk_evm::aux_structures::DecommittmentQuery,
     ) -> anyhow::Result<zk_evm::aux_structures::DecommittmentQuery> {
         todo!()
     }
@@ -153,8 +150,8 @@ impl DecommittmentProcessor for MockDecommitter {
     fn decommit_into_memory<M: zk_evm::abstractions::Memory>(
         &mut self,
         _: u32,
-        partial_query: zk_evm::aux_structures::DecommittmentQuery,
-        memory: &mut M,
+        _partial_query: zk_evm::aux_structures::DecommittmentQuery,
+        _memory: &mut M,
     ) -> anyhow::Result<Option<Vec<zk_evm::ethereum_types::U256>>> {
         todo!()
     }
