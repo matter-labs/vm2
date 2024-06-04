@@ -309,6 +309,7 @@ pub struct Snapshot {
     pubdata: <RollbackablePod<i32> as Rollback>::Snapshot,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct StorageChange {
     pub before: Option<U256>,
     pub after: U256,
@@ -321,3 +322,115 @@ pub struct StorageChange {
 const WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST - STORAGE_ACCESS_WARM_READ_COST;
 const WARM_WRITE_REFUND: u32 = STORAGE_ACCESS_COLD_WRITE_COST - STORAGE_ACCESS_WARM_WRITE_COST;
 const COLD_WRITE_AFTER_WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn test_storage_changes(
+            initial_values in arbitrary_storage_changes(),
+            first_changes in arbitrary_storage_changes(),
+            second_changes in arbitrary_storage_changes(),
+        ) {
+            let mut world_diff = WorldDiff::default();
+            world_diff.storage_initial_values = initial_values
+                .iter()
+                .map(|(key, value)| (*key, Some(*value)))
+                .collect();
+
+            let checkpoint1 = world_diff.snapshot();
+            for (key, value) in &first_changes {
+                world_diff.write_storage(&mut NoWorld, key.0, key.1, *value, 0);
+            }
+            assert_eq!(
+                world_diff
+                    .get_storage_changes_after(&checkpoint1)
+                    .collect::<BTreeMap<_, _>>(),
+                first_changes
+                    .iter()
+                    .map(|(key, value)| (
+                        *key,
+                        StorageChange {
+                            before: initial_values.get(key).copied(),
+                            after: *value,
+                            is_initial: initial_values.get(key).is_none(),
+                            tx_number: 0,
+                        }
+                    ))
+                    .collect()
+            );
+
+            let checkpoint2 = world_diff.snapshot();
+            for (key, value) in &second_changes {
+                world_diff.write_storage(&mut NoWorld, key.0, key.1, *value, 1);
+            }
+            assert_eq!(
+                world_diff
+                    .get_storage_changes_after(&checkpoint2)
+                    .collect::<BTreeMap<_, _>>(),
+                second_changes
+                    .iter()
+                    .map(|(key, value)| (
+                        *key,
+                        StorageChange {
+                            before: first_changes.get(key).or(initial_values.get(&key)).copied(),
+                            after: *value,
+                            is_initial: initial_values.get(key).is_none(),
+                            tx_number: 1,
+                        }
+                    ))
+                    .collect()
+            );
+
+            let mut combined = first_changes
+                .into_iter()
+                .filter_map(|(key, value)| {
+                    let initial = initial_values.get(&key).copied();
+                    (initial.unwrap_or_default() != value).then_some((key, (0, initial, value)))
+                })
+                .collect::<BTreeMap<_, _>>();
+            for (key, value) in second_changes {
+                let initial = initial_values.get(&key).copied();
+                if initial.unwrap_or_default() != value {
+                    combined.insert(key, (1, initial, value));
+                } else {
+                    combined.remove(&key);
+                }
+            }
+
+            assert_eq!(combined, world_diff.get_storage_changes().collect());
+        }
+    }
+
+    fn arbitrary_storage_changes() -> impl Strategy<Value = BTreeMap<(H160, U256), U256>> {
+        any::<Vec<(([u8; 20], [u8; 32]), [u8; 32])>>().prop_map(|vec| {
+            vec.into_iter()
+                .map(|((contract, key), value)| {
+                    ((H160::from(contract), U256::from(key)), U256::from(value))
+                })
+                .collect()
+        })
+    }
+
+    struct NoWorld;
+    impl World for NoWorld {
+        fn decommit(&mut self, _: U256) -> crate::Program {
+            unimplemented!()
+        }
+
+        fn read_storage(&mut self, _: H160, _: U256) -> Option<U256> {
+            None
+        }
+
+        fn cost_of_writing_storage(&mut self, _: Option<U256>, _: U256) -> u32 {
+            0
+        }
+
+        fn is_free_storage_slot(&self, _: &H160, _: &U256) -> bool {
+            false
+        }
+    }
+}
