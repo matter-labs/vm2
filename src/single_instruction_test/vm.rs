@@ -42,8 +42,10 @@ impl VirtualMachine {
 
 impl<'a> Arbitrary<'a> for VirtualMachine {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        let mut registers: [U256; 16] = u.arbitrary()?;
-        registers[0] = U256::zero();
+        let mut registers = [U256::zero(); 16];
+        for r in &mut registers[1..] {
+            *r = u.arbitrary()?;
+        }
         let mut register_pointer_flags = u.arbitrary()?;
         register_pointer_flags &= !1;
 
