@@ -1,11 +1,12 @@
 [package]
-name = "afl-fuzz"
+name = "differential_fuzzing"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 afl = "0.15"
 arbitrary = "1"
+pretty_assertions = "1.4.0"
 
 [dependencies.vm2]
 path = ".."
