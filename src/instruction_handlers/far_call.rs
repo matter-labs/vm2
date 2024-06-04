@@ -1,4 +1,4 @@
-use super::{heap_access::grow_heap, ret::panic_from_failed_far_call, AuxHeap, Heap};
+use super::{free_panic, heap_access::grow_heap, ret::panic_from_failed_far_call, AuxHeap, Heap};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
     decommit::u256_into_address,
@@ -37,9 +37,13 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
 ) -> InstructionResult {
     let args = unsafe { &(*instruction).arguments };
 
-    let address_mask: U256 = U256::MAX >> (256 - 160);
+    if CALLING_MODE == CallingMode::Mimic as u8 && !vm.state.current_frame.is_kernel {
+        return free_panic(vm, world);
+    }
 
     let (raw_abi, raw_abi_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
+
+    let address_mask: U256 = U256::MAX >> (256 - 160);
     let destination_address = Register2::get(args, &mut vm.state) & address_mask;
     let exception_handler = Immediate1::get(args, &mut vm.state).low_u32() as u16;
 

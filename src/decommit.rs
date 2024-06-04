@@ -46,7 +46,9 @@ impl WorldDiff {
 
                 // The address aliasing contract implements Ethereum-like behavior of calls to EOAs
                 // returning successfully (and address aliasing when called from the bootloader).
-                _ if code_info == U256::zero() && !is_kernel(address) => default_aa_code_hash,
+                _ if code_info == U256::zero() && !is_kernel(u256_into_address(address)) => {
+                    default_aa_code_hash
+                }
 
                 _ => return None,
             }
@@ -105,6 +107,6 @@ pub(crate) fn u256_into_address(source: U256) -> H160 {
     result
 }
 
-pub(crate) fn is_kernel(address: U256) -> bool {
-    address < (1 << 16).into()
+pub(crate) fn is_kernel(address: H160) -> bool {
+    address.0[..18].iter().all(|&byte| byte == 0)
 }

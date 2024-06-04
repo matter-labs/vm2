@@ -18,7 +18,7 @@ fn event(
         instruction,
         world,
         |vm, args, world, continue_normally| {
-            if vm.state.current_frame.is_static {
+            if !vm.state.current_frame.is_kernel || vm.state.current_frame.is_static {
                 return free_panic(vm, world);
             }
             if vm.state.current_frame.address == H160::from_low_u64_be(ADDRESS_EVENT_WRITER as u64)
@@ -51,7 +51,7 @@ fn l2_to_l1(
         instruction,
         world,
         |vm, args, world, continue_normally| {
-            if vm.state.current_frame.is_static {
+            if !vm.state.current_frame.is_kernel || vm.state.current_frame.is_static {
                 return free_panic(vm, world);
             }
 

@@ -101,7 +101,7 @@ fn set_context_u128(
         instruction,
         world,
         |vm, args, world, continue_normally| {
-            if vm.state.current_frame.is_static {
+            if vm.state.current_frame.is_static || !vm.state.current_frame.is_kernel {
                 return free_panic(vm, world);
             }
 
@@ -118,8 +118,14 @@ fn increment_tx_number(
     instruction: *const Instruction,
     world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, _, _| {
+    instruction_boilerplate_with_panic(vm, instruction, world, |vm, _, world, continue_normally| {
+        if vm.state.current_frame.is_static || !vm.state.current_frame.is_kernel {
+            return free_panic(vm, world);
+        }
+
         vm.start_new_tx();
+
+        continue_normally
     })
 }
 

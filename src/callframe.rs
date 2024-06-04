@@ -1,6 +1,6 @@
 use crate::{
-    address_into_u256, decommit::is_kernel, heap::HeapId, program::Program, stack::Stack,
-    world_diff::Snapshot, Instruction,
+    decommit::is_kernel, heap::HeapId, program::Program, stack::Stack, world_diff::Snapshot,
+    Instruction,
 };
 use u256::H160;
 use zkevm_opcode_defs::system_params::{NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND};
@@ -14,6 +14,7 @@ pub struct Callframe {
     pub exception_handler: u16,
     pub context_u128: u128,
     pub is_static: bool,
+    pub is_kernel: bool,
 
     pub stack: Box<Stack>,
     pub sp: u16,
@@ -74,7 +75,8 @@ impl Callframe {
         is_static: bool,
         world_before_this_frame: Snapshot,
     ) -> Self {
-        let heap_size = if is_kernel(address_into_u256(address)) {
+        let is_kernel = is_kernel(address);
+        let heap_size = if is_kernel {
             NEW_KERNEL_FRAME_MEMORY_STIPEND
         } else {
             NEW_FRAME_MEMORY_STIPEND
@@ -87,6 +89,7 @@ impl Callframe {
             program,
             context_u128,
             is_static,
+            is_kernel,
             stack,
             heap,
             aux_heap,
