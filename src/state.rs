@@ -139,4 +139,8 @@ impl Addressable for State {
     fn code_page(&self) -> &[U256] {
         self.current_frame.program.code_page()
     }
+
+    fn in_kernel_mode(&self) -> bool {
+        self.current_frame.is_kernel
+    }
 }

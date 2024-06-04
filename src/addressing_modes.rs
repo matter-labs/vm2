@@ -3,11 +3,19 @@ use crate::predication::Predicate;
 use arbitrary::{Arbitrary, Unstructured};
 use enum_dispatch::enum_dispatch;
 use u256::U256;
+use zkevm_opcode_defs::erase_fat_pointer_metadata;
 
 pub(crate) trait Source {
+    /// Get a word's value for non-pointer operations. (Pointers are erased.)
     fn get(args: &Arguments, state: &mut impl Addressable) -> U256 {
-        Self::get_with_pointer_flag(args, state).0
+        let (mut value, is_pointer) = Self::get_with_pointer_flag(args, state);
+        if is_pointer && !state.in_kernel_mode() {
+            erase_fat_pointer_metadata(&mut value)
+        }
+        value
     }
+
+    /// Get a word's value and pointer flag.
     fn get_with_pointer_flag(args: &Arguments, state: &mut impl Addressable) -> (U256, bool) {
         (Self::get(args, state), false)
     }
@@ -35,6 +43,8 @@ pub trait Addressable {
     fn clear_stack_pointer_flag(&mut self, slot: u16);
 
     fn code_page(&self) -> &[U256];
+
+    fn in_kernel_mode(&self) -> bool;
 }
 
 #[enum_dispatch]
