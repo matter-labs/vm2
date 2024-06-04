@@ -3,8 +3,9 @@
 use differential_fuzzing::VmAndWorld;
 
 fn main() {
-    let data = [2; 10000];
+    const BYTES_GIVEN: usize = 10000;
+    let data = [0xFF; BYTES_GIVEN];
     let mut u = arbitrary::Unstructured::new(&data);
     let _: VmAndWorld = u.arbitrary().unwrap();
-    println!("{:?}", u.len());
+    println!("{:?}", BYTES_GIVEN - u.len());
 }
