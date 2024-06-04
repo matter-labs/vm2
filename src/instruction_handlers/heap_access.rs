@@ -128,6 +128,8 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
     })
 }
 
+/// Pays for more heap space. Doesn't acually grow the heap.
+/// That distinction is necessary because the bootloader gets u32::MAX heap for free.
 pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<(), ()> {
     let already_paid = H::get_heap_size(state);
     if *already_paid < new_bound {
