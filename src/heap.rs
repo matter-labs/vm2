@@ -21,26 +21,12 @@ impl HeapId {
 pub struct Heap(Vec<u8>);
 
 impl Heap {
-    pub fn resize(&mut self, new_len: usize, value: u8) {
-        self.0.resize(new_len, value);
+    pub fn reserve(&mut self, additional: usize) {
+        self.0.reserve(additional);
     }
 
     pub fn len(&self) -> usize {
         self.0.len()
-    }
-}
-
-impl<Idx: std::slice::SliceIndex<[u8]>> std::ops::Index<Idx> for Heap {
-    type Output = Idx::Output;
-
-    fn index(&self, i: Idx) -> &Self::Output {
-        self.0.index(i)
-    }
-}
-
-impl<Idx: std::slice::SliceIndex<[u8]>> std::ops::IndexMut<Idx> for Heap {
-    fn index_mut(&mut self, i: Idx) -> &mut Self::Output {
-        self.0.index_mut(i)
     }
 }
 
