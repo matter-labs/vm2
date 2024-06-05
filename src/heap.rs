@@ -22,7 +22,7 @@ pub struct Heap(Vec<u8>);
 
 impl Heap {
     pub fn reserve(&mut self, additional: usize) {
-        self.0.reserve(additional);
+        self.0.reserve_exact(additional);
     }
 }
 
