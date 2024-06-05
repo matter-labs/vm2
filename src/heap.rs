@@ -20,6 +20,12 @@ impl HeapId {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Heap(Vec<u8>);
 
+impl Heap {
+    pub fn reserve(&mut self, additional: usize) {
+        self.0.reserve_exact(additional);
+    }
+}
+
 impl HeapInterface for Heap {
     fn read_u256(&self, start_address: u32) -> U256 {
         self.read_u256_partially(start_address..start_address + 32)
