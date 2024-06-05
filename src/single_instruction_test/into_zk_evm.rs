@@ -6,7 +6,7 @@ use crate::{
 };
 use u256::U256;
 use zk_evm::{
-    abstractions::{DecommittmentProcessor, Memory, PrecompilesProcessor, Storage},
+    abstractions::{DecommittmentProcessor, Memory, MemoryType, PrecompilesProcessor, Storage},
     aux_structures::PubdataCost,
     block_properties::BlockProperties,
     reference_impls::event_sink::InMemoryEventSink,
@@ -16,11 +16,7 @@ use zk_evm::{
 };
 use zk_evm_abstractions::vm::EventSink;
 
-pub fn vm2_to_zk_evm(
-    vm: &VirtualMachine,
-    world: MockWorld,
-    program_counter: *const Instruction,
-) -> VmState<
+type ZkEvmState = VmState<
     MockWorldWrapper,
     MockMemory,
     InMemoryEventSink,
@@ -29,7 +25,13 @@ pub fn vm2_to_zk_evm(
     NoOracle,
     8,
     EncodingModeProduction,
-> {
+>;
+
+pub fn vm2_to_zk_evm(
+    vm: &VirtualMachine,
+    world: MockWorld,
+    program_counter: *const Instruction,
+) -> ZkEvmState {
     let mut event_sink = InMemoryEventSink::new();
     event_sink.start_frame(zk_evm::aux_structures::Timestamp(0));
 
@@ -44,6 +46,7 @@ pub fn vm2_to_zk_evm(
         memory: MockMemory {
             code_page: vm.state.current_frame.program.code_page().clone(),
             stack: *vm.state.current_frame.stack.clone(),
+            heap_read: None,
         },
         event_sink,
         precompiles_processor: NoOracle,
@@ -52,10 +55,38 @@ pub fn vm2_to_zk_evm(
     }
 }
 
+pub fn add_heap_to_zk_evm(zk_evm: &mut ZkEvmState, vm_after_execution: &VirtualMachine) {
+    zk_evm.memory.heap_read = vm_after_execution
+        .state
+        .heaps
+        .read
+        .read_that_happened()
+        .map(|(heapid, heap)| {
+            let (start_index, mut value) = heap.read.read_that_happened().unwrap();
+            value.reverse();
+
+            ExpectedHeapRead {
+                heap: heapid.to_u32(),
+                start_index,
+                value,
+            }
+        });
+}
+
 #[derive(Debug)]
 pub struct MockMemory {
     code_page: Arc<[U256]>,
     stack: Stack,
+    heap_read: Option<ExpectedHeapRead>,
+}
+
+// One arbitrary heap value is not enough for zk_evm
+// because it reads two U256s to read one U256.
+#[derive(Debug, Copy, Clone)]
+pub struct ExpectedHeapRead {
+    heap: u32,
+    start_index: u32,
+    value: [u8; 32],
 }
 
 impl Memory for MockMemory {
@@ -65,7 +96,7 @@ impl Memory for MockMemory {
         mut query: zk_evm::aux_structures::MemoryQuery,
     ) -> zk_evm::aux_structures::MemoryQuery {
         match query.location.memory_type {
-            zk_evm::abstractions::MemoryType::Stack => {
+            MemoryType::Stack => {
                 let slot = query.location.index.0 as u16;
                 if query.rw_flag {
                     self.stack.set(slot, query.value);
@@ -77,6 +108,28 @@ impl Memory for MockMemory {
                 } else {
                     query.value = self.stack.get(slot);
                     query.value_is_pointer = self.stack.get_pointer_flag(slot);
+                }
+                query
+            }
+            MemoryType::Heap => {
+                if query.rw_flag {
+                    dbg!(query);
+                    todo!()
+                } else {
+                    let heap = self.heap_read.unwrap();
+                    assert_eq!(query.location.page.0, heap.heap);
+
+                    let start = query.location.index.0 * 32;
+                    let mut read = [0; 32];
+                    for i in 0..32 {
+                        if start + i >= heap.start_index {
+                            let j = start + i - heap.start_index;
+                            if j < 32 {
+                                read[i as usize] = heap.value[j as usize];
+                            }
+                        }
+                    }
+                    query.value = U256::from_big_endian(&read);
                 }
                 query
             }

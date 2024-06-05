@@ -66,7 +66,7 @@ fn vm2_frame_to_zk_evm_frames(frame: Callframe) -> impl Iterator<Item = CallStac
         this_address: frame.address,
         msg_sender: frame.caller,
         code_address: frame.code_address,
-        base_memory_page: MemoryPage(frame.heap.to_u32()),
+        base_memory_page: MemoryPage(frame.heap.to_u32() - 2),
         code_page: MemoryPage(0), // TODO
         sp: frame.sp,
         pc: 0,

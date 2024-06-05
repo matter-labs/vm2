@@ -1,5 +1,7 @@
 use super::{heap::FIRST_AUX_HEAP, stack::StackPool};
-use crate::{callframe::Callframe, decommit::is_kernel, predication::Flags, Program, WorldDiff};
+use crate::{
+    callframe::Callframe, decommit::is_kernel, predication::Flags, HeapId, Program, WorldDiff,
+};
 use arbitrary::Arbitrary;
 use u256::H160;
 
@@ -12,6 +14,10 @@ impl<'a> Arbitrary<'a> for Flags {
 impl<'a> Arbitrary<'a> for Callframe {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         let address = u.arbitrary()?;
+
+        // zk_evm requires a base page, which makes heap ids of 0 and 1 invalid
+        let base_page = u.arbitrary::<u16>()? as u32;
+
         let mut me = Self {
             address,
             code_address: u.arbitrary()?,
@@ -26,8 +32,8 @@ impl<'a> Arbitrary<'a> for Callframe {
             stipend: u.arbitrary()?,
             near_calls: vec![],
             program: u.arbitrary()?,
-            heap: u.arbitrary()?,
-            aux_heap: u.arbitrary()?,
+            heap: HeapId::from_u32_unchecked(base_page + 2),
+            aux_heap: HeapId::from_u32_unchecked(base_page + 3),
             heap_size: u.arbitrary()?,
             aux_heap_size: u.arbitrary()?,
             calldata_heap: u.arbitrary()?,

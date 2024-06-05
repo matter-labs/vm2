@@ -2,6 +2,7 @@ use differential_fuzzing::VmAndWorld;
 use pretty_assertions::assert_eq;
 use std::env;
 use std::fs;
+use vm2::single_instruction_test::add_heap_to_zk_evm;
 use vm2::single_instruction_test::vm2_to_zk_evm;
 use vm2::single_instruction_test::NoTracer;
 use vm2::single_instruction_test::UniversalVmState;
@@ -37,6 +38,7 @@ fn main() {
 
     assert!(vm.is_in_valid_state());
 
+    add_heap_to_zk_evm(&mut zk_evm, &vm);
     let _ = zk_evm.cycle(&mut NoTracer);
     assert_eq!(
         UniversalVmState::from(zk_evm),

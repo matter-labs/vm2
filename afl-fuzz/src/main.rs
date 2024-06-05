@@ -1,5 +1,5 @@
 use differential_fuzzing::VmAndWorld;
-use vm2::single_instruction_test::{vm2_to_zk_evm, NoTracer, UniversalVmState};
+use vm2::single_instruction_test::{add_heap_to_zk_evm, vm2_to_zk_evm, NoTracer, UniversalVmState};
 
 fn main() {
     afl::fuzz!(|data: &[u8]| {
@@ -18,7 +18,9 @@ fn main() {
                 let pc = vm.run_single_instruction(&mut world).unwrap();
                 assert!(vm.is_in_valid_state());
 
+                add_heap_to_zk_evm(&mut zk_evm, &vm);
                 let _ = zk_evm.cycle(&mut NoTracer);
+
                 assert_eq!(
                     UniversalVmState::from(zk_evm),
                     vm2_to_zk_evm(&vm, world.clone(), pc).into()
