@@ -24,10 +24,6 @@ impl Heap {
     pub fn reserve(&mut self, additional: usize) {
         self.0.reserve(additional);
     }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
 }
 
 impl HeapInterface for Heap {
