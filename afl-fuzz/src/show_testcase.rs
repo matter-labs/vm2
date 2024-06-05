@@ -20,13 +20,17 @@ fn main() {
     println!("{:?}", vm.state);
     assert!(vm.is_in_valid_state());
 
-    let mut zk_evm = vm2_to_zk_evm(&vm, world.clone());
+    let mut zk_evm = vm2_to_zk_evm(
+        &vm,
+        world.clone(),
+        vm.state.current_frame.pc_from_u16(0).unwrap(),
+    );
 
     let (parsed, _) = EncodingModeProduction::parse_preliminary_variant_and_absolute_number(
         vm.state.current_frame.raw_first_instruction(),
     );
     println!("{}", parsed);
-    let _ = vm.run_single_instruction(&mut world);
+    let pc = vm.run_single_instruction(&mut world).unwrap();
 
     println!("Mocks that have been touched:");
     vm.print_mock_info();
@@ -36,6 +40,6 @@ fn main() {
     let _ = zk_evm.cycle(&mut NoTracer);
     assert_eq!(
         UniversalVmState::from(zk_evm),
-        vm2_to_zk_evm(&vm, world.clone()).into()
+        vm2_to_zk_evm(&vm, world.clone(), pc).into()
     );
 }

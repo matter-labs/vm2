@@ -63,6 +63,13 @@ impl
 }
 
 fn zk_evm_state_to_universal(vm: &VmLocalState<8, EncodingModeProduction>) -> UniversalVmState {
+    let mut current_frame = zk_evm_frame_to_universal(&vm.callstack.current);
+    // Most of the current frame doesn't matter if we panic, as it is just thrown away
+    // but only sp has proved problematic so far
+    if vm.pending_exception {
+        current_frame.sp = 0;
+    }
+
     UniversalVmState {
         registers: vm
             .registers
@@ -83,9 +90,9 @@ fn zk_evm_state_to_universal(vm: &VmLocalState<8, EncodingModeProduction>) -> Un
             .inner
             .iter()
             .skip(1) // zk_evm requires an unused bottom frame
-            .chain(std::iter::once(&vm.callstack.current))
             .map(zk_evm_frame_to_universal)
-            .collect(),
+            .chain(std::iter::once(current_frame))
+            .collect::<Vec<_>>(),
     }
 }
 

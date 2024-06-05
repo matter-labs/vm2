@@ -140,7 +140,7 @@ impl Callframe {
         unsafe { pc.offset_from(self.program.instruction(0).unwrap()) as u16 }
     }
 
-    pub(crate) fn pc_from_u16(&self, index: u16) -> Option<*const Instruction> {
+    pub fn pc_from_u16(&self, index: u16) -> Option<*const Instruction> {
         self.program
             .instruction(index)
             .map(|p| p as *const Instruction)

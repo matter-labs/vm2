@@ -1,4 +1,8 @@
-use crate::callframe::{Callframe, NearCallFrame};
+use crate::{
+    callframe::{Callframe, NearCallFrame},
+    instruction_handlers::PANIC,
+    Instruction,
+};
 use std::iter;
 use u256::U256;
 use zk_evm::{
@@ -9,6 +13,7 @@ use zkevm_opcode_defs::decoding::EncodingModeProduction;
 
 pub(crate) fn vm2_state_to_zk_evm_state(
     state: &crate::State,
+    program_counter: *const Instruction,
 ) -> VmLocalState<8, EncodingModeProduction> {
     // zk_evm requires an unused bottom frame
     let mut callframes: Vec<_> = iter::once(CallStackEntry::empty_context())
@@ -44,7 +49,7 @@ pub(crate) fn vm2_state_to_zk_evm_state(
         memory_page_counter: 3000,
         absolute_execution_step: 0,
         tx_number_in_block: state.transaction_number,
-        pending_exception: false,
+        pending_exception: program_counter == &PANIC,
         previous_super_pc: 0, // Same as current pc so the instruction is read from previous_code_word
         context_u128_register: state.context_u128,
         callstack: Callstack {
