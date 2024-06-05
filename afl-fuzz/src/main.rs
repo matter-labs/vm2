@@ -21,6 +21,12 @@ fn main() {
                 add_heap_to_zk_evm(&mut zk_evm, &vm);
                 let _ = zk_evm.cycle(&mut NoTracer);
 
+                // vm2 does not build a frame for a failed far call, so we need to run the panic
+                // to get a meaningful comparison.
+                if vm.instruction_is_far_call() && zk_evm.local_state.pending_exception {
+                    let _ = zk_evm.cycle(&mut NoTracer);
+                }
+
                 assert_eq!(
                     UniversalVmState::from(zk_evm),
                     vm2_to_zk_evm(&vm, world.clone(), pc).into()
