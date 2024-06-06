@@ -207,9 +207,10 @@ impl DecommittmentProcessor for MockDecommitter {
     fn prepare_to_decommit(
         &mut self,
         _: u32,
-        _partial_query: zk_evm::aux_structures::DecommittmentQuery,
+        mut partial_query: zk_evm::aux_structures::DecommittmentQuery,
     ) -> anyhow::Result<zk_evm::aux_structures::DecommittmentQuery> {
-        todo!()
+        partial_query.is_fresh = true;
+        Ok(partial_query)
     }
 
     fn decommit_into_memory<M: zk_evm::abstractions::Memory>(
@@ -218,7 +219,7 @@ impl DecommittmentProcessor for MockDecommitter {
         _partial_query: zk_evm::aux_structures::DecommittmentQuery,
         _memory: &mut M,
     ) -> anyhow::Result<Option<Vec<zk_evm::ethereum_types::U256>>> {
-        todo!()
+        Ok(None)
     }
 }
 
