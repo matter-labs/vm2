@@ -170,7 +170,7 @@ pub const INVALID_INSTRUCTION: Instruction = Instruction {
     arguments: Arguments::new(Predicate::Always, INVALID_INSTRUCTION_COST),
 };
 
-const RETURN_COST: u32 = 5;
+pub(crate) const RETURN_COST: u32 = 5;
 pub static PANIC: Instruction = Instruction {
     handler: ret::<{ ReturnType::Panic as u8 }, false>,
     arguments: Arguments::new(Predicate::Always, RETURN_COST),

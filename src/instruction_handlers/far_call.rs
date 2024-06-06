@@ -1,4 +1,9 @@
-use super::{free_panic, heap_access::grow_heap, ret::panic_from_failed_far_call, AuxHeap, Heap};
+use super::{
+    free_panic,
+    heap_access::grow_heap,
+    ret::{panic_from_failed_far_call, RETURN_COST},
+    AuxHeap, Heap,
+};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
     decommit::u256_into_address,
@@ -51,15 +56,6 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
 
     let calldata = get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm);
 
-    let decommit_result = vm.world_diff.decommit(
-        world,
-        destination_address,
-        vm.settings.default_aa_code_hash,
-        vm.settings.evm_interpreter_code_hash,
-        &mut vm.state.current_frame.gas,
-        abi.is_constructor_call,
-    );
-
     let mandated_gas = if destination_address == ADDRESS_MSG_VALUE.into() {
         MSG_VALUE_SIMULATOR_ADDITIVE_COST
     } else {
@@ -70,16 +66,26 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     if let Some(gas_left) = vm.state.current_frame.gas.checked_sub(mandated_gas) {
         vm.state.current_frame.gas = gas_left;
     } else {
+        vm.state.current_frame.gas = 0;
         return panic_from_failed_far_call(vm, exception_handler);
     };
 
-    let maximum_gas = vm.state.current_frame.gas / 64 * 63;
-    let new_frame_gas = abi.gas_to_pass.min(maximum_gas);
-    vm.state.current_frame.gas -= new_frame_gas;
+    let decommit_result = vm.world_diff.decommit(
+        world,
+        destination_address,
+        vm.settings.default_aa_code_hash,
+        vm.settings.evm_interpreter_code_hash,
+        &mut vm.state.current_frame.gas,
+        abi.is_constructor_call,
+    );
 
-    let new_frame_gas = new_frame_gas + mandated_gas;
+    let maximum_gas = vm.state.current_frame.gas / 64 * 63;
+    let normally_passed_gas = abi.gas_to_pass.min(maximum_gas);
+    vm.state.current_frame.gas -= normally_passed_gas;
+    let new_frame_gas = normally_passed_gas + mandated_gas;
 
     let (Some(calldata), Some((program, is_evm_interpreter))) = (calldata, decommit_result) else {
+        vm.state.current_frame.gas += new_frame_gas.saturating_sub(RETURN_COST);
         return panic_from_failed_far_call(vm, exception_handler);
     };
 
