@@ -9,7 +9,9 @@ use crate::{
         Add, And, AuxHeap, CallingMode, Div, Heap, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub,
         RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
     },
-    jump_to_beginning, Instruction, Predicate, VirtualMachine, World,
+    jump_to_beginning,
+    mode_requirements::ModeRequirements,
+    Instruction, Predicate, VirtualMachine, World,
 };
 use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
@@ -33,7 +35,7 @@ pub fn decode_program(raw: &[u64], is_bootloader: bool) -> Vec<Instruction> {
 }
 
 fn unimplemented_instruction(variant: Opcode) -> Instruction {
-    let mut arguments = Arguments::new(Predicate::Always, 0);
+    let mut arguments = Arguments::new(Predicate::Always, 0, ModeRequirements::none());
     let variant_as_number: u16 = unsafe { std::mem::transmute(variant) };
     Immediate1(variant_as_number).write_source(&mut arguments);
     Instruction {
@@ -68,7 +70,14 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
         zkevm_opcode_defs::Condition::Ne => crate::Predicate::IfNotEQ,
         zkevm_opcode_defs::Condition::GtOrLt => crate::Predicate::IfGtOrLT,
     };
-    let arguments = Arguments::new(predicate, parsed.variant.ergs_price());
+    let arguments = Arguments::new(
+        predicate,
+        parsed.variant.ergs_price(),
+        ModeRequirements::new(
+            parsed.variant.requires_kernel_mode(),
+            !parsed.variant.can_be_used_in_static_context(),
+        ),
+    );
 
     let stack_in = RegisterAndImmediate {
         immediate: parsed.imm_0,

@@ -1,4 +1,4 @@
-use crate::predication::Predicate;
+use crate::{mode_requirements::ModeRequirements, predication::Predicate};
 #[cfg(feature = "arbitrary")]
 use arbitrary::{Arbitrary, Unstructured};
 use enum_dispatch::enum_dispatch;
@@ -73,13 +73,14 @@ impl<T: DestinationWriter> DestinationWriter for Option<T> {
     }
 }
 
-#[derive(Hash, Debug)]
+// It is important for performance that this fits into 8 bytes.
+#[derive(Debug)]
 pub struct Arguments {
     source_registers: PackedRegisters,
     destination_registers: PackedRegisters,
     immediate1: u16,
     immediate2: u16,
-    pub predicate: Predicate,
+    predicate_and_mode_requirements: u8,
     static_gas_cost: u8,
 }
 
@@ -89,13 +90,21 @@ pub(crate) const SLOAD_COST: u32 = 2008;
 pub(crate) const INVALID_INSTRUCTION_COST: u32 = 4294967295;
 
 impl Arguments {
-    pub const fn new(predicate: Predicate, gas_cost: u32) -> Self {
+    pub const fn new(
+        predicate: Predicate,
+        gas_cost: u32,
+        mode_requirements: ModeRequirements,
+    ) -> Self {
+        // Make sure that these two can be packed into 8 bits without overlapping
+        assert!(predicate as u8 & (0b11 << 6) == 0);
+        assert!(mode_requirements.0 & !(0b11) == 0);
+
         Self {
             source_registers: PackedRegisters(0),
             destination_registers: PackedRegisters(0),
             immediate1: 0,
             immediate2: 0,
-            predicate,
+            predicate_and_mode_requirements: (predicate as u8) << 2 | mode_requirements.0,
             static_gas_cost: Self::encode_static_gas_cost(gas_cost),
         }
     }
@@ -125,6 +134,14 @@ impl Arguments {
             4 => INVALID_INSTRUCTION_COST,
             x => x.into(),
         }
+    }
+
+    pub(crate) fn predicate(&self) -> Predicate {
+        unsafe { std::mem::transmute(self.predicate_and_mode_requirements >> 2) }
+    }
+
+    pub(crate) fn mode_requirements(&self) -> ModeRequirements {
+        ModeRequirements(self.predicate_and_mode_requirements & 0b11)
     }
 
     pub(crate) fn write_source(mut self, sw: &impl SourceWriter) -> Self {

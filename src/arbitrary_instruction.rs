@@ -3,6 +3,7 @@ use crate::instruction_handlers::{
     Add, And, CallingMode, Div, Heap, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub, RotateLeft,
     RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
 };
+use crate::mode_requirements::ModeRequirements;
 use crate::{instruction::Instruction, Predicate};
 use arbitrary::Arbitrary;
 
@@ -16,7 +17,7 @@ impl<'a> Arbitrary<'a> for Instruction {
 
         // 1 to 4 are reserved gas costs and also skip 0
         let gas_cost = u.arbitrary::<u8>()?.saturating_add(5);
-        let arguments = Arguments::new(predicate, gas_cost as u32);
+        let arguments = Arguments::new(predicate, gas_cost as u32, ModeRequirements::none());
 
         Ok(match u.choose_index(23)? {
             0 => Self::from_binop::<Add>(

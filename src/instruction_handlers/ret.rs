@@ -3,6 +3,7 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     callframe::FrameRemnant,
     instruction::{ExecutionEnd, InstructionResult},
+    mode_requirements::ModeRequirements,
     predication::Flags,
     Instruction, Predicate, VirtualMachine, World,
 };
@@ -167,13 +168,17 @@ pub(crate) fn panic_from_failed_far_call(
 /// Panics, burning all available gas.
 pub const INVALID_INSTRUCTION: Instruction = Instruction {
     handler: ret::<{ ReturnType::Panic as u8 }, false>,
-    arguments: Arguments::new(Predicate::Always, INVALID_INSTRUCTION_COST),
+    arguments: Arguments::new(
+        Predicate::Always,
+        INVALID_INSTRUCTION_COST,
+        ModeRequirements::none(),
+    ),
 };
 
 pub(crate) const RETURN_COST: u32 = 5;
 pub static PANIC: Instruction = Instruction {
     handler: ret::<{ ReturnType::Panic as u8 }, false>,
-    arguments: Arguments::new(Predicate::Always, RETURN_COST),
+    arguments: Arguments::new(Predicate::Always, RETURN_COST, ModeRequirements::none()),
 };
 
 /// Turn the current instruction into a panic at no extra cost. (Great value, I know.)

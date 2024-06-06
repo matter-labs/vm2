@@ -11,6 +11,7 @@ pub mod fat_pointer;
 mod heap;
 mod instruction;
 pub mod instruction_handlers;
+mod mode_requirements;
 mod predication;
 #[cfg(not(feature = "single_instruction_test"))]
 mod program;
@@ -28,6 +29,7 @@ pub use decommit::address_into_u256;
 pub use decommit::initial_decommit;
 pub use heap::{HeapId, FIRST_HEAP};
 pub use instruction::{jump_to_beginning, ExecutionEnd, Instruction};
+pub use mode_requirements::ModeRequirements;
 pub use predication::Predicate;
 pub use program::Program;
 pub use state::State;

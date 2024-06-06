@@ -76,18 +76,24 @@ impl VirtualMachine {
         unsafe {
             loop {
                 let args = &(*instruction).arguments;
-                let Ok(_) = self.state.use_gas(args.get_static_gas_cost()) else {
+
+                if self.state.use_gas(args.get_static_gas_cost()).is_err()
+                    || !args.mode_requirements().met(
+                        self.state.current_frame.is_kernel,
+                        self.state.current_frame.is_static,
+                    )
+                {
                     instruction = match free_panic(self, world) {
                         Ok(i) => i,
                         Err(e) => return e,
                     };
                     continue;
-                };
+                }
 
                 #[cfg(trace)]
                 self.print_instruction(instruction);
 
-                if args.predicate.satisfied(&self.state.flags) {
+                if args.predicate().satisfied(&self.state.flags) {
                     instruction = match ((*instruction).handler)(self, instruction, world) {
                         Ok(n) => n,
                         Err(e) => return e,
@@ -123,18 +129,24 @@ impl VirtualMachine {
         let end = unsafe {
             loop {
                 let args = &(*instruction).arguments;
-                let Ok(_) = self.state.use_gas(args.get_static_gas_cost()) else {
+
+                if self.state.use_gas(args.get_static_gas_cost()).is_err()
+                    || !args.mode_requirements().met(
+                        self.state.current_frame.is_kernel,
+                        self.state.current_frame.is_static,
+                    )
+                {
                     instruction = match free_panic(self, world) {
                         Ok(i) => i,
                         Err(end) => break end,
                     };
                     continue;
-                };
+                }
 
                 #[cfg(trace)]
                 self.print_instruction(instruction);
 
-                if args.predicate.satisfied(&self.state.flags) {
+                if args.predicate().satisfied(&self.state.flags) {
                     instruction = match ((*instruction).handler)(self, instruction, world) {
                         Ok(n) => n,
                         Err(end) => break end,

@@ -1,7 +1,4 @@
-use super::{
-    common::{instruction_boilerplate, instruction_boilerplate_with_panic},
-    free_panic,
-};
+use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Source},
     decommit::address_into_u256,
@@ -99,21 +96,10 @@ fn set_context_u128(
     instruction: *const Instruction,
     world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(
-        vm,
-        instruction,
-        world,
-        |vm, args, world, continue_normally| {
-            if vm.state.current_frame.is_static || !vm.state.current_frame.is_kernel {
-                return free_panic(vm, world);
-            }
-
-            let value = Register1::get(args, &mut vm.state).low_u128();
-            vm.state.set_context_u128(value);
-
-            continue_normally
-        },
-    )
+    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
+        let value = Register1::get(args, &mut vm.state).low_u128();
+        vm.state.set_context_u128(value);
+    })
 }
 
 fn increment_tx_number(
@@ -121,14 +107,8 @@ fn increment_tx_number(
     instruction: *const Instruction,
     world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, world, |vm, _, world, continue_normally| {
-        if vm.state.current_frame.is_static || !vm.state.current_frame.is_kernel {
-            return free_panic(vm, world);
-        }
-
+    instruction_boilerplate(vm, instruction, world, |vm, _, _| {
         vm.start_new_tx();
-
-        continue_normally
     })
 }
 
@@ -137,14 +117,8 @@ fn aux_mutating(
     instruction: *const Instruction,
     world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, world, |vm, _, world, continue_normally| {
-        if vm.state.current_frame.is_static || !vm.state.current_frame.is_kernel {
-            return free_panic(vm, world);
-        }
-
+    instruction_boilerplate(vm, instruction, world, |_, _, _| {
         // This instruction just crashes or nops
-
-        continue_normally
     })
 }
 

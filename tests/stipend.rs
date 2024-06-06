@@ -7,7 +7,7 @@ use vm2::{
     initial_decommit,
     instruction_handlers::{Add, CallingMode},
     testworld::TestWorld,
-    ExecutionEnd, Instruction, Predicate, Program, VirtualMachine,
+    ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, VirtualMachine,
 };
 use zkevm_opcode_defs::ethereum_types::Address;
 
@@ -33,7 +33,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
                 Register2(r0),
                 Register1(r1).into(),
                 (),
-                Arguments::new(Predicate::Always, 6),
+                Arguments::new(Predicate::Always, 6, ModeRequirements::none()),
                 false,
                 false,
             ),
@@ -46,7 +46,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
                 Register2(r0),
                 Register1(r2).into(),
                 (),
-                Arguments::new(Predicate::Always, 6),
+                Arguments::new(Predicate::Always, 6, ModeRequirements::none()),
                 false,
                 false,
             ),
@@ -56,12 +56,12 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
                 // crash on error
                 Immediate1(0xFFFF),
                 false,
-                Arguments::new(Predicate::Always, 200),
+                Arguments::new(Predicate::Always, 200, ModeRequirements::none()),
             ),
             Instruction::from_ret(
                 Register1(Register::new(0)),
                 None,
-                Arguments::new(Predicate::Always, 5),
+                Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
             ),
         ],
         vec![abi, ethereum_address.into()],
@@ -74,14 +74,14 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
                 Register2(r0),
                 Register1(r0).into(),
                 (),
-                Arguments::new(Predicate::Always, 6),
+                Arguments::new(Predicate::Always, 6, ModeRequirements::none()),
                 false,
                 false,
             ),
             Instruction::from_ret(
                 Register1(Register::new(0)),
                 None,
-                Arguments::new(Predicate::Always, 5),
+                Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
             ),
         ],
         vec![],

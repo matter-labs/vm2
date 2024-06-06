@@ -1,6 +1,9 @@
 use std::fmt::{self, Debug, Formatter};
 
-use crate::{addressing_modes::Arguments, vm::VirtualMachine, Predicate, World};
+use crate::{
+    addressing_modes::Arguments, mode_requirements::ModeRequirements, vm::VirtualMachine,
+    Predicate, World,
+};
 
 pub struct Instruction {
     pub(crate) handler: Handler,
@@ -33,7 +36,7 @@ pub enum ExecutionEnd {
 pub fn jump_to_beginning() -> Instruction {
     Instruction {
         handler: jump_to_beginning_handler,
-        arguments: Arguments::new(Predicate::Always, 0),
+        arguments: Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
     }
 }
 fn jump_to_beginning_handler(

@@ -1,5 +1,4 @@
 use super::{
-    free_panic,
     heap_access::grow_heap,
     ret::{panic_from_failed_far_call, RETURN_COST},
     AuxHeap, Heap,
@@ -41,10 +40,6 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     world: &mut dyn World,
 ) -> InstructionResult {
     let args = unsafe { &(*instruction).arguments };
-
-    if CALLING_MODE == CallingMode::Mimic as u8 && !vm.state.current_frame.is_kernel {
-        return free_panic(vm, world);
-    }
 
     let (raw_abi, raw_abi_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
 

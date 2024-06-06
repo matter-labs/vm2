@@ -17,11 +17,17 @@ impl VirtualMachine {
 
         unsafe {
             let args = &(*instruction).arguments;
-            let Ok(_) = self.state.use_gas(args.get_static_gas_cost()) else {
-                return free_panic(self, world);
-            };
 
-            if args.predicate.satisfied(&self.state.flags) {
+            if self.state.use_gas(args.get_static_gas_cost()).is_err()
+                || !args.mode_requirements().met(
+                    self.state.current_frame.is_kernel,
+                    self.state.current_frame.is_static,
+                )
+            {
+                return free_panic(self, world);
+            }
+
+            if args.predicate().satisfied(&self.state.flags) {
                 ((*instruction).handler)(self, instruction, world)
             } else {
                 Ok(instruction.add(1))
