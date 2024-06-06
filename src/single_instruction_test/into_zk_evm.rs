@@ -47,6 +47,7 @@ pub fn vm2_to_zk_evm(
             code_page: vm.state.current_frame.program.code_page().clone(),
             stack: *vm.state.current_frame.stack.clone(),
             heap_read: None,
+            heap_write: None,
         },
         event_sink,
         precompiles_processor: NoOracle,
@@ -56,37 +57,60 @@ pub fn vm2_to_zk_evm(
 }
 
 pub fn add_heap_to_zk_evm(zk_evm: &mut ZkEvmState, vm_after_execution: &VirtualMachine) {
-    zk_evm.memory.heap_read = vm_after_execution
-        .state
-        .heaps
-        .read
-        .read_that_happened()
-        .map(|(heapid, heap)| {
-            let (start_index, mut value) = heap.read.read_that_happened().unwrap();
+    if let Some((heapid, heap)) = vm_after_execution.state.heaps.read.read_that_happened() {
+        if let Some((start_index, mut value)) = heap.read.read_that_happened() {
             value.reverse();
 
-            ExpectedHeapRead {
+            zk_evm.memory.heap_read = Some(ExpectedHeapValue {
                 heap: heapid.to_u32(),
                 start_index,
                 value,
-            }
-        });
+            });
+        }
+        if let Some((start_index, value_u256)) = heap.write {
+            let mut value = [0; 32];
+            value_u256.to_big_endian(&mut value);
+
+            zk_evm.memory.heap_write = Some(ExpectedHeapValue {
+                heap: heapid.to_u32(),
+                start_index,
+                value,
+            });
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct MockMemory {
     code_page: Arc<[U256]>,
     stack: Stack,
-    heap_read: Option<ExpectedHeapRead>,
+    heap_read: Option<ExpectedHeapValue>,
+    heap_write: Option<ExpectedHeapValue>,
 }
 
 // One arbitrary heap value is not enough for zk_evm
 // because it reads two U256s to read one U256.
 #[derive(Debug, Copy, Clone)]
-pub struct ExpectedHeapRead {
+pub struct ExpectedHeapValue {
     heap: u32,
     start_index: u32,
     value: [u8; 32],
+}
+
+impl ExpectedHeapValue {
+    /// Returns a new U256 that contains data from the heap value and zero elsewhere.
+    fn partially_overlapping_u256(&self, start: u32) -> U256 {
+        let mut read = [0; 32];
+        for i in 0..32 {
+            if start + i >= self.start_index {
+                let j = start + i - self.start_index;
+                if j < 32 {
+                    read[i as usize] = self.value[j as usize];
+                }
+            }
+        }
+        U256::from_big_endian(&read)
+    }
 }
 
 impl Memory for MockMemory {
@@ -113,23 +137,19 @@ impl Memory for MockMemory {
             }
             MemoryType::Heap => {
                 if query.rw_flag {
-                    dbg!(query);
-                    todo!()
-                } else {
-                    let heap = self.heap_read.unwrap();
+                    let heap = self.heap_write.unwrap();
+                    assert_eq!(heap.heap, query.location.page.0);
+
+                    assert_eq!(
+                        query.value,
+                        heap.partially_overlapping_u256(query.location.index.0 * 32)
+                    );
+                } else if let Some(heap) = self.heap_read {
+                    // ^ Writes read the heap too, but they are just fed zeroes
+
                     assert_eq!(query.location.page.0, heap.heap);
 
-                    let start = query.location.index.0 * 32;
-                    let mut read = [0; 32];
-                    for i in 0..32 {
-                        if start + i >= heap.start_index {
-                            let j = start + i - heap.start_index;
-                            if j < 32 {
-                                read[i as usize] = heap.value[j as usize];
-                            }
-                        }
-                    }
-                    query.value = U256::from_big_endian(&read);
+                    query.value = heap.partially_overlapping_u256(query.location.index.0 * 32);
                 }
                 query
             }
