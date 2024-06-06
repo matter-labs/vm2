@@ -158,7 +158,9 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
             zkevm_opcode_defs::ShiftOpcode::Rol => binop!(RotateLeft, ()),
             zkevm_opcode_defs::ShiftOpcode::Ror => binop!(RotateRight, ()),
         },
-        zkevm_opcode_defs::Opcode::Jump(_) => Instruction::from_jump(src1, arguments),
+        zkevm_opcode_defs::Opcode::Jump(_) => {
+            Instruction::from_jump(src1, out.try_into().unwrap(), arguments)
+        }
         zkevm_opcode_defs::Opcode::Context(x) => match x {
             zkevm_opcode_defs::ContextOpcode::This => {
                 Instruction::from_this(out.try_into().unwrap(), arguments)

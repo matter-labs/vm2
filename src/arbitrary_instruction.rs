@@ -128,7 +128,7 @@ impl<'a> Arbitrary<'a> for Instruction {
                 u.arbitrary()?,
                 u.arbitrary()?,
             ),
-            12 => Self::from_jump(u.arbitrary()?, arguments),
+            12 => Self::from_jump(u.arbitrary()?, u.arbitrary()?, arguments),
             13 => Self::from_ptr::<PtrAdd>(
                 u.arbitrary()?,
                 u.arbitrary()?,
