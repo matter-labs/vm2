@@ -40,14 +40,27 @@ impl VirtualMachine {
     }
 
     pub fn instruction_is_not_precompile_call(&self) -> bool {
+        // TODO PLA-934 implement Decommit
+        if self.current_opcode() == 1093 {
+            return false;
+        }
+
+        // TODO PLA-972 implement StaticMemoryRead/Write
+        if (1096..=1103).contains(&self.current_opcode()) {
+            return false;
+        }
+
         // Precompilecall is not allowed because it accesses memory multiple times
         // and only needs to work as used by trusted code
-        self.state.current_frame.program.raw_first_instruction & 0x7FF != 1056u64
+        self.current_opcode() != 1056u64
     }
 
     pub fn instruction_is_far_call(&self) -> bool {
-        let opcode = self.state.current_frame.program.raw_first_instruction & 0x7FF;
-        (1057..=1068).contains(&opcode)
+        (1057..=1068).contains(&self.current_opcode())
+    }
+
+    fn current_opcode(&self) -> u64 {
+        self.state.current_frame.program.raw_first_instruction & 0x7FF
     }
 }
 
