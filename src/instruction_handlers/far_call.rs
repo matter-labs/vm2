@@ -166,15 +166,7 @@ pub(crate) fn get_far_call_calldata(
             pointer.narrow();
         }
         FatPointerSource::MakeNewPointer(target) => {
-            // This check has to be first so the penalty for an incorrect bound is always paid.
-            // It must be paid even in cases where memory growth wouldn't be paid due to other errors.
-            let Some(bound) = pointer.start.checked_add(pointer.length) else {
-                let _ = vm.state.use_gas(u32::MAX);
-                return None;
-            };
-            if is_pointer || pointer.offset != 0 {
-                return None;
-            }
+            let bound = pointer.start.saturating_add(pointer.length);
 
             match target {
                 ToHeap => {
@@ -185,6 +177,14 @@ pub(crate) fn get_far_call_calldata(
                     grow_heap::<AuxHeap>(&mut vm.state, pointer.start + pointer.length).ok()?;
                     pointer.memory_page = vm.state.current_frame.aux_heap;
                 }
+            }
+
+            // All checks are done afterwards because the heap is grown no matter what
+            if pointer.start.checked_add(pointer.length).is_none()
+                || is_pointer
+                || pointer.offset != 0
+            {
+                return None;
             }
         }
     }
