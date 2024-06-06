@@ -57,19 +57,19 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
         if is_fat_pointer {
             return Ok(&PANIC);
         }
+
+        let address = pointer.low_u32();
+
+        let new_bound = address.wrapping_add(32);
+        if grow_heap::<H>(&mut vm.state, new_bound).is_err() {
+            return Ok(&PANIC);
+        };
+
+        // The heap is always grown even when the index nonsensical.
         if pointer > LAST_ADDRESS.into() {
             let _ = vm.state.use_gas(u32::MAX);
             return Ok(&PANIC);
         }
-
-        let address = pointer.low_u32();
-
-        // The size check above ensures this never overflows
-        let new_bound = address + 32;
-
-        if grow_heap::<H>(&mut vm.state, new_bound).is_err() {
-            return Ok(&PANIC);
-        };
 
         let value = H::get_heap(&mut vm.state).read_u256(address);
         Register1::set(args, &mut vm.state, value);
