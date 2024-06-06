@@ -97,7 +97,7 @@ impl Callframe {
             aux_heap_size: heap_size,
             calldata_heap,
             heaps_i_am_keeping_alive: vec![],
-            sp: 1024,
+            sp: 0,
             gas,
             stipend,
             exception_handler,
