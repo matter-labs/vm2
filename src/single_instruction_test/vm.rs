@@ -41,7 +41,7 @@ impl VirtualMachine {
 
     pub fn instruction_is_far_call(&self) -> bool {
         let opcode = self.state.current_frame.program.raw_first_instruction & 0x7FF;
-        1057 <= opcode && opcode <= 1068
+        (1057..=1068).contains(&opcode)
     }
 }
 
