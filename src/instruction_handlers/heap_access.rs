@@ -66,6 +66,7 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
         };
 
         // The heap is always grown even when the index nonsensical.
+        // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
         if pointer > LAST_ADDRESS.into() {
             let _ = vm.state.use_gas(u32::MAX);
             return Ok(&PANIC);
