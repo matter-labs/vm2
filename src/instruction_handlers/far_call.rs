@@ -166,6 +166,10 @@ pub(crate) fn get_far_call_calldata(
             pointer.narrow();
         }
         FatPointerSource::MakeNewPointer(target) => {
+            if is_pointer || pointer.offset != 0 {
+                return None;
+            }
+
             let bound = pointer.start.saturating_add(pointer.length);
 
             match target {
@@ -179,12 +183,9 @@ pub(crate) fn get_far_call_calldata(
                 }
             }
 
-            // All checks are done afterwards because the heap is grown no matter what
+            // The heap is grown even if the pointer goes out of the heap
             // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
-            if pointer.start.checked_add(pointer.length).is_none()
-                || is_pointer
-                || pointer.offset != 0
-            {
+            if pointer.start.checked_add(pointer.length).is_none() {
                 return None;
             }
         }
