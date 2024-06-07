@@ -51,37 +51,41 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     abi.is_constructor_call = abi.is_constructor_call && vm.state.current_frame.is_kernel;
     abi.is_system_call = abi.is_system_call && is_kernel(u256_into_address(destination_address));
 
-    let calldata = get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm);
-
-    let mandated_gas = if destination_address == ADDRESS_MSG_VALUE.into() {
+    let mut mandated_gas = if destination_address == ADDRESS_MSG_VALUE.into() {
         MSG_VALUE_SIMULATOR_ADDITIVE_COST
     } else {
         0
     };
 
-    // mandated gas is passed even if it means transferring more than the 63/64 rule allows
-    if let Some(gas_left) = vm.state.current_frame.gas.checked_sub(mandated_gas) {
-        vm.state.current_frame.gas = gas_left;
-    } else {
-        vm.state.current_frame.gas = 0;
-        return panic_from_failed_far_call(vm, exception_handler);
-    };
+    let failing_part = (|| {
+        let calldata = get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm)?;
 
-    let decommit_result = vm.world_diff.decommit(
-        world,
-        destination_address,
-        vm.settings.default_aa_code_hash,
-        vm.settings.evm_interpreter_code_hash,
-        &mut vm.state.current_frame.gas,
-        abi.is_constructor_call,
-    );
+        // mandated gas is passed even if it means transferring more than the 63/64 rule allows
+        if let Some(gas_left) = vm.state.current_frame.gas.checked_sub(mandated_gas) {
+            vm.state.current_frame.gas = gas_left;
+        } else {
+            mandated_gas = 0;
+            return None;
+        };
+
+        let decommit_result = vm.world_diff.decommit(
+            world,
+            destination_address,
+            vm.settings.default_aa_code_hash,
+            vm.settings.evm_interpreter_code_hash,
+            &mut vm.state.current_frame.gas,
+            abi.is_constructor_call,
+        )?;
+
+        Some((calldata, decommit_result))
+    })();
 
     let maximum_gas = vm.state.current_frame.gas / 64 * 63;
     let normally_passed_gas = abi.gas_to_pass.min(maximum_gas);
     vm.state.current_frame.gas -= normally_passed_gas;
     let new_frame_gas = normally_passed_gas + mandated_gas;
 
-    let (Some(calldata), Some((program, is_evm_interpreter))) = (calldata, decommit_result) else {
+    let Some((calldata, (program, is_evm_interpreter))) = failing_part else {
         vm.state.current_frame.gas += new_frame_gas.saturating_sub(RETURN_COST);
         return panic_from_failed_far_call(vm, exception_handler);
     };
