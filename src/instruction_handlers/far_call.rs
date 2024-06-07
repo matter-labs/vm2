@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
-    decommit::u256_into_address,
+    decommit::{is_kernel, u256_into_address},
     fat_pointer::FatPointer,
     instruction::InstructionResult,
     predication::Flags,
@@ -47,7 +47,9 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     let destination_address = Register2::get(args, &mut vm.state) & address_mask;
     let exception_handler = Immediate1::get(args, &mut vm.state).low_u32() as u16;
 
-    let abi = get_far_call_arguments(raw_abi);
+    let mut abi = get_far_call_arguments(raw_abi);
+    abi.is_constructor_call = abi.is_constructor_call && vm.state.current_frame.is_kernel;
+    abi.is_system_call = abi.is_system_call && is_kernel(u256_into_address(destination_address));
 
     let calldata = get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm);
 
