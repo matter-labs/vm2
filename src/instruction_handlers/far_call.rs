@@ -178,7 +178,7 @@ pub(crate) fn get_far_call_calldata(
                     pointer.memory_page = vm.state.current_frame.heap;
                 }
                 ToAuxHeap => {
-                    grow_heap::<AuxHeap>(&mut vm.state, pointer.start + pointer.length).ok()?;
+                    grow_heap::<AuxHeap>(&mut vm.state, bound).ok()?;
                     pointer.memory_page = vm.state.current_frame.aux_heap;
                 }
             }
