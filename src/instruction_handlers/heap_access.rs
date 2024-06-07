@@ -53,10 +53,7 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
     world: &mut dyn World,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
-        let (pointer, is_fat_pointer) = In::get_with_pointer_flag(args, &mut vm.state);
-        if is_fat_pointer {
-            return Ok(&PANIC);
-        }
+        let pointer = In::get(args, &mut vm.state);
 
         let address = pointer.low_u32();
 
@@ -89,10 +86,7 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
     world: &mut dyn World,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
-        let (pointer, is_fat_pointer) = In::get_with_pointer_flag(args, &mut vm.state);
-        if is_fat_pointer {
-            return Ok(&PANIC);
-        }
+        let pointer = In::get(args, &mut vm.state);
 
         let address = pointer.low_u32();
         let value = Register2::get(args, &mut vm.state);
