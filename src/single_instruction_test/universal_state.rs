@@ -14,6 +14,7 @@ pub struct UniversalVmState {
     transaction_number: u16,
     context_u128: u128,
     frames: Vec<UniversalVmFrame>,
+    will_panic: bool,
 }
 
 #[derive(PartialEq, Debug)]
@@ -109,6 +110,7 @@ fn zk_evm_state_to_universal(vm: &VmLocalState<8, EncodingModeProduction>) -> Un
         transaction_number: vm.tx_number_in_block,
         context_u128: vm.context_u128_register,
         frames,
+        will_panic: vm.pending_exception,
     }
 }
 
