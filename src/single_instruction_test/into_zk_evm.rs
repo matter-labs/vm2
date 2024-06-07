@@ -135,7 +135,7 @@ impl Memory for MockMemory {
                 }
                 query
             }
-            MemoryType::Heap => {
+            MemoryType::Heap | MemoryType::AuxHeap => {
                 if query.rw_flag {
                     let heap = self.heap_write.unwrap();
                     assert_eq!(heap.heap, query.location.page.0);
