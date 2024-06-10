@@ -17,8 +17,8 @@ use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
     ImmMemHandlerFlags, Opcode,
     Operand::*,
-    RegOrImmFlags, FAR_CALL_STATIC_FLAG_IDX, FIRST_MESSAGE_FLAG_IDX, RET_TO_LABEL_BIT_IDX,
-    SET_FLAGS_FLAG_IDX, SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES,
+    RegOrImmFlags, FAR_CALL_SHARD_FLAG_IDX, FAR_CALL_STATIC_FLAG_IDX, FIRST_MESSAGE_FLAG_IDX,
+    RET_TO_LABEL_BIT_IDX, SET_FLAGS_FLAG_IDX, SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES,
     SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
 };
 
@@ -222,6 +222,7 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
                 src2,
                 Immediate1(parsed.imm_0),
                 parsed.variant.flags[FAR_CALL_STATIC_FLAG_IDX],
+                parsed.variant.flags[FAR_CALL_SHARD_FLAG_IDX],
                 arguments,
             )
         }

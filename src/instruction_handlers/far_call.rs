@@ -34,7 +34,7 @@ pub enum CallingMode {
 ///
 /// Even though all errors happen before the new stack frame, they cause a panic in the new frame,
 /// not in the caller!
-fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
+fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
     world: &mut dyn World,
@@ -66,8 +66,9 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
             abi.is_constructor_call,
         );
 
-        let calldata =
-            get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm, decommit_result.is_none())?;
+        let already_failed = decommit_result.is_none() || IS_SHARD && abi.shard_id != 0;
+
+        let calldata = get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm, already_failed)?;
 
         let (unpaid_decommit, is_evm) = decommit_result?;
 
@@ -146,7 +147,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
 
 pub(crate) struct FarCallABI {
     pub gas_to_pass: u32,
-    pub _shard_id: u8,
+    pub shard_id: u8,
     pub is_constructor_call: bool,
     pub is_system_call: bool,
 }
@@ -154,11 +155,11 @@ pub(crate) struct FarCallABI {
 pub(crate) fn get_far_call_arguments(abi: U256) -> FarCallABI {
     let gas_to_pass = abi.0[3] as u32;
     let settings = (abi.0[3] >> 32) as u32;
-    let [_, _shard_id, constructor_call_byte, system_call_byte] = settings.to_le_bytes();
+    let [_, shard_id, constructor_call_byte, system_call_byte] = settings.to_le_bytes();
 
     FarCallABI {
         gas_to_pass,
-        _shard_id,
+        shard_id,
         is_constructor_call: constructor_call_byte != 0,
         is_system_call: system_call_byte != 0,
     }
@@ -252,10 +253,11 @@ impl Instruction {
         src2: Register2,
         error_handler: Immediate1,
         is_static: bool,
+        is_shard: bool,
         arguments: Arguments,
     ) -> Self {
         Self {
-            handler: monomorphize!(far_call [MODE] match_boolean is_static),
+            handler: monomorphize!(far_call [MODE] match_boolean is_static match_boolean is_shard),
             arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)

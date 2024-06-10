@@ -56,6 +56,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
                 // crash on error
                 Immediate1(0xFFFF),
                 false,
+                false,
                 Arguments::new(Predicate::Always, 200, ModeRequirements::none()),
             ),
             Instruction::from_ret(
