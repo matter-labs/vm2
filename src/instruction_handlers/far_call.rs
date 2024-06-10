@@ -58,7 +58,18 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     };
 
     let failing_part = (|| {
-        let calldata = get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm)?;
+        let decommit_result = vm.world_diff.decommit(
+            world,
+            destination_address,
+            vm.settings.default_aa_code_hash,
+            vm.settings.evm_interpreter_code_hash,
+            abi.is_constructor_call,
+        );
+
+        let calldata =
+            get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm, decommit_result.is_none())?;
+
+        let (unpaid_decommit, is_evm) = decommit_result?;
 
         // mandated gas is passed even if it means transferring more than the 63/64 rule allows
         if let Some(gas_left) = vm.state.current_frame.gas.checked_sub(mandated_gas) {
@@ -68,16 +79,13 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
             return None;
         };
 
-        let decommit_result = vm.world_diff.decommit(
+        let program = vm.world_diff.pay_for_decommit(
             world,
-            destination_address,
-            vm.settings.default_aa_code_hash,
-            vm.settings.evm_interpreter_code_hash,
+            unpaid_decommit,
             &mut vm.state.current_frame.gas,
-            abi.is_constructor_call,
         )?;
 
-        Some((calldata, decommit_result))
+        Some((calldata, program, is_evm))
     })();
 
     let maximum_gas = vm.state.current_frame.gas / 64 * 63;
@@ -85,7 +93,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
     vm.state.current_frame.gas -= normally_passed_gas;
     let new_frame_gas = normally_passed_gas + mandated_gas;
 
-    let Some((calldata, (program, is_evm_interpreter))) = failing_part else {
+    let Some((calldata, program, is_evm_interpreter)) = failing_part else {
         vm.state.current_frame.gas += new_frame_gas.saturating_sub(RETURN_COST);
         return panic_from_failed_far_call(vm, exception_handler);
     };
@@ -160,6 +168,7 @@ pub(crate) fn get_far_call_calldata(
     raw_abi: U256,
     is_pointer: bool,
     vm: &mut VirtualMachine,
+    already_failed: bool,
 ) -> Option<FatPointer> {
     let mut pointer = FatPointer::from(raw_abi);
 
@@ -173,7 +182,7 @@ pub(crate) fn get_far_call_calldata(
         }
         FatPointerSource::MakeNewPointer(target) => {
             if let Some(bound) = pointer.start.checked_add(pointer.length) {
-                if is_pointer || pointer.offset != 0 {
+                if is_pointer || pointer.offset != 0 || already_failed {
                     return None;
                 }
                 match target {

@@ -11,9 +11,8 @@ impl WorldDiff {
         address: U256,
         default_aa_code_hash: [u8; 32],
         evm_interpreter_code_hash: [u8; 32],
-        gas: &mut u32,
         is_constructor_call: bool,
-    ) -> Option<(Program, bool)> {
+    ) -> Option<(UnpaidDecommit, bool)> {
         let deployer_system_contract_address =
             Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
 
@@ -57,21 +56,35 @@ impl WorldDiff {
         code_info[1] = 0;
         let code_key: U256 = U256::from_big_endian(&code_info);
 
-        if !self.decommitted_hashes.as_ref().contains_key(&code_key) {
+        let cost = if self.decommitted_hashes.as_ref().contains_key(&code_key) {
+            0
+        } else {
             let code_length_in_words = u16::from_be_bytes([code_info[2], code_info[3]]);
-            let cost =
-                code_length_in_words as u32 * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT;
-            if cost > *gas {
-                // Unlike all other gas costs, this one is not paid if low on gas.
-                return None;
-            }
-            *gas -= cost;
-            self.decommitted_hashes.insert(code_key, ());
+            code_length_in_words as u32 * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT
         };
 
-        let program = world.decommit(code_key);
-        Some((program, is_evm))
+        Some((UnpaidDecommit { cost, code_key }, is_evm))
     }
+
+    pub(crate) fn pay_for_decommit(
+        &mut self,
+        world: &mut dyn World,
+        decommit: UnpaidDecommit,
+        gas: &mut u32,
+    ) -> Option<Program> {
+        if decommit.cost > *gas {
+            // Unlike all other gas costs, this one is not paid if low on gas.
+            return None;
+        }
+        *gas -= decommit.cost;
+        self.decommitted_hashes.insert(decommit.code_key, ());
+        Some(world.decommit(decommit.code_key))
+    }
+}
+
+pub(crate) struct UnpaidDecommit {
+    cost: u32,
+    code_key: U256,
 }
 
 /// May be used to load code when the VM first starts up.

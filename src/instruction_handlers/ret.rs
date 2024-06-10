@@ -64,7 +64,7 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
             None
         } else {
             let (raw_abi, is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
-            let result = get_far_call_calldata(raw_abi, is_pointer, vm)
+            let result = get_far_call_calldata(raw_abi, is_pointer, vm, false)
                 .filter(|pointer| pointer.memory_page != vm.state.current_frame.calldata_heap);
 
             if result.is_none() {
