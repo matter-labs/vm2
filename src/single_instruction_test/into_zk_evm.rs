@@ -189,7 +189,7 @@ impl Storage for MockWorldWrapper {
         _: u32,
         _partial_query: &zk_evm::aux_structures::LogQuery,
     ) -> zk_evm::abstractions::StorageAccessRefund {
-        todo!()
+        zk_evm::abstractions::StorageAccessRefund::Cold
     }
 
     fn execute_partial_query(
@@ -201,7 +201,7 @@ impl Storage for MockWorldWrapper {
         zk_evm::aux_structures::PubdataCost,
     ) {
         if query.rw_flag {
-            todo!()
+            (query, PubdataCost(0))
         } else {
             query.read_value = self
                 .0
