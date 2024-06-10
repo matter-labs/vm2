@@ -172,26 +172,32 @@ pub(crate) fn get_far_call_calldata(
             pointer.narrow();
         }
         FatPointerSource::MakeNewPointer(target) => {
-            if is_pointer || pointer.offset != 0 {
-                return None;
-            }
-
-            let bound = pointer.start.saturating_add(pointer.length);
-
-            match target {
-                ToHeap => {
-                    grow_heap::<Heap>(&mut vm.state, bound).ok()?;
-                    pointer.memory_page = vm.state.current_frame.heap;
+            if let Some(bound) = pointer.start.checked_add(pointer.length) {
+                if is_pointer || pointer.offset != 0 {
+                    return None;
                 }
-                ToAuxHeap => {
-                    grow_heap::<AuxHeap>(&mut vm.state, bound).ok()?;
-                    pointer.memory_page = vm.state.current_frame.aux_heap;
+                match target {
+                    ToHeap => {
+                        grow_heap::<Heap>(&mut vm.state, bound).ok()?;
+                        pointer.memory_page = vm.state.current_frame.heap;
+                    }
+                    ToAuxHeap => {
+                        grow_heap::<AuxHeap>(&mut vm.state, bound).ok()?;
+                        pointer.memory_page = vm.state.current_frame.aux_heap;
+                    }
                 }
-            }
-
-            // The heap is grown even if the pointer goes out of the heap
-            // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
-            if pointer.start.checked_add(pointer.length).is_none() {
+            } else {
+                // The heap is grown even if the pointer goes out of the heap
+                // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
+                let bound = u32::MAX;
+                match target {
+                    ToHeap => {
+                        grow_heap::<Heap>(&mut vm.state, bound).ok()?;
+                    }
+                    ToAuxHeap => {
+                        grow_heap::<AuxHeap>(&mut vm.state, bound).ok()?;
+                    }
+                }
                 return None;
             }
         }
