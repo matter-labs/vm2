@@ -106,7 +106,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool>(
         new_frame_gas,
         stipend,
         exception_handler,
-        IS_STATIC && !is_evm_interpreter,
+        (IS_STATIC || vm.state.current_frame.is_static) && !is_evm_interpreter,
         calldata.memory_page,
         vm.world_diff.snapshot(),
     );

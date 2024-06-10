@@ -229,7 +229,7 @@ impl VirtualMachine {
             } else {
                 self.state.context_u128
             },
-            is_static || self.state.current_frame.is_static,
+            is_static,
             world_before_this_frame,
         );
         self.state.context_u128 = 0;
