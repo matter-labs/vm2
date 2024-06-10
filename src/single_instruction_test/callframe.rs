@@ -4,6 +4,7 @@ use crate::{
 };
 use arbitrary::Arbitrary;
 use u256::H160;
+use zkevm_opcode_defs::EVM_SIMULATOR_STIPEND;
 
 impl<'a> Arbitrary<'a> for Flags {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
@@ -28,7 +29,8 @@ impl<'a> Arbitrary<'a> for Callframe {
             is_kernel: is_kernel(address),
             stack: u.arbitrary()?,
             sp: u.arbitrary()?,
-            gas: u.arbitrary()?,
+            // It is assumed that it is always possible to add the stipend
+            gas: u.int_in_range(0..=u32::MAX - EVM_SIMULATOR_STIPEND)?,
             stipend: u.arbitrary()?,
             near_calls: vec![],
             program: u.arbitrary()?,
