@@ -37,10 +37,12 @@ impl WorldDiff {
             // returning successfully (and address aliasing when called from the bootloader).
             // It makes sense that unconstructed code is treated as an EOA but for some reason
             // a constructor call to constructed code is also treated as EOA.
-            if (is_constructed == is_constructor_call || code_info == U256::zero())
-                && !is_kernel(u256_into_address(address))
-            {
-                default_aa_code_hash
+            if is_constructed == is_constructor_call || code_info == U256::zero() {
+                if is_kernel(u256_into_address(address)) {
+                    return None;
+                } else {
+                    default_aa_code_hash
+                }
             } else {
                 match code_info_bytes[0] {
                     1 => code_info_bytes,
