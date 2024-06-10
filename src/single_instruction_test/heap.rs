@@ -19,7 +19,7 @@ impl HeapInterface for Heap {
     fn read_u256_partially(&self, range: std::ops::Range<u32>) -> U256 {
         assert!(self.write.is_none());
         let mut result = *self.read.get(range.start);
-        for byte in &mut result[0..range.len()] {
+        for byte in &mut result[0..32 - range.len()] {
             *byte = 0;
         }
         U256::from_little_endian(&result)
