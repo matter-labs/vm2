@@ -66,6 +66,8 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>
             abi.is_constructor_call,
         );
 
+        // calldata has to be constructed even if we already know we will panic because
+        // overflowing start + length makes the heap resize even when already panicking.
         let already_failed = decommit_result.is_none() || IS_SHARD && abi.shard_id != 0;
 
         let calldata = get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm, already_failed)?;
@@ -165,6 +167,10 @@ pub(crate) fn get_far_call_arguments(abi: U256) -> FarCallABI {
     }
 }
 
+/// Forms a new fat pointer or narrows an existing one, as dictated by the ABI.
+///
+/// This function needs to be called even if we already know we will panic because
+/// overflowing start + length makes the heap resize even when already panicking.
 pub(crate) fn get_far_call_calldata(
     raw_abi: U256,
     is_pointer: bool,
