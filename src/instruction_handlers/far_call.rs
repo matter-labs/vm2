@@ -110,6 +110,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>
         .checked_add(stipend)
         .expect("stipend must not cause overflow");
 
+    let new_frame_is_static = IS_STATIC || vm.state.current_frame.is_static;
     vm.push_frame::<CALLING_MODE>(
         instruction,
         u256_into_address(destination_address),
@@ -117,7 +118,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>
         new_frame_gas,
         stipend,
         exception_handler,
-        (IS_STATIC || vm.state.current_frame.is_static) && !is_evm_interpreter,
+        new_frame_is_static && !is_evm_interpreter,
         calldata.memory_page,
         vm.world_diff.snapshot(),
     );
@@ -137,7 +138,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>
     vm.state.register_pointer_flags = 2;
     vm.state.registers[1] = calldata.into_u256();
 
-    let is_static_call_to_evm_interpreter = IS_STATIC && is_evm_interpreter;
+    let is_static_call_to_evm_interpreter = new_frame_is_static && is_evm_interpreter;
     let call_type = (u8::from(is_static_call_to_evm_interpreter) << 2)
         | (u8::from(abi.is_system_call) << 1)
         | u8::from(abi.is_constructor_call);
