@@ -1,6 +1,4 @@
 pub mod addressing_modes;
-#[cfg(feature = "arbitrary")]
-mod arbitrary_instruction;
 #[cfg(not(feature = "single_instruction_test"))]
 mod bitset;
 mod callframe;
