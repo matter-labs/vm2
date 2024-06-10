@@ -33,25 +33,34 @@ impl WorldDiff {
                 }
             };
 
+            let try_default_aa = if is_kernel(u256_into_address(address)) {
+                None
+            } else {
+                Some(default_aa_code_hash)
+            };
+
             // The address aliasing contract implements Ethereum-like behavior of calls to EOAs
             // returning successfully (and address aliasing when called from the bootloader).
             // It makes sense that unconstructed code is treated as an EOA but for some reason
             // a constructor call to constructed code is also treated as EOA.
-            if is_constructed == is_constructor_call || code_info == U256::zero() {
-                if is_kernel(u256_into_address(address)) {
-                    return None;
-                } else {
-                    default_aa_code_hash
+            match code_info_bytes[0] {
+                1 => {
+                    if is_constructed == is_constructor_call {
+                        try_default_aa?
+                    } else {
+                        code_info_bytes
+                    }
                 }
-            } else {
-                match code_info_bytes[0] {
-                    1 => code_info_bytes,
-                    2 => {
+                2 => {
+                    if is_constructed == is_constructor_call {
+                        try_default_aa?
+                    } else {
                         is_evm = true;
                         evm_interpreter_code_hash
                     }
-                    _ => return None,
                 }
+                _ if code_info == U256::zero() => try_default_aa?,
+                _ => return None,
             }
         };
 
