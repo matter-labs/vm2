@@ -76,7 +76,7 @@ impl Callframe {
             aux_heap: FIRST_AUX_HEAP,
             heap_size: 0,
             aux_heap_size: 0,
-            calldata_heap: FIRST_AUX_HEAP,
+            calldata_heap: HeapId::from_u32_unchecked(1),
             heaps_i_am_keeping_alive: vec![],
             world_before_this_frame: WorldDiff::default().snapshot(),
         }
