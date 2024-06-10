@@ -15,6 +15,7 @@ use zk_evm::{
     witness_trace::VmWitnessTracer,
 };
 use zk_evm_abstractions::vm::EventSink;
+use zkevm_opcode_defs::TRANSIENT_STORAGE_AUX_BYTE;
 
 type ZkEvmState = VmState<
     MockWorldWrapper,
@@ -203,10 +204,13 @@ impl Storage for MockWorldWrapper {
         if query.rw_flag {
             (query, PubdataCost(0))
         } else {
-            query.read_value = self
-                .0
-                .read_storage(query.address, query.key)
-                .unwrap_or_default();
+            query.read_value = if query.aux_byte == TRANSIENT_STORAGE_AUX_BYTE {
+                U256::zero()
+            } else {
+                self.0
+                    .read_storage(query.address, query.key)
+                    .unwrap_or_default()
+            };
             (query, PubdataCost(0))
         }
     }
