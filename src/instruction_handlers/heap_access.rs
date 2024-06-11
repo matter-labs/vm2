@@ -53,7 +53,9 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
     world: &mut dyn World,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
-        let pointer = In::get(args, &mut vm.state);
+        // Pointers need not be masked here even though we do not care about them being pointers.
+        // They will panic, though because they are larger than 2^32.
+        let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
 
         let address = pointer.low_u32();
 
@@ -86,7 +88,9 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
     world: &mut dyn World,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
-        let pointer = In::get(args, &mut vm.state);
+        // Pointers need not be masked here even though we do not care about them being pointers.
+        // They will panic, though because they are larger than 2^32.
+        let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
 
         let address = pointer.low_u32();
         let value = Register2::get(args, &mut vm.state);
