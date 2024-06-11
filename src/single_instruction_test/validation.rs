@@ -29,7 +29,5 @@ impl State {
 impl Callframe {
     pub(crate) fn is_valid(&self) -> bool {
         self.stack.is_valid()
-            && self.calldata_heap != self.heap
-            && self.calldata_heap != self.aux_heap
     }
 }

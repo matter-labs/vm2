@@ -16,8 +16,8 @@ impl<'a> Arbitrary<'a> for Callframe {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         let address = u.arbitrary()?;
 
-        // zk_evm requires a base page, which makes heap ids of 0 and 1 invalid
-        let base_page = u.arbitrary::<u16>()? as u32;
+        // zk_evm requires a base page, which heap and aux heap are offset from
+        let base_page = u.int_in_range(1..=u32::MAX - 10)?;
 
         let mut me = Self {
             address,
@@ -38,7 +38,10 @@ impl<'a> Arbitrary<'a> for Callframe {
             aux_heap: HeapId::from_u32_unchecked(base_page + 3),
             heap_size: u.arbitrary()?,
             aux_heap_size: u.arbitrary()?,
-            calldata_heap: u.arbitrary()?,
+            // zk_evm considers smaller pages to be older
+            // vm2 doesn't care about the order
+            // but the calldata heap must be different from the heap and aux heap
+            calldata_heap: HeapId::from_u32_unchecked(u.int_in_range(0..=base_page - 1)?),
             heaps_i_am_keeping_alive: vec![],
             world_before_this_frame: WorldDiff::default().snapshot(),
         };
