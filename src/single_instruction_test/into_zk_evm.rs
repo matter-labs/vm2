@@ -219,9 +219,7 @@ impl Storage for MockWorldWrapper {
 
     fn finish_frame(&mut self, _: zk_evm::aux_structures::Timestamp, _panicked: bool) {}
 
-    fn start_new_tx(&mut self, _: zk_evm::aux_structures::Timestamp) {
-        todo!()
-    }
+    fn start_new_tx(&mut self, _: zk_evm::aux_structures::Timestamp) {}
 }
 
 #[derive(Debug)]
