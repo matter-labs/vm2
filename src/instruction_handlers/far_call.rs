@@ -51,7 +51,8 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>
     abi.is_constructor_call = abi.is_constructor_call && vm.state.current_frame.is_kernel;
     abi.is_system_call = abi.is_system_call && is_kernel(u256_into_address(destination_address));
 
-    let mut mandated_gas = if destination_address == ADDRESS_MSG_VALUE.into() {
+    let mut mandated_gas = if abi.is_system_call && destination_address == ADDRESS_MSG_VALUE.into()
+    {
         MSG_VALUE_SIMULATOR_ADDITIVE_COST
     } else {
         0
