@@ -17,14 +17,7 @@ impl<'a> Arbitrary<'a> for Flags {
 
 impl<'a> Arbitrary<'a> for Callframe {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        let mut address: H160 = u.arbitrary()?;
-
-        // Make kernel addresses much more likely
-        if address.to_low_u64_be() % 1117 < 200 {
-            for i in 0..18 {
-                address.0[i] = 0;
-            }
-        }
+        let address: H160 = u.arbitrary()?;
 
         // zk_evm requires a base page, which heap and aux heap are offset from
         let base_page = u.int_in_range(1..=u32::MAX - 10)?;
