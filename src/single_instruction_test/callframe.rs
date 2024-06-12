@@ -1,4 +1,7 @@
-use super::{heap::FIRST_AUX_HEAP, stack::StackPool};
+use super::{
+    heap::FIRST_AUX_HEAP,
+    stack::{Stack, StackPool},
+};
 use crate::{
     callframe::Callframe, decommit::is_kernel, predication::Flags, HeapId, Program, WorldDiff,
 };
@@ -19,6 +22,11 @@ impl<'a> Arbitrary<'a> for Callframe {
         // zk_evm requires a base page, which heap and aux heap are offset from
         let base_page = u.int_in_range(1..=u32::MAX - 10)?;
 
+        // zk_evm considers smaller pages to be older
+        // vm2 doesn't care about the order
+        // but the calldata heap must be different from the heap and aux heap
+        let calldata_heap = HeapId::from_u32_unchecked(u.int_in_range(0..=base_page - 1)?);
+
         let mut me = Self {
             address,
             code_address: u.arbitrary()?,
@@ -27,7 +35,7 @@ impl<'a> Arbitrary<'a> for Callframe {
             context_u128: u.arbitrary()?,
             is_static: u.arbitrary()?,
             is_kernel: is_kernel(address),
-            stack: u.arbitrary()?,
+            stack: Box::new(Stack::new_arbitrary(u, calldata_heap, base_page)?),
             sp: u.arbitrary()?,
             // It is assumed that it is always possible to add the stipend
             gas: u.int_in_range(0..=u32::MAX - EVM_SIMULATOR_STIPEND)?,
@@ -38,10 +46,7 @@ impl<'a> Arbitrary<'a> for Callframe {
             aux_heap: HeapId::from_u32_unchecked(base_page + 3),
             heap_size: u.arbitrary()?,
             aux_heap_size: u.arbitrary()?,
-            // zk_evm considers smaller pages to be older
-            // vm2 doesn't care about the order
-            // but the calldata heap must be different from the heap and aux heap
-            calldata_heap: HeapId::from_u32_unchecked(u.int_in_range(0..=base_page - 1)?),
+            calldata_heap,
             heaps_i_am_keeping_alive: vec![],
             world_before_this_frame: WorldDiff::default().snapshot(),
         };

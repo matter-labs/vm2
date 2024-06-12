@@ -1,7 +1,7 @@
 use super::stack::StackPool;
 use crate::{
-    callframe::Callframe, instruction::InstructionResult, instruction_handlers::free_panic,
-    Instruction, Settings, State, VirtualMachine, World,
+    callframe::Callframe, fat_pointer::FatPointer, instruction::InstructionResult,
+    instruction_handlers::free_panic, HeapId, Instruction, Settings, State, VirtualMachine, World,
 };
 use arbitrary::Arbitrary;
 use std::fmt::Debug;
@@ -66,19 +66,27 @@ impl VirtualMachine {
 
 impl<'a> Arbitrary<'a> for VirtualMachine {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        let current_frame: Callframe = u.arbitrary()?;
+
         let mut registers = [U256::zero(); 16];
-        for r in &mut registers[1..] {
-            *r = u.arbitrary()?;
+        let mut register_pointer_flags = 0;
+
+        for i in 1..16 {
+            let (value, is_pointer) = arbitrary_register_value(
+                u,
+                current_frame.calldata_heap,
+                current_frame.heap.to_u32() - 2,
+            )?;
+            registers[i] = value;
+            register_pointer_flags |= (is_pointer as u16) << i;
         }
-        let mut register_pointer_flags = u.arbitrary()?;
-        register_pointer_flags &= !1;
 
         Ok(Self {
             state: State {
                 registers,
                 register_pointer_flags,
                 flags: u.arbitrary()?,
-                current_frame: u.arbitrary()?,
+                current_frame,
                 // Exiting the final frame is different in vm2 on purpose,
                 // so always generate two frames to avoid that.
                 previous_frames: vec![(0, Callframe::dummy())],
@@ -91,6 +99,37 @@ impl<'a> Arbitrary<'a> for VirtualMachine {
             stack_pool: StackPool {},
         })
     }
+}
+
+/// Generates a pointer or non-pointer value.
+/// The pointers always point to the calldata heap or a heap larger than the base page.
+/// This is because heap < base_page in zk_evm means the same as heap == calldata_heap in vm2.
+pub(crate) fn arbitrary_register_value<'a>(
+    u: &mut arbitrary::Unstructured<'a>,
+    calldata_heap: HeapId,
+    base_page: u32,
+) -> arbitrary::Result<(U256, bool)> {
+    Ok(if u.arbitrary()? {
+        (
+            FatPointer {
+                offset: u.arbitrary()?,
+                memory_page: if u.arbitrary()? {
+                    // generate a pointer to calldata
+                    calldata_heap
+                } else {
+                    // generate a pointer to return data
+                    HeapId::from_u32_unchecked(u.int_in_range(base_page..=u32::MAX)?)
+                },
+                start: u.arbitrary()?,
+                length: u.arbitrary()?,
+            }
+            .into_u256(),
+            true,
+        )
+    } else {
+        // generate a value
+        (u.arbitrary()?, false)
+    })
 }
 
 impl<'a> Arbitrary<'a> for Settings {

@@ -1,5 +1,7 @@
-use super::{mock_array::MockRead, validation::is_valid_tagged_value};
-use arbitrary::Arbitrary;
+use super::{
+    mock_array::MockRead, validation::is_valid_tagged_value, vm::arbitrary_register_value,
+};
+use crate::HeapId;
 use u256::U256;
 
 #[derive(PartialEq, Debug, Clone)]
@@ -10,18 +12,20 @@ pub struct Stack {
     pointer_tag_written: bool,
 }
 
-impl<'a> Arbitrary<'a> for Stack {
-    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+impl Stack {
+    pub(crate) fn new_arbitrary<'a>(
+        u: &mut arbitrary::Unstructured<'a>,
+        calldata_heap: HeapId,
+        base_page: u32,
+    ) -> arbitrary::Result<Self> {
         Ok(Self {
-            read: u.arbitrary()?,
+            read: MockRead::new(arbitrary_register_value(u, calldata_heap, base_page)?),
             slot_written: None,
             value_written: 0.into(),
             pointer_tag_written: false,
         })
     }
-}
 
-impl Stack {
     pub(crate) fn get(&self, slot: u16) -> U256 {
         assert!(self.slot_written.is_none());
         self.read.get(slot).0
