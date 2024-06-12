@@ -8,16 +8,27 @@ use zkevm_opcode_defs::erase_fat_pointer_metadata;
 pub(crate) trait Source {
     /// Get a word's value for non-pointer operations. (Pointers are erased.)
     fn get(args: &Arguments, state: &mut impl Addressable) -> U256 {
-        let (mut value, is_pointer) = Self::get_with_pointer_flag(args, state);
-        if is_pointer && !state.in_kernel_mode() {
-            erase_fat_pointer_metadata(&mut value)
-        }
-        value
+        Self::get_with_pointer_flag_and_erasing(args, state).0
     }
 
     /// Get a word's value and pointer flag.
     fn get_with_pointer_flag(args: &Arguments, state: &mut impl Addressable) -> (U256, bool) {
         (Self::get(args, state), false)
+    }
+
+    /// Get a word's value, erasing pointers but also returning the pointer flag.
+    /// The flag will always be false unless in kernel mode.
+    /// Necessary for pointer operations, which for some reason erase their second argument
+    /// but also panic when it was a pointer.
+    fn get_with_pointer_flag_and_erasing(
+        args: &Arguments,
+        state: &mut impl Addressable,
+    ) -> (U256, bool) {
+        let (mut value, is_pointer) = Self::get_with_pointer_flag(args, state);
+        if is_pointer && !state.in_kernel_mode() {
+            erase_fat_pointer_metadata(&mut value)
+        }
+        (value, is_pointer && state.in_kernel_mode())
     }
 }
 
