@@ -71,9 +71,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>
         // overflowing start + length makes the heap resize even when already panicking.
         let already_failed = decommit_result.is_none() || IS_SHARD && abi.shard_id != 0;
 
-        let calldata = get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm, already_failed)?;
-
-        let (unpaid_decommit, is_evm) = decommit_result?;
+        let maybe_calldata = get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm, already_failed);
 
         // mandated gas is passed even if it means transferring more than the 63/64 rule allows
         if let Some(gas_left) = vm.state.current_frame.gas.checked_sub(mandated_gas) {
@@ -83,6 +81,8 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>
             return None;
         };
 
+        let calldata = maybe_calldata?;
+        let (unpaid_decommit, is_evm) = decommit_result?;
         let program = vm.world_diff.pay_for_decommit(
             world,
             unpaid_decommit,
