@@ -13,8 +13,8 @@ pub struct Stack {
 }
 
 impl Stack {
-    pub(crate) fn new_arbitrary<'a>(
-        u: &mut arbitrary::Unstructured<'a>,
+    pub(crate) fn new_arbitrary(
+        u: &mut arbitrary::Unstructured,
         calldata_heap: HeapId,
         base_page: u32,
     ) -> arbitrary::Result<Self> {

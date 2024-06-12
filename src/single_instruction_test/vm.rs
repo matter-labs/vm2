@@ -71,13 +71,13 @@ impl<'a> Arbitrary<'a> for VirtualMachine {
         let mut registers = [U256::zero(); 16];
         let mut register_pointer_flags = 0;
 
-        for i in 1..16 {
+        for (i, register) in registers.iter_mut().enumerate().skip(1) {
             let (value, is_pointer) = arbitrary_register_value(
                 u,
                 current_frame.calldata_heap,
                 current_frame.heap.to_u32() - 2,
             )?;
-            registers[i] = value;
+            *register = value;
             register_pointer_flags |= (is_pointer as u16) << i;
         }
 
@@ -104,8 +104,8 @@ impl<'a> Arbitrary<'a> for VirtualMachine {
 /// Generates a pointer or non-pointer value.
 /// The pointers always point to the calldata heap or a heap larger than the base page.
 /// This is because heap < base_page in zk_evm means the same as heap == calldata_heap in vm2.
-pub(crate) fn arbitrary_register_value<'a>(
-    u: &mut arbitrary::Unstructured<'a>,
+pub(crate) fn arbitrary_register_value(
+    u: &mut arbitrary::Unstructured,
     calldata_heap: HeapId,
     base_page: u32,
 ) -> arbitrary::Result<(U256, bool)> {
