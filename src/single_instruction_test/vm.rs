@@ -111,19 +111,20 @@ pub(crate) fn arbitrary_register_value<'a>(
 ) -> arbitrary::Result<(U256, bool)> {
     Ok(if u.arbitrary()? {
         (
-            FatPointer {
-                offset: u.arbitrary()?,
-                memory_page: if u.arbitrary()? {
-                    // generate a pointer to calldata
-                    calldata_heap
-                } else {
-                    // generate a pointer to return data
-                    HeapId::from_u32_unchecked(u.int_in_range(base_page..=u32::MAX)?)
-                },
-                start: u.arbitrary()?,
-                length: u.arbitrary()?,
-            }
-            .into_u256(),
+            (U256::from(u.arbitrary::<u128>()?) << 128)
+                | FatPointer {
+                    offset: u.arbitrary()?,
+                    memory_page: if u.arbitrary()? {
+                        // generate a pointer to calldata
+                        calldata_heap
+                    } else {
+                        // generate a pointer to return data
+                        HeapId::from_u32_unchecked(u.int_in_range(base_page..=u32::MAX)?)
+                    },
+                    start: u.arbitrary()?,
+                    length: u.arbitrary()?,
+                }
+                .into_u256(),
             true,
         )
     } else {
