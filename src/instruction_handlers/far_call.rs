@@ -183,7 +183,7 @@ pub(crate) fn get_far_call_calldata(
 
     match FatPointerSource::from_abi((raw_abi.0[3] >> 32) as u8) {
         FatPointerSource::ForwardFatPointer => {
-            if !is_pointer || pointer.offset > pointer.length {
+            if !is_pointer || pointer.offset > pointer.length || already_failed {
                 return None;
             }
 
