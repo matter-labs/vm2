@@ -77,6 +77,8 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>
         if let Some(gas_left) = vm.state.current_frame.gas.checked_sub(mandated_gas) {
             vm.state.current_frame.gas = gas_left;
         } else {
+            // If the gas is insufficient, the rest is burned
+            vm.state.current_frame.gas = 0;
             mandated_gas = 0;
             return None;
         };
