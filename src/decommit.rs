@@ -1,8 +1,14 @@
 use crate::{program::Program, world_diff::WorldDiff, World};
-use u256::{H160, U256};
+use u256::{H160, H256, U256};
 use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
+
+pub fn u256_to_h256(num: U256) -> H256 {
+    let mut bytes = [0u8; 32];
+    num.to_big_endian(&mut bytes);
+    H256::from_slice(&bytes)
+}
 
 impl WorldDiff {
     pub(crate) fn decommit(
@@ -67,14 +73,23 @@ impl WorldDiff {
         code_info[1] = 0;
         let code_key: U256 = U256::from_big_endian(&code_info);
 
-        let cost = if self.decommitted_hashes.as_ref().contains_key(&code_key) {
+        println!("code key {:?}", H256::from(code_info));
+        let is_initial = self.decommitted_hashes.as_ref().contains_key(&code_key);
+        let cost = if is_initial {
             0
         } else {
             let code_length_in_words = u16::from_be_bytes([code_info[2], code_info[3]]);
             code_length_in_words as u32 * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT
         };
 
-        Some((UnpaidDecommit { cost, code_key }, is_evm))
+        Some((
+            UnpaidDecommit {
+                cost,
+                code_key,
+                is_initial,
+            },
+            is_evm,
+        ))
     }
 
     pub(crate) fn pay_for_decommit(
@@ -94,8 +109,15 @@ impl WorldDiff {
 }
 
 pub(crate) struct UnpaidDecommit {
-    cost: u32,
-    code_key: U256,
+    pub cost: u32,
+    pub code_key: U256,
+    pub is_initial: bool,
+}
+
+impl UnpaidDecommit {
+    pub fn is_initial(&self) -> bool {
+        self.is_initial
+    }
 }
 
 /// May be used to load code when the VM first starts up.

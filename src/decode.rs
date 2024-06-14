@@ -283,7 +283,12 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
                 out.try_into().unwrap(),
                 arguments,
             ),
-            x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Log(x)),
+            zkevm_opcode_defs::LogOpcode::Decommit => Instruction::from_decommit(
+                src1.try_into().unwrap(),
+                src2,
+                out.try_into().unwrap(),
+                arguments,
+            ),
         },
         zkevm_opcode_defs::Opcode::UMA(x) => {
             let increment = parsed.variant.flags[UMA_INCREMENT_FLAG_IDX];

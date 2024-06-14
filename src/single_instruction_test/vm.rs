@@ -40,11 +40,6 @@ impl VirtualMachine {
     }
 
     pub fn instruction_is_not_precompile_call(&self) -> bool {
-        // TODO PLA-934 implement Decommit
-        if self.current_opcode() == 1093 {
-            return false;
-        }
-
         // TODO PLA-972 implement StaticMemoryRead/Write
         if (1096..=1103).contains(&self.current_opcode()) {
             return false;

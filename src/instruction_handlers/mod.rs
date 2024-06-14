@@ -7,6 +7,7 @@ pub(crate) use ret::{free_panic, PANIC};
 mod binop;
 mod common;
 mod context;
+mod decommit;
 mod event;
 mod far_call;
 mod heap_access;

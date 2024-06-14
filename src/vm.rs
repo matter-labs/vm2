@@ -281,6 +281,7 @@ impl VirtualMachine {
 
     #[cfg(feature = "trace")]
     fn print_instruction(&self, instruction: *const Instruction) {
+        return;
         print!("{:?}: ", unsafe {
             instruction.offset_from(self.state.current_frame.program.instruction(0).unwrap())
         });
