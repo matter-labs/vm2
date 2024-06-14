@@ -90,7 +90,7 @@ impl VirtualMachine {
                     continue;
                 }
 
-                #[cfg(trace)]
+                #[cfg(feature = "trace")]
                 self.print_instruction(instruction);
 
                 if args.predicate().satisfied(&self.state.flags) {
@@ -143,7 +143,7 @@ impl VirtualMachine {
                     continue;
                 }
 
-                #[cfg(trace)]
+                #[cfg(feature = "trace")]
                 self.print_instruction(instruction);
 
                 if args.predicate().satisfied(&self.state.flags) {
@@ -279,7 +279,7 @@ impl VirtualMachine {
             })
     }
 
-    #[cfg(trace)]
+    #[cfg(feature = "trace")]
     fn print_instruction(&self, instruction: *const Instruction) {
         print!("{:?}: ", unsafe {
             instruction.offset_from(&self.state.current_frame.program.instructions()[0])

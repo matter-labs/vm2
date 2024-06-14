@@ -26,3 +26,4 @@ harness = false
 
 [features]
 single_instruction_test = ["arbitrary", "u256/arbitrary", "zk_evm", "anyhow"]
+trace = []
