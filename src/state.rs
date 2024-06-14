@@ -1,7 +1,6 @@
 use crate::{
     addressing_modes::Addressable,
     callframe::Callframe,
-    decommit::u256_into_address,
     fat_pointer::FatPointer,
     heap::{Heaps, CALLDATA_HEAP, FIRST_AUX_HEAP, FIRST_HEAP},
     predication::Flags,
@@ -11,7 +10,7 @@ use crate::{
 };
 use u256::{H160, U256};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct State {
     pub registers: [U256; 16],
     pub(crate) register_pointer_flags: u16,
@@ -31,17 +30,6 @@ pub struct State {
     pub(crate) context_u128: u128,
 }
 
-impl std::fmt::Debug for State {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("State")
-            .field("registers", &self.registers)
-            .field("register_pointer_flags", &self.register_pointer_flags)
-            .field("flags", &self.flags)
-            .field("callframe", &self.current_frame)
-            .finish()
-    }
-}
-
 impl State {
     pub(crate) fn new(
         address: H160,
@@ -52,7 +40,7 @@ impl State {
         world_before_this_frame: Snapshot,
         stack: Box<Stack>,
     ) -> Self {
-        let mut registers = [0.into(); 16];
+        let mut registers: [U256; 16] = Default::default();
         registers[1] = FatPointer {
             memory_page: CALLDATA_HEAP,
             offset: 0,
