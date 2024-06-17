@@ -25,10 +25,6 @@ impl Program {
         self.instructions.get::<usize>(n.into())
     }
 
-    pub fn instructions(&self) -> &[Instruction] {
-        &self.instructions
-    }
-
     pub fn code_page(&self) -> &Arc<[U256]> {
         &self.code_page
     }

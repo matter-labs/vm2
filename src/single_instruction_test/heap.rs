@@ -30,12 +30,12 @@ impl HeapInterface for Heap {
         self.write = Some((start_address, value));
     }
 
-    fn memset(&mut self, mem: &[U256]) {}
-
     fn read_range_big_endian(&self, _: std::ops::Range<u32>) -> Vec<u8> {
         // This is wrong, but this method is only used to get the final return value.
         vec![]
     }
+
+    fn memset(&mut self, _memory: &[U256]) {}
 }
 
 impl<'a> Arbitrary<'a> for Heap {

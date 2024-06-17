@@ -1,11 +1,5 @@
-use u256::{H256, U256};
-use zkevm_opcode_defs::{
-    BlobSha256Format, ContractCodeSha256Format, VersionedHashHeader, VersionedHashLen32,
-    VersionedHashNormalizedPreimage,
-};
-
 use crate::{
-    addressing_modes::{Addressable, Arguments, Destination, Register1, Register2, Source},
+    addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     decommit::UnpaidDecommit,
     fat_pointer::FatPointer,
     instruction::InstructionResult,
@@ -13,12 +7,6 @@ use crate::{
 };
 
 use super::{common::instruction_boilerplate_with_panic, HeapInterface};
-
-pub fn u256_to_h256(num: U256) -> H256 {
-    let mut bytes = [0u8; 32];
-    num.to_big_endian(&mut bytes);
-    H256::from_slice(&bytes)
-}
 
 fn decommit(
     vm: &mut VirtualMachine,
@@ -30,7 +18,7 @@ fn decommit(
         instruction,
         world,
         |vm, args, world, continue_normally| {
-            let extra_cost = Register2::get(args, &mut vm.state).low_u32();
+            let _extra_cost = Register2::get(args, &mut vm.state).low_u32();
             let code_hash = Register1::get(args, &mut vm.state);
 
             /*
@@ -50,7 +38,6 @@ fn decommit(
             let unpaid_decommit = UnpaidDecommit {
                 cost: 1000,
                 code_key: code_hash,
-                is_initial: true,
             };
 
             let decommit_result = vm.world_diff.pay_for_decommit(
@@ -60,30 +47,12 @@ fn decommit(
             );
 
             let heap = vm.state.heaps.allocate();
-            let mut length = decommit_result
-                .as_ref()
-                .unwrap()
-                .code_page()
-                .as_ref()
-                .len()
-                .try_into()
-                .unwrap();
-
+            let program = &decommit_result.unwrap();
+            let decommited_memory = program.code_page().as_ref();
+            let mut length = decommited_memory.len().try_into().unwrap();
             length *= 32;
 
-            for (i, word) in decommit_result
-                .unwrap()
-                .code_page()
-                .as_ref()
-                .iter()
-                .enumerate()
-            {
-                let mut bytes = [0; 32];
-                word.to_big_endian(&mut bytes);
-                let h: H256 = H256::from(bytes);
-
-                vm.state.heaps[heap].write_u256((i * 32) as u32, *word);
-            }
+            vm.state.heaps[heap].memset(decommited_memory);
 
             let value = FatPointer {
                 offset: 0,
