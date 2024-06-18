@@ -106,8 +106,8 @@ impl WorldDiff {
 
 #[derive(Debug)]
 pub(crate) struct UnpaidDecommit {
-    pub cost: u32,
-    pub code_key: U256,
+    cost: u32,
+    code_key: U256,
 }
 
 /// May be used to load code when the VM first starts up.

@@ -51,7 +51,7 @@ impl<'a> Arbitrary<'a> for Heap {
     }
 }
 
-#[derive(Debug, Clone, Arbitrary)]
+#[derive(Debug, Clone)]
 pub struct Heaps {
     heap_id: HeapId,
     pub(crate) read: MockRead<HeapId, Heap>,
@@ -74,6 +74,16 @@ impl Heaps {
 
     pub fn set_heap_id(&mut self, heap_id: HeapId) {
         self.heap_id = heap_id
+    }
+
+    pub(crate) fn from_id(
+        heap_id: HeapId,
+        u: &mut arbitrary::Unstructured<'_>,
+    ) -> arbitrary::Result<Heaps> {
+        Ok(Heaps {
+            heap_id,
+            read: u.arbitrary()?,
+        })
     }
 }
 

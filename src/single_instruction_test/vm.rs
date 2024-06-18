@@ -76,8 +76,8 @@ impl<'a> Arbitrary<'a> for VirtualMachine {
             register_pointer_flags |= (is_pointer as u16) << i;
         }
 
-        let mut heaps: Heaps = u.arbitrary()?;
-        heaps.set_heap_id(current_frame.heap);
+        let heaps = Heaps::from_id(current_frame.heap, u)?;
+
         Ok(Self {
             state: State {
                 registers,

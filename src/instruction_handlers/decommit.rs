@@ -1,7 +1,5 @@
 use u256::U256;
-use zkevm_opcode_defs::{
-    BlobSha256Format, ContractCodeSha256Format, VersionedHashHeader, VersionedHashLen32,
-};
+use zkevm_opcode_defs::{BlobSha256Format, ContractCodeSha256Format, VersionedHashLen32};
 
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
@@ -30,7 +28,6 @@ fn decommit(
 
             let preimage_len_in_bytes =
                 zkevm_opcode_defs::system_params::NEW_KERNEL_FRAME_MEMORY_STIPEND;
-            let mut _decommit_header = VersionedHashHeader::default();
 
             if vm.state.use_gas(extra_cost).is_err() {
                 Register1::set(args, &mut vm.state, U256::zero());
