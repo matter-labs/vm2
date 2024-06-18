@@ -100,7 +100,6 @@ impl WorldDiff {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct UnpaidDecommit {
     cost: u32,
     code_key: U256,
