@@ -1,7 +1,6 @@
 use crate::heap::HeapId;
 use u256::U256;
 
-#[derive(Debug)]
 #[repr(C)]
 pub struct FatPointer {
     pub offset: u32,
