@@ -1,3 +1,4 @@
+
 use crate::{program::Program, world_diff::WorldDiff, World};
 use u256::{H160, U256};
 use zkevm_opcode_defs::{
@@ -77,15 +78,11 @@ impl WorldDiff {
         Some((UnpaidDecommit { cost, code_key }, is_evm))
     }
 
-    pub(crate) fn decommit_opcode(
-        &mut self,
-        world: &mut dyn World,
-        code_hash: U256,
-    ) -> Option<Program> {
+    pub(crate) fn decommit_opcode(&mut self, world: &mut dyn World, code_hash: U256) -> Vec<u8> {
         let mut code_info_bytes = [0; 32];
         code_hash.to_big_endian(&mut code_info_bytes);
         self.decommitted_hashes.insert(code_hash, ());
-        Some(world.decommit(code_hash))
+        world.decommit_code(code_hash)
     }
 
     pub(crate) fn pay_for_decommit(

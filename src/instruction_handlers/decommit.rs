@@ -8,59 +8,46 @@ use crate::{
     Instruction, VirtualMachine, World,
 };
 
-use super::{common::instruction_boilerplate_with_panic, HeapInterface};
+use super::{common::instruction_boilerplate, HeapInterface};
 
 fn decommit(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
     world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(
-        vm,
-        instruction,
-        world,
-        |vm, args, world, continue_normally| {
-            let code_hash = Register1::get(args, &mut vm.state);
-            let extra_cost = Register2::get(args, &mut vm.state).low_u32();
+    instruction_boilerplate(vm, instruction, world, |vm, args, world| {
+        let code_hash = Register1::get(args, &mut vm.state);
+        let extra_cost = Register2::get(args, &mut vm.state).low_u32();
 
-            let mut buffer = [0u8; 32];
-            code_hash.to_big_endian(&mut buffer);
+        let mut buffer = [0u8; 32];
+        code_hash.to_big_endian(&mut buffer);
 
-            let preimage_len_in_bytes =
-                zkevm_opcode_defs::system_params::NEW_KERNEL_FRAME_MEMORY_STIPEND;
+        let preimage_len_in_bytes =
+            zkevm_opcode_defs::system_params::NEW_KERNEL_FRAME_MEMORY_STIPEND;
 
-            if vm.state.use_gas(extra_cost).is_err() {
-                Register1::set(args, &mut vm.state, U256::zero());
-                return continue_normally;
-            }
+        if vm.state.use_gas(extra_cost).is_err()
+            || (!ContractCodeSha256Format::is_valid(&buffer)
+                && !BlobSha256Format::is_valid(&buffer))
+        {
+            Register1::set(args, &mut vm.state, U256::zero());
+            return;
+        }
 
-            if !ContractCodeSha256Format::is_valid(&buffer) && !BlobSha256Format::is_valid(&buffer)
-            {
-                Register1::set(args, &mut vm.state, U256::zero());
-                return continue_normally;
-            };
+        let program = vm.world_diff.decommit_opcode(world, code_hash);
 
-            let Some(program) = vm.world_diff.decommit_opcode(world, code_hash) else {
-                Register1::set(args, &mut vm.state, U256::zero());
-                return continue_normally;
-            };
+        let heap = vm.state.heaps.allocate();
+        vm.state.current_frame.heaps_i_am_keeping_alive.push(heap);
+        vm.state.heaps[heap].memset(program.as_ref());
 
-            let heap = vm.state.heaps.allocate();
-            let decommited_memory = program.code_page().as_ref();
-            vm.state.heaps[heap].memset(decommited_memory);
-
-            let value = FatPointer {
-                offset: 0,
-                memory_page: heap,
-                start: 0,
-                length: preimage_len_in_bytes,
-            };
-            let value = value.into_u256();
-            Register1::set_fat_ptr(args, &mut vm.state, value);
-
-            continue_normally
-        },
-    )
+        let value = FatPointer {
+            offset: 0,
+            memory_page: heap,
+            start: 0,
+            length: preimage_len_in_bytes,
+        };
+        let value = value.into_u256();
+        Register1::set_fat_ptr(args, &mut vm.state, value);
+    })
 }
 impl Instruction {
     pub fn from_decommit(

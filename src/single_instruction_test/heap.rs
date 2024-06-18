@@ -35,10 +35,9 @@ impl HeapInterface for Heap {
         vec![]
     }
 
-    fn memset(&mut self, src: &[U256]) {
-        for (i, word) in src.iter().enumerate() {
-            self.write_u256((i * 32) as u32, *word);
-        }
+    fn memset(&mut self, src: &[u8]) {
+        let u = U256::from_big_endian(src);
+        self.write_u256(0, u);
     }
 }
 
@@ -71,10 +70,6 @@ impl Heaps {
     }
 
     pub(crate) fn deallocate(&mut self, _: HeapId) {}
-
-    pub fn set_heap_id(&mut self, heap_id: HeapId) {
-        self.heap_id = heap_id
-    }
 
     pub(crate) fn from_id(
         heap_id: HeapId,

@@ -21,6 +21,7 @@ pub mod testworld;
 mod vm;
 mod world_diff;
 
+
 use u256::{H160, U256};
 
 pub use decommit::address_into_u256;
@@ -49,6 +50,8 @@ pub trait World {
     /// This will be called *every* time a contract is called. Caching and decoding is
     /// the world implementor's job.
     fn decommit(&mut self, hash: U256) -> Program;
+
+    fn decommit_code(&mut self, hash: U256) -> Vec<u8>;
 
     /// There is no write_storage; [WorldDiff::get_storage_changes] gives a list of all storage changes.
     fn read_storage(&mut self, contract: H160, key: U256) -> Option<U256>;

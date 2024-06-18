@@ -57,10 +57,8 @@ impl HeapInterface for Heap {
         }
         result
     }
-    fn memset(&mut self, src: &[U256]) {
-        for (i, word) in src.iter().enumerate() {
-            self.write_u256((i * 32) as u32, *word);
-        }
+    fn memset(&mut self, src: &[u8]) {
+        self.0 = src.to_vec();
     }
 }
 
