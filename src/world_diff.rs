@@ -376,7 +376,7 @@ mod tests {
                     .map(|(key, value)| (
                         *key,
                         StorageChange {
-                            before: first_changes.get(key).or(initial_values.get(&key)).copied(),
+                            before: first_changes.get(key).or(initial_values.get(key)).copied(),
                             after: *value,
                             is_initial: initial_values.get(key).is_none(),
                             tx_number: 1,
@@ -431,6 +431,10 @@ mod tests {
 
         fn is_free_storage_slot(&self, _: &H160, _: &U256) -> bool {
             false
+        }
+
+        fn decommit_code(&mut self, _: U256) -> Vec<u8> {
+            unimplemented!()
         }
     }
 }

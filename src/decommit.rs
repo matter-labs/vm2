@@ -77,6 +77,13 @@ impl WorldDiff {
         Some((UnpaidDecommit { cost, code_key }, is_evm))
     }
 
+    pub(crate) fn decommit_opcode(&mut self, world: &mut dyn World, code_hash: U256) -> Vec<u8> {
+        let mut code_info_bytes = [0; 32];
+        code_hash.to_big_endian(&mut code_info_bytes);
+        self.decommitted_hashes.insert(code_hash, ());
+        world.decommit_code(code_hash)
+    }
+
     pub(crate) fn pay_for_decommit(
         &mut self,
         world: &mut dyn World,
