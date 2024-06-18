@@ -1,4 +1,4 @@
-use super::stack::StackPool;
+use super::{heap::Heaps, stack::StackPool};
 use crate::{
     callframe::Callframe, fat_pointer::FatPointer, instruction::InstructionResult,
     instruction_handlers::free_panic, HeapId, Instruction, Settings, State, VirtualMachine, World,
@@ -40,17 +40,9 @@ impl VirtualMachine {
     }
 
     pub fn instruction_is_not_precompile_call(&self) -> bool {
-        self.current_opcode() == 1093
-        /*
-                // TODO PLA-972 implement StaticMemoryRead/Write
-                if (1096..=1103).contains(&self.current_opcode()) {
-                    return false;
-                }
-
-                // Precompilecall is not allowed because it accesses memory multiple times
-                // and only needs to work as used by trusted code
-                self.current_opcode() != 1056u64
-        */
+        // Precompilecall is not allowed because it accesses memory multiple times
+        // and only needs to work as used by trusted code
+        self.current_opcode() != 1056u64
     }
 
     pub fn instruction_is_far_call(&self) -> bool {
@@ -79,6 +71,8 @@ impl<'a> Arbitrary<'a> for VirtualMachine {
             register_pointer_flags |= (is_pointer as u16) << i;
         }
 
+        let mut heaps: Heaps = u.arbitrary()?;
+        heaps.set_heap_id(current_frame.heap);
         Ok(Self {
             state: State {
                 registers,
@@ -88,7 +82,7 @@ impl<'a> Arbitrary<'a> for VirtualMachine {
                 // Exiting the final frame is different in vm2 on purpose,
                 // so always generate two frames to avoid that.
                 previous_frames: vec![(0, Callframe::dummy())],
-                heaps: u.arbitrary()?,
+                heaps,
                 transaction_number: u.arbitrary()?,
                 context_u128: u.arbitrary()?,
             },

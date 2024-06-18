@@ -53,7 +53,7 @@ impl<'a> Arbitrary<'a> for Heap {
 
 #[derive(Debug, Clone, Arbitrary)]
 pub struct Heaps {
-    heap_id: u32,
+    heap_id: HeapId,
     pub(crate) read: MockRead<HeapId, Heap>,
 }
 
@@ -67,12 +67,12 @@ impl Heaps {
     }
 
     pub(crate) fn allocate(&mut self) -> HeapId {
-        HeapId::from_u32_unchecked(self.heap_id)
+        self.heap_id
     }
 
     pub(crate) fn deallocate(&mut self, _: HeapId) {}
 
-    pub fn set_heap_id(&mut self, heap_id: u32) {
+    pub fn set_heap_id(&mut self, heap_id: HeapId) {
         self.heap_id = heap_id
     }
 }

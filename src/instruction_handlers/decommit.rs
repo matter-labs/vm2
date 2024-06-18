@@ -1,7 +1,6 @@
 use u256::U256;
 use zkevm_opcode_defs::{
     BlobSha256Format, ContractCodeSha256Format, VersionedHashHeader, VersionedHashLen32,
-    VersionedHashNormalizedPreimage,
 };
 
 use crate::{
@@ -26,54 +25,31 @@ fn decommit(
             let code_hash = Register1::get(args, &mut vm.state);
             let extra_cost = Register2::get(args, &mut vm.state).low_u32();
 
-            let mut decommit_preimage_format_is_invalid = false;
             let mut buffer = [0u8; 32];
             code_hash.to_big_endian(&mut buffer);
-            let mut _decommit_preimage_normalized = VersionedHashNormalizedPreimage::default();
 
-            let mut preimage_len_in_bytes =
+            let preimage_len_in_bytes =
                 zkevm_opcode_defs::system_params::NEW_KERNEL_FRAME_MEMORY_STIPEND;
             let mut _decommit_header = VersionedHashHeader::default();
-
-            if ContractCodeSha256Format::is_valid(&buffer) {
-                let (header, normalized_preimage) =
-                    ContractCodeSha256Format::normalize_for_decommitment(&buffer);
-                _decommit_header = header;
-                _decommit_preimage_normalized = normalized_preimage;
-            } else if BlobSha256Format::is_valid(&buffer) {
-                let (header, normalized_preimage) =
-                    BlobSha256Format::normalize_for_decommitment(&buffer);
-                _decommit_header = header;
-                _decommit_preimage_normalized = normalized_preimage;
-            } else {
-                preimage_len_in_bytes = 0;
-                decommit_preimage_format_is_invalid = true;
-            };
 
             if vm.state.use_gas(extra_cost).is_err() {
                 Register1::set(args, &mut vm.state, U256::zero());
                 return continue_normally;
             }
 
-            if decommit_preimage_format_is_invalid {
-                let value = U256::zero();
-                Register1::set(args, &mut vm.state, value);
-                return continue_normally;
-            }
-
-            let Some(unpaid_decommit) = vm.world_diff.decommit_opcode(code_hash) else {
+            if !ContractCodeSha256Format::is_valid(&buffer) && !BlobSha256Format::is_valid(&buffer)
+            {
                 Register1::set(args, &mut vm.state, U256::zero());
                 return continue_normally;
             };
 
-            let decommit_result = vm.world_diff.unpaid_decommit(world, unpaid_decommit);
+            let Some(program) = vm.world_diff.decommit_opcode(world, code_hash) else {
+                Register1::set(args, &mut vm.state, U256::zero());
+                return continue_normally;
+            };
 
             let heap = vm.state.heaps.allocate();
-            let program = &decommit_result.unwrap();
             let decommited_memory = program.code_page().as_ref();
-            let mut _length: u32 = decommited_memory.len().try_into().unwrap();
-            _length *= 32;
-
             vm.state.heaps[heap].memset(decommited_memory);
 
             let value = FatPointer {

@@ -77,21 +77,15 @@ impl WorldDiff {
         Some((UnpaidDecommit { cost, code_key }, is_evm))
     }
 
-    pub(crate) fn decommit_opcode(&mut self, code_hash: U256) -> Option<UnpaidDecommit> {
+    pub(crate) fn decommit_opcode(
+        &mut self,
+        world: &mut dyn World,
+        code_hash: U256,
+    ) -> Option<Program> {
         let mut code_info_bytes = [0; 32];
         code_hash.to_big_endian(&mut code_info_bytes);
-
-        let cost = if self.decommitted_hashes.as_ref().contains_key(&code_hash) {
-            0
-        } else {
-            let code_length_in_words = u16::from_be_bytes([code_info_bytes[2], code_info_bytes[3]]);
-            code_length_in_words as u32 * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT
-        };
-
-        Some(UnpaidDecommit {
-            cost,
-            code_key: code_hash,
-        })
+        self.decommitted_hashes.insert(code_hash, ());
+        Some(world.decommit(code_hash))
     }
 
     pub(crate) fn pay_for_decommit(
@@ -105,15 +99,6 @@ impl WorldDiff {
             return None;
         }
         *gas -= decommit.cost;
-        self.decommitted_hashes.insert(decommit.code_key, ());
-        Some(world.decommit(decommit.code_key))
-    }
-
-    pub(crate) fn unpaid_decommit(
-        &mut self,
-        world: &mut dyn World,
-        decommit: UnpaidDecommit,
-    ) -> Option<Program> {
         self.decommitted_hashes.insert(decommit.code_key, ());
         Some(world.decommit(decommit.code_key))
     }
