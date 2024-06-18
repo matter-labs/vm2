@@ -21,7 +21,6 @@ pub mod testworld;
 mod vm;
 mod world_diff;
 
-
 use u256::{H160, U256};
 
 pub use decommit::address_into_u256;

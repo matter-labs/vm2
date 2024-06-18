@@ -1,4 +1,3 @@
-
 use crate::{program::Program, world_diff::WorldDiff, World};
 use u256::{H160, U256};
 use zkevm_opcode_defs::{
