@@ -35,7 +35,11 @@ impl HeapInterface for Heap {
         vec![]
     }
 
-    fn memset(&mut self, _memory: &[U256]) {}
+    fn memset(&mut self, src: &[U256]) {
+        for (i, word) in src.iter().enumerate() {
+            self.write_u256((i * 32) as u32, *word);
+        }
+    }
 }
 
 impl<'a> Arbitrary<'a> for Heap {
@@ -49,6 +53,7 @@ impl<'a> Arbitrary<'a> for Heap {
 
 #[derive(Debug, Clone, Arbitrary)]
 pub struct Heaps {
+    heap_id: u32,
     pub(crate) read: MockRead<HeapId, Heap>,
 }
 
@@ -62,10 +67,14 @@ impl Heaps {
     }
 
     pub(crate) fn allocate(&mut self) -> HeapId {
-        HeapId(3)
+        HeapId::from_u32_unchecked(self.heap_id)
     }
 
     pub(crate) fn deallocate(&mut self, _: HeapId) {}
+
+    pub fn set_heap_id(&mut self, heap_id: u32) {
+        self.heap_id = heap_id
+    }
 }
 
 impl Index<HeapId> for Heaps {

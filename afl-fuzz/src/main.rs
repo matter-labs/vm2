@@ -8,6 +8,9 @@ fn main() {
             if vm.is_in_valid_state() && vm.instruction_is_not_precompile_call() {
                 // Tests that running one instruction and converting to zk_evm produces the same result as
                 // first converting to zk_evm and then running one instruction.
+                vm.state
+                    .heaps
+                    .set_heap_id(vm.state.current_frame.heap.to_u32());
 
                 let mut zk_evm = vm2_to_zk_evm(
                     &vm,
