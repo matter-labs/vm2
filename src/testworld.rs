@@ -48,6 +48,18 @@ impl World for TestWorld {
         }
     }
 
+    fn decommit_code(&mut self, hash: U256) -> Vec<u8> {
+        self.decommit(hash)
+            .code_page()
+            .iter()
+            .flat_map(|u256| {
+                let mut buffer = [0u8; 32];
+                u256.to_big_endian(&mut buffer);
+                buffer
+            })
+            .collect()
+    }
+
     fn read_storage(&mut self, contract: u256::H160, key: u256::U256) -> Option<U256> {
         let deployer_system_contract_address =
             Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);

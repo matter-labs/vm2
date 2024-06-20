@@ -1,8 +1,8 @@
 use super::ret::INVALID_INSTRUCTION;
 use crate::{
     addressing_modes::{
-        AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Immediate1, Register1,
-        RelativeStack, Source,
+        AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Destination,
+        Immediate1, Register1, RelativeStack, Source,
     },
     instruction::{Instruction, InstructionResult},
     VirtualMachine, World,
@@ -10,28 +10,33 @@ use crate::{
 
 fn jump<In: Source>(
     vm: &mut VirtualMachine,
-    mut instruction: *const Instruction,
+    instruction: *const Instruction,
     _: &mut dyn World,
 ) -> InstructionResult {
     unsafe {
-        let target = In::get(&(*instruction).arguments, &mut vm.state).low_u32() as u16;
-        if let Some(i) = vm.state.current_frame.program.instruction(target) {
-            instruction = i;
-        } else {
-            return Ok(&INVALID_INSTRUCTION);
-        }
+        let args = &(*instruction).arguments;
+        let target = In::get(args, &mut vm.state).low_u32() as u16;
 
-        Ok(instruction)
+        let next_instruction = vm.state.current_frame.pc_to_u16(instruction) + 1;
+        Register1::set(args, &mut vm.state, next_instruction.into());
+
+        if let Some(instruction) = vm.state.current_frame.program.instruction(target) {
+            Ok(instruction)
+        } else {
+            Ok(&INVALID_INSTRUCTION)
+        }
     }
 }
 
 use super::monomorphization::*;
 
 impl Instruction {
-    pub fn from_jump(source: AnySource, arguments: Arguments) -> Self {
+    pub fn from_jump(source: AnySource, destination: Register1, arguments: Arguments) -> Self {
         Self {
             handler: monomorphize!(jump match_source source),
-            arguments: arguments.write_source(&source),
+            arguments: arguments
+                .write_source(&source)
+                .write_destination(&destination),
         }
     }
 }
