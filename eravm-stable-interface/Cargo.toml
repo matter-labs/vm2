@@ -1,0 +1,7 @@
+[package]
+name = "eravm-stable-interface"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+u256 = { package = "primitive-types", version = "0.12.1" }

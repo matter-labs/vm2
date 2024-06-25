@@ -15,7 +15,7 @@ use zkevm_opcode_defs::system_params::{
 #[derive(Default)]
 pub struct WorldDiff {
     // These are rolled back on revert or panic (and when the whole VM is rolled back).
-    storage_changes: RollbackableMap<(H160, U256), (u16, U256)>,
+    storage_changes: RollbackableMap<(H160, U256), U256>,
     paid_changes: RollbackableMap<(H160, U256), u32>,
     transient_storage_changes: RollbackableMap<(H160, U256), U256>,
     events: RollbackableLog<Event>,
@@ -72,7 +72,6 @@ impl WorldDiff {
             .as_ref()
             .get(&(contract, key))
             .cloned()
-            .map(|v| v.1)
             .unwrap_or_else(|| world.read_storage(contract, key).unwrap_or_default());
 
         let refund = if world.is_free_storage_slot(&contract, &key)
@@ -94,10 +93,8 @@ impl WorldDiff {
         contract: H160,
         key: U256,
         value: U256,
-        tx_number: u16,
     ) -> u32 {
-        self.storage_changes
-            .insert((contract, key), (tx_number, value));
+        self.storage_changes.insert((contract, key), value);
 
         let initial_value = self
             .storage_initial_values
@@ -136,21 +133,21 @@ impl WorldDiff {
         refund
     }
 
-    pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), (u16, U256)> {
+    pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
         self.storage_changes.as_ref()
     }
 
     pub fn get_storage_changes(
         &self,
-    ) -> impl Iterator<Item = ((H160, U256), (u16, Option<U256>, U256))> + '_ {
+    ) -> impl Iterator<Item = ((H160, U256), (Option<U256>, U256))> + '_ {
         self.storage_changes
             .as_ref()
             .iter()
-            .filter_map(|(key, &(tx_number, value))| {
+            .filter_map(|(key, &value)| {
                 if self.storage_initial_values[key].unwrap_or_default() == value {
                     None
                 } else {
-                    Some((*key, (tx_number, self.storage_initial_values[key], value)))
+                    Some((*key, (self.storage_initial_values[key], value)))
                 }
             })
     }
@@ -162,14 +159,13 @@ impl WorldDiff {
         self.storage_changes
             .changes_after(snapshot.storage_changes)
             .into_iter()
-            .map(|(key, (before, (tx_id, after)))| {
+            .map(|(key, (before, after))| {
                 let initial = self.storage_initial_values[&key];
                 (
                     key,
                     StorageChange {
-                        before: before.map(|x| x.1).or(initial),
+                        before: before.or(initial),
                         after,
-                        tx_number: tx_id,
                         is_initial: initial.is_none(),
                     },
                 )
@@ -313,7 +309,6 @@ pub struct Snapshot {
 pub struct StorageChange {
     pub before: Option<U256>,
     pub after: U256,
-    pub tx_number: u16,
     /// `true` if the slot is not set in the World.
     /// A write may be initial even if it isn't the first write to a slot!
     pub is_initial: bool,
@@ -343,7 +338,7 @@ mod tests {
 
             let checkpoint1 = world_diff.snapshot();
             for (key, value) in &first_changes {
-                world_diff.write_storage(&mut NoWorld, key.0, key.1, *value, 0);
+                world_diff.write_storage(&mut NoWorld, key.0, key.1, *value);
             }
             assert_eq!(
                 world_diff
@@ -357,7 +352,6 @@ mod tests {
                             before: initial_values.get(key).copied(),
                             after: *value,
                             is_initial: initial_values.get(key).is_none(),
-                            tx_number: 0,
                         }
                     ))
                     .collect()
@@ -365,7 +359,7 @@ mod tests {
 
             let checkpoint2 = world_diff.snapshot();
             for (key, value) in &second_changes {
-                world_diff.write_storage(&mut NoWorld, key.0, key.1, *value, 1);
+                world_diff.write_storage(&mut NoWorld, key.0, key.1, *value);
             }
             assert_eq!(
                 world_diff
@@ -376,10 +370,9 @@ mod tests {
                     .map(|(key, value)| (
                         *key,
                         StorageChange {
-                            before: first_changes.get(key).or(initial_values.get(&key)).copied(),
+                            before: first_changes.get(key).or(initial_values.get(key)).copied(),
                             after: *value,
                             is_initial: initial_values.get(key).is_none(),
-                            tx_number: 1,
                         }
                     ))
                     .collect()
@@ -389,13 +382,13 @@ mod tests {
                 .into_iter()
                 .filter_map(|(key, value)| {
                     let initial = initial_values.get(&key).copied();
-                    (initial.unwrap_or_default() != value).then_some((key, (0, initial, value)))
+                    (initial.unwrap_or_default() != value).then_some((key, (initial, value)))
                 })
                 .collect::<BTreeMap<_, _>>();
             for (key, value) in second_changes {
                 let initial = initial_values.get(&key).copied();
                 if initial.unwrap_or_default() != value {
-                    combined.insert(key, (1, initial, value));
+                    combined.insert(key, (initial, value));
                 } else {
                     combined.remove(&key);
                 }
@@ -431,6 +424,10 @@ mod tests {
 
         fn is_free_storage_slot(&self, _: &H160, _: &U256) -> bool {
             false
+        }
+
+        fn decommit_code(&mut self, _: U256) -> Vec<u8> {
+            unimplemented!()
         }
     }
 }

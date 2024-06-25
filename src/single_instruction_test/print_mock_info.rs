@@ -14,14 +14,14 @@ impl VirtualMachine {
 
 impl State {
     pub fn print_mock_info(&self) {
-        if let Some(heap) = self.heaps.read.read_that_happened() {
-            println!("Heap: {:?}", heap);
-        }
-        if let Some((address, value)) = self.heaps.read.value_read.read.read_that_happened() {
-            println!("  {value:?} read from {address:?}");
-        }
-        if let Some((address, value)) = self.heaps.read.value_read.write {
-            println!("  {value:?} written to {address:?}");
+        if let Some((heapid, heap)) = self.heaps.read.read_that_happened() {
+            println!("Heap: {:?}", heapid);
+            if let Some((address, value)) = heap.read.read_that_happened() {
+                println!("  {value:?} read from {address:?}");
+            }
+            if let Some((address, value)) = heap.write {
+                println!("  {value:?} written to {address:?}");
+            }
         }
 
         println!("Current frame:");

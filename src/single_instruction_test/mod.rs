@@ -18,6 +18,6 @@ mod validation;
 mod vm;
 mod world;
 
-pub use into_zk_evm::{vm2_to_zk_evm, NoTracer};
+pub use into_zk_evm::{add_heap_to_zk_evm, vm2_to_zk_evm, NoTracer};
 pub use universal_state::UniversalVmState;
 pub use world::MockWorld;

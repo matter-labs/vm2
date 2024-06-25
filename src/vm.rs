@@ -76,18 +76,24 @@ impl VirtualMachine {
         unsafe {
             loop {
                 let args = &(*instruction).arguments;
-                let Ok(_) = self.state.use_gas(args.get_static_gas_cost()) else {
+
+                if self.state.use_gas(args.get_static_gas_cost()).is_err()
+                    || !args.mode_requirements().met(
+                        self.state.current_frame.is_kernel,
+                        self.state.current_frame.is_static,
+                    )
+                {
                     instruction = match free_panic(self, world) {
                         Ok(i) => i,
                         Err(e) => return e,
                     };
                     continue;
-                };
+                }
 
-                #[cfg(trace)]
+                #[cfg(feature = "trace")]
                 self.print_instruction(instruction);
 
-                if args.predicate.satisfied(&self.state.flags) {
+                if args.predicate().satisfied(&self.state.flags) {
                     instruction = match ((*instruction).handler)(self, instruction, world) {
                         Ok(n) => n,
                         Err(e) => return e,
@@ -123,18 +129,24 @@ impl VirtualMachine {
         let end = unsafe {
             loop {
                 let args = &(*instruction).arguments;
-                let Ok(_) = self.state.use_gas(args.get_static_gas_cost()) else {
+
+                if self.state.use_gas(args.get_static_gas_cost()).is_err()
+                    || !args.mode_requirements().met(
+                        self.state.current_frame.is_kernel,
+                        self.state.current_frame.is_static,
+                    )
+                {
                     instruction = match free_panic(self, world) {
                         Ok(i) => i,
                         Err(end) => break end,
                     };
                     continue;
-                };
+                }
 
-                #[cfg(trace)]
+                #[cfg(feature = "trace")]
                 self.print_instruction(instruction);
 
-                if args.predicate.satisfied(&self.state.flags) {
+                if args.predicate().satisfied(&self.state.flags) {
                     instruction = match ((*instruction).handler)(self, instruction, world) {
                         Ok(n) => n,
                         Err(end) => break end,
@@ -217,7 +229,7 @@ impl VirtualMachine {
             } else {
                 self.state.context_u128
             },
-            is_static || self.state.current_frame.is_static,
+            is_static,
             world_before_this_frame,
         );
         self.state.context_u128 = 0;
@@ -267,10 +279,10 @@ impl VirtualMachine {
             })
     }
 
-    #[cfg(trace)]
+    #[cfg(feature = "trace")]
     fn print_instruction(&self, instruction: *const Instruction) {
         print!("{:?}: ", unsafe {
-            instruction.offset_from(&self.state.current_frame.program.instructions()[0])
+            instruction.offset_from(self.state.current_frame.program.instruction(0).unwrap())
         });
         self.state.registers[1..]
             .iter()

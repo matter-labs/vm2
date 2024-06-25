@@ -3,7 +3,7 @@ use vm2::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register, Register1},
     initial_decommit,
     testworld::TestWorld,
-    ExecutionEnd, Instruction, Predicate, Program, VirtualMachine,
+    ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, VirtualMachine,
 };
 use zkevm_opcode_defs::ethereum_types::Address;
 
@@ -15,15 +15,15 @@ proptest! {
                 Register1(Register::new(0)),
                 Immediate1(1),
                 Immediate2(0xFFFF),
-                Arguments::new(Predicate::Always, 25),
+                Arguments::new(Predicate::Always, 25, ModeRequirements::none()),
             ),
-            Instruction::from_panic(Some(Immediate1(label)), Arguments::new(Predicate::Always, 5)),
+            Instruction::from_panic(Some(Immediate1(label)), Arguments::new(Predicate::Always, 5, ModeRequirements::none())),
         ];
         for _ in 0..98 {
             instructions.push(Instruction::from_ret(
                 Register1(Register::new(0)),
                 None,
-                Arguments::new(Predicate::Always, 5),
+                Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
             ));
         }
 
