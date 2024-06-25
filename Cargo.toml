@@ -32,4 +32,4 @@ trace = []
 single_instruction_test = ["arbitrary", "u256/arbitrary", "zk_evm", "anyhow"]
 
 [workspace]
-members = [".", "afl-fuzz"]
+members = [".", "afl-fuzz", "eravm-stable-interface"]
