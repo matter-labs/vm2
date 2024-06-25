@@ -1,4 +1,4 @@
-workspace = { members = ["afl-fuzz"] }
+workspace = { members = ["afl-fuzz", "eravm-stable-interface"] }
 [package]
 name = "vm2"
 version = "0.1.0"
