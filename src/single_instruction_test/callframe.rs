@@ -35,7 +35,7 @@ impl<'a> Arbitrary<'a> for Callframe {
             context_u128: u.arbitrary()?,
             is_static: u.arbitrary()?,
             is_kernel: is_kernel(address),
-            stack: Box::new(Stack::new_arbitrary(u, calldata_heap, base_page)?),
+            stack: Stack::new_arbitrary(u, calldata_heap, base_page)?,
             sp: u.arbitrary()?,
             // It is assumed that it is always possible to add the stipend
             gas: u.int_in_range(0..=u32::MAX - EVM_SIMULATOR_STIPEND)?,

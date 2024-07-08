@@ -16,7 +16,7 @@ pub struct Callframe {
     pub is_static: bool,
     pub is_kernel: bool,
 
-    pub stack: Box<Stack>,
+    pub stack: Stack,
     pub sp: u16,
 
     pub gas: u32,
@@ -64,7 +64,7 @@ impl Callframe {
         code_address: H160,
         caller: H160,
         program: Program,
-        stack: Box<Stack>,
+        stack: Stack,
         heap: HeapId,
         aux_heap: HeapId,
         calldata_heap: HeapId,

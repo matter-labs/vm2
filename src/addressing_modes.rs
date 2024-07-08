@@ -46,12 +46,10 @@ pub trait Addressable {
     fn register_pointer_flags(&mut self) -> &mut u16;
 
     fn read_stack(&mut self, slot: u16) -> U256;
-    fn write_stack(&mut self, slot: u16, value: U256);
-    fn stack_pointer(&mut self) -> &mut u16;
+    fn read_stack_and_pointer_flag(&mut self, slot: u16) -> (U256, bool);
 
-    fn read_stack_pointer_flag(&mut self, slot: u16) -> bool;
-    fn set_stack_pointer_flag(&mut self, slot: u16);
-    fn clear_stack_pointer_flag(&mut self, slot: u16);
+    fn write_stack(&mut self, slot: u16, value: U256, is_pointer: bool);
+    fn stack_pointer(&mut self) -> &mut u16;
 
     fn code_page(&self) -> &[U256];
 
@@ -298,24 +296,19 @@ trait StackAddressing {
 impl<T: StackAddressing> Source for T {
     fn get_with_pointer_flag(args: &Arguments, state: &mut impl Addressable) -> (U256, bool) {
         let address = Self::address_for_get(args, state);
-        (
-            state.read_stack(address),
-            state.read_stack_pointer_flag(address),
-        )
+        state.read_stack_and_pointer_flag(address)
     }
 }
 
 impl<T: StackAddressing> Destination for T {
     fn set(args: &Arguments, state: &mut impl Addressable, value: U256) {
         let address = Self::address_for_set(args, state);
-        state.write_stack(address, value);
-        state.clear_stack_pointer_flag(address);
+        state.write_stack(address, value, false);
     }
 
     fn set_fat_ptr(args: &Arguments, state: &mut impl Addressable, value: U256) {
         let address = Self::address_for_set(args, state);
-        state.write_stack(address, value);
-        state.set_stack_pointer_flag(address);
+        state.write_stack(address, value, true);
     }
 }
 

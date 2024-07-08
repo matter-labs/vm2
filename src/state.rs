@@ -38,7 +38,7 @@ impl State {
         gas: u32,
         program: Program,
         world_before_this_frame: Snapshot,
-        stack: Box<Stack>,
+        stack: Stack,
     ) -> Self {
         let mut registers: [U256; 16] = Default::default();
         registers[1] = FatPointer {
@@ -112,6 +112,7 @@ impl Addressable for State {
     fn registers(&mut self) -> &mut [U256; 16] {
         &mut self.registers
     }
+
     fn register_pointer_flags(&mut self) -> &mut u16 {
         &mut self.register_pointer_flags
     }
@@ -119,21 +120,17 @@ impl Addressable for State {
     fn read_stack(&mut self, slot: u16) -> U256 {
         self.current_frame.stack.get(slot)
     }
-    fn write_stack(&mut self, slot: u16, value: U256) {
-        self.current_frame.stack.set(slot, value)
-    }
-    fn stack_pointer(&mut self) -> &mut u16 {
-        &mut self.current_frame.sp
+
+    fn read_stack_and_pointer_flag(&mut self, slot: u16) -> (U256, bool) {
+        self.current_frame.stack.get_with_pointer_flag(slot)
     }
 
-    fn read_stack_pointer_flag(&mut self, slot: u16) -> bool {
-        self.current_frame.stack.get_pointer_flag(slot)
+    fn write_stack(&mut self, slot: u16, value: U256, is_pointer: bool) {
+        self.current_frame.stack.set(slot, value, is_pointer)
     }
-    fn set_stack_pointer_flag(&mut self, slot: u16) {
-        self.current_frame.stack.set_pointer_flag(slot)
-    }
-    fn clear_stack_pointer_flag(&mut self, slot: u16) {
-        self.current_frame.stack.clear_pointer_flag(slot)
+
+    fn stack_pointer(&mut self) -> &mut u16 {
+        &mut self.current_frame.sp
     }
 
     fn code_page(&self) -> &[U256] {

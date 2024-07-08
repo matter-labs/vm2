@@ -46,7 +46,7 @@ pub fn vm2_to_zk_evm(
         storage: MockWorldWrapper(world),
         memory: MockMemory {
             code_page: vm.state.current_frame.program.code_page().clone(),
-            stack: *vm.state.current_frame.stack.clone(),
+            stack: vm.state.current_frame.stack.clone(),
             heap_read: None,
             heap_write: None,
         },
@@ -124,15 +124,9 @@ impl Memory for MockMemory {
             MemoryType::Stack => {
                 let slot = query.location.index.0 as u16;
                 if query.rw_flag {
-                    self.stack.set(slot, query.value);
-                    if query.value_is_pointer {
-                        self.stack.set_pointer_flag(slot);
-                    } else {
-                        self.stack.clear_pointer_flag(slot);
-                    }
+                    self.stack.set(slot, query.value, query.value_is_pointer);
                 } else {
-                    query.value = self.stack.get(slot);
-                    query.value_is_pointer = self.stack.get_pointer_flag(slot);
+                    (query.value, query.value_is_pointer) = self.stack.get_with_pointer_flag(slot);
                 }
                 query
             }

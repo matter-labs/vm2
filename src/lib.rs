@@ -1,8 +1,6 @@
 extern crate core;
 
 pub mod addressing_modes;
-#[cfg(not(feature = "single_instruction_test"))]
-mod bitset;
 mod callframe;
 pub mod decode;
 mod decommit;

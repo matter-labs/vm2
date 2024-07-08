@@ -31,24 +31,15 @@ impl Stack {
         self.read.get(slot).0
     }
 
-    pub(crate) fn get_pointer_flag(&self, slot: u16) -> bool {
+    pub(crate) fn get_with_pointer_flag(&self, slot: u16) -> (U256, bool) {
         assert!(self.slot_written.is_none());
-        self.read.get(slot).1
+        *self.read.get(slot)
     }
 
-    pub(crate) fn set(&mut self, slot: u16, value: U256) {
+    pub(crate) fn set(&mut self, slot: u16, value: U256, is_pointer: bool) {
         self.assert_write_to_same_slot(slot);
         self.value_written = value;
-    }
-
-    pub(crate) fn set_pointer_flag(&mut self, slot: u16) {
-        self.assert_write_to_same_slot(slot);
-        self.pointer_tag_written = true;
-    }
-
-    pub(crate) fn clear_pointer_flag(&mut self, slot: u16) {
-        self.assert_write_to_same_slot(slot);
-        self.pointer_tag_written = false;
+        self.pointer_tag_written = is_pointer;
     }
 
     fn assert_write_to_same_slot(&mut self, slot: u16) {
@@ -78,16 +69,16 @@ impl Stack {
 pub struct StackPool {}
 
 impl StackPool {
-    pub fn get(&mut self) -> Box<Stack> {
+    pub fn get(&mut self) -> Stack {
         // A single instruction shouldn't be able to touch a new stack
         // but the stack is set to already written just in case.
-        Box::new(Stack {
+        Stack {
             read: MockRead::new((U256::zero(), false)),
             slot_written: Some(45678),
             value_written: U256::zero(),
             pointer_tag_written: false,
-        })
+        }
     }
 
-    pub fn recycle(&mut self, _: Box<Stack>) {}
+    pub fn recycle(&mut self, _: Stack) {}
 }
