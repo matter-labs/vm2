@@ -1,4 +1,3 @@
-workspace = { members = ["afl-fuzz"] }
 [package]
 name = "vm2"
 version = "0.1.0"
@@ -25,5 +24,9 @@ name = "nested_near_call"
 harness = false
 
 [features]
+default = []
 single_instruction_test = ["arbitrary", "u256/arbitrary", "zk_evm", "anyhow"]
 trace = []
+
+[workspace]
+members = [".", "afl-fuzz"]

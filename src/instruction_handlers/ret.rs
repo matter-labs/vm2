@@ -98,10 +98,7 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
 
             return if let Some(return_value) = return_value_or_panic {
                 let output = vm.state.heaps[return_value.memory_page]
-                    .read_range_big_endian(
-                        return_value.start..return_value.start + return_value.length,
-                    )
-                    .to_vec();
+                    .read_range(return_value.start, return_value.length);
                 if return_type == ReturnType::Revert {
                     Err(ExecutionEnd::Reverted(output))
                 } else {

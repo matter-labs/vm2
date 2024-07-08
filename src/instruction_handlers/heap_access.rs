@@ -16,7 +16,7 @@ pub trait HeapInterface {
     fn read_u256(&self, start_address: u32) -> U256;
     fn read_u256_partially(&self, range: Range<u32>) -> U256;
     fn write_u256(&mut self, start_address: u32, value: U256);
-    fn read_range_big_endian(&self, range: Range<u32>) -> Vec<u8>;
+    fn read_range(&self, offset: u32, length: u32) -> Vec<u8>;
     fn memset(&mut self, memory: &[u8]);
 }
 

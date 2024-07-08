@@ -30,7 +30,7 @@ impl HeapInterface for Heap {
         self.write = Some((start_address, value));
     }
 
-    fn read_range_big_endian(&self, _: std::ops::Range<u32>) -> Vec<u8> {
+    fn read_range(&self, _offset: u32, _length: u32) -> Vec<u8> {
         // This is wrong, but this method is only used to get the final return value.
         vec![]
     }
