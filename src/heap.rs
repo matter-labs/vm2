@@ -2,6 +2,7 @@ use crate::instruction_handlers::HeapInterface;
 use std::{
     collections::HashMap,
     ops::{Index, IndexMut, Range},
+    rc::Rc,
 };
 use u256::U256;
 use zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND;
@@ -25,11 +26,14 @@ const HEAP_PAGE_SIZE: usize = 1 << 12;
 
 /// Heap page.
 #[derive(Debug, Clone, PartialEq)]
-struct HeapPage(Box<[u8]>);
+struct HeapPage(Rc<[u8; HEAP_PAGE_SIZE]>);
 
 impl Default for HeapPage {
     fn default() -> Self {
-        Self(vec![0_u8; HEAP_PAGE_SIZE].into())
+        // FIXME: try reusing pages (w/ thread-local arena tied to execution?)
+        let boxed_slice: Box<[u8]> = vec![0_u8; HEAP_PAGE_SIZE].into();
+        let boxed_slice: Box<[u8; HEAP_PAGE_SIZE]> = boxed_slice.try_into().unwrap();
+        Self(boxed_slice.into())
     }
 }
 
@@ -44,9 +48,10 @@ impl Heap {
         let pages = bytes
             .chunks(HEAP_PAGE_SIZE)
             .map(|bytes| {
-                let mut page = HeapPage::default();
-                page.0[..bytes.len()].copy_from_slice(bytes);
-                page
+                let boxed_slice: Box<[u8]> = vec![0_u8; HEAP_PAGE_SIZE].into();
+                let mut boxed_slice: Box<[u8; HEAP_PAGE_SIZE]> = boxed_slice.try_into().unwrap();
+                boxed_slice[..bytes.len()].copy_from_slice(bytes);
+                HeapPage(boxed_slice.into())
             })
             .enumerate()
             .collect();
@@ -94,12 +99,12 @@ impl HeapInterface for Heap {
         let (page_idx, offset_in_page) = (offset >> 12, offset & (HEAP_PAGE_SIZE - 1));
         let len_in_page = 32.min(HEAP_PAGE_SIZE - offset_in_page);
         let page = self.pages.entry(page_idx).or_default();
-        page.0[offset_in_page..(offset_in_page + len_in_page)]
+        Rc::make_mut(&mut page.0)[offset_in_page..(offset_in_page + len_in_page)]
             .copy_from_slice(&bytes[..len_in_page]);
 
         if len_in_page < 32 {
             let page = self.pages.entry(page_idx + 1).or_default();
-            page.0[..32 - len_in_page].copy_from_slice(&bytes[len_in_page..]);
+            Rc::make_mut(&mut page.0)[..32 - len_in_page].copy_from_slice(&bytes[len_in_page..]);
         }
     }
 
