@@ -2,7 +2,6 @@ use crate::instruction_handlers::HeapInterface;
 use std::{
     collections::HashMap,
     ops::{Index, IndexMut, Range},
-    rc::Rc,
 };
 use u256::U256;
 use zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND;
@@ -26,14 +25,12 @@ const HEAP_PAGE_SIZE: usize = 1 << 12;
 
 /// Heap page.
 #[derive(Debug, Clone, PartialEq)]
-struct HeapPage(Rc<[u8; HEAP_PAGE_SIZE]>);
+struct HeapPage(Box<[u8]>);
 
 impl Default for HeapPage {
     fn default() -> Self {
         // FIXME: try reusing pages (w/ thread-local arena tied to execution?)
-        let boxed_slice: Box<[u8]> = vec![0_u8; HEAP_PAGE_SIZE].into();
-        let boxed_slice: Box<[u8; HEAP_PAGE_SIZE]> = boxed_slice.try_into().unwrap();
-        Self(boxed_slice.into())
+        Self(vec![0_u8; HEAP_PAGE_SIZE].into())
     }
 }
 
@@ -48,10 +45,9 @@ impl Heap {
         let pages = bytes
             .chunks(HEAP_PAGE_SIZE)
             .map(|bytes| {
-                let boxed_slice: Box<[u8]> = vec![0_u8; HEAP_PAGE_SIZE].into();
-                let mut boxed_slice: Box<[u8; HEAP_PAGE_SIZE]> = boxed_slice.try_into().unwrap();
+                let mut boxed_slice: Box<[u8]> = vec![0_u8; HEAP_PAGE_SIZE].into();
                 boxed_slice[..bytes.len()].copy_from_slice(bytes);
-                HeapPage(boxed_slice.into())
+                HeapPage(boxed_slice)
             })
             .enumerate()
             .collect();
@@ -99,12 +95,12 @@ impl HeapInterface for Heap {
         let (page_idx, offset_in_page) = (offset >> 12, offset & (HEAP_PAGE_SIZE - 1));
         let len_in_page = 32.min(HEAP_PAGE_SIZE - offset_in_page);
         let page = self.pages.entry(page_idx).or_default();
-        Rc::make_mut(&mut page.0)[offset_in_page..(offset_in_page + len_in_page)]
+        page.0[offset_in_page..(offset_in_page + len_in_page)]
             .copy_from_slice(&bytes[..len_in_page]);
 
         if len_in_page < 32 {
             let page = self.pages.entry(page_idx + 1).or_default();
-            Rc::make_mut(&mut page.0)[..32 - len_in_page].copy_from_slice(&bytes[len_in_page..]);
+            page.0[..32 - len_in_page].copy_from_slice(&bytes[len_in_page..]);
         }
     }
 
@@ -323,5 +319,46 @@ mod tests {
         let heap = Heap::with_capacity(NEW_FRAME_MEMORY_STIPEND as usize);
         assert_eq!(heap.pages.len(), 1);
         assert_eq!(*heap.pages[&0].0, [0_u8; 4096]);
+    }
+
+    #[test]
+    fn creating_heap_from_bytes() {
+        let bytes: Vec<_> = (0..=u8::MAX).collect();
+        let heap = Heap::from_bytes(&bytes);
+        assert_eq!(heap.pages.len(), 1);
+
+        assert_eq!(heap.read_range(0, 256), bytes);
+        for offset in 0..256 - 32 {
+            let value = heap.read_u256(offset as u32);
+            assert_eq!(value, U256::from_big_endian(&bytes[offset..offset + 32]));
+        }
+
+        // Test larger heap with multiple pages.
+        let bytes: Vec<_> = (0..HEAP_PAGE_SIZE * 5 / 2).map(|byte| byte as u8).collect();
+        let heap = Heap::from_bytes(&bytes);
+        assert_eq!(heap.pages.len(), 3);
+
+        assert_eq!(heap.read_range(0, HEAP_PAGE_SIZE as u32 * 5 / 2), bytes);
+        for len in [
+            1,
+            10,
+            100,
+            HEAP_PAGE_SIZE / 3,
+            HEAP_PAGE_SIZE / 2,
+            HEAP_PAGE_SIZE,
+            2 * HEAP_PAGE_SIZE,
+        ] {
+            for offset in 0..(HEAP_PAGE_SIZE * 5 / 2 - len) {
+                assert_eq!(
+                    heap.read_range(offset as u32, len as u32),
+                    bytes[offset..offset + len]
+                );
+            }
+        }
+
+        for offset in 0..HEAP_PAGE_SIZE * 5 / 2 - 32 {
+            let value = heap.read_u256(offset as u32);
+            assert_eq!(value, U256::from_big_endian(&bytes[offset..offset + 32]));
+        }
     }
 }
