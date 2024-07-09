@@ -80,6 +80,14 @@ impl Heaps {
             read: u.arbitrary()?,
         })
     }
+
+    pub(crate) fn root_snapshot(&self) -> HeapsSnapshot {
+        self.clone()
+    }
+
+    pub(crate) fn restore_from_snapshot(&mut self, snapshot: HeapsSnapshot) {
+        *self = snapshot;
+    }
 }
 
 impl Index<HeapId> for Heaps {
@@ -115,3 +123,5 @@ impl HeapId {
         self.0
     }
 }
+
+pub(crate) type HeapsSnapshot = Heaps;

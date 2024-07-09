@@ -161,6 +161,26 @@ impl Heaps {
     pub(crate) fn deallocate(&mut self, heap: HeapId) {
         self.0[heap.0 as usize] = Heap::default();
     }
+
+    /// Creates a heaps snapshot for the root callframe. This uses a fact that all heaps other than `FIRST_HEAP` and `FIRST_AUX_HEAP`
+    /// are immutable for this frame.
+    pub(crate) fn root_snapshot(&self) -> HeapsSnapshot {
+        HeapsSnapshot {
+            mutable_heaps: vec![
+                (FIRST_HEAP, self[FIRST_HEAP].clone()),
+                (FIRST_AUX_HEAP, self[FIRST_AUX_HEAP].clone()),
+            ],
+            len: self.0.len(),
+        }
+    }
+
+    /// Restores the heaps from the provided snapshot.
+    pub(crate) fn restore_from_snapshot(&mut self, snapshot: HeapsSnapshot) {
+        self.0.truncate(snapshot.len);
+        for (heap_id, heap) in snapshot.mutable_heaps {
+            self[heap_id] = heap;
+        }
+    }
 }
 
 impl Index<HeapId> for Heaps {
@@ -188,6 +208,13 @@ impl PartialEq for Heaps {
         }
         true
     }
+}
+
+/// Snapshot of [`Heaps`].
+#[derive(Debug)]
+pub(crate) struct HeapsSnapshot {
+    mutable_heaps: Vec<(HeapId, Heap)>,
+    len: usize,
 }
 
 #[cfg(test)]

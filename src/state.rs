@@ -2,7 +2,7 @@ use crate::{
     addressing_modes::Addressable,
     callframe::Callframe,
     fat_pointer::FatPointer,
-    heap::{Heaps, CALLDATA_HEAP, FIRST_AUX_HEAP, FIRST_HEAP},
+    heap::{Heaps, HeapsSnapshot, CALLDATA_HEAP, FIRST_AUX_HEAP, FIRST_HEAP},
     predication::Flags,
     program::Program,
     stack::Stack,
@@ -10,7 +10,7 @@ use crate::{
 };
 use u256::{H160, U256};
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(PartialEq, Debug)]
 pub struct State {
     pub registers: [U256; 16],
     pub(crate) register_pointer_flags: u16,
@@ -106,6 +106,30 @@ impl State {
     pub(crate) fn get_context_u128(&self) -> u128 {
         self.current_frame.context_u128
     }
+
+    pub(crate) fn root_snapshot(&self) -> StateSnapshot {
+        assert!(self.previous_frames.is_empty());
+        StateSnapshot {
+            registers: self.registers,
+            register_pointer_flags: self.register_pointer_flags,
+            flags: self.flags.clone(),
+            current_frame: self.current_frame.clone(),
+            heaps: self.heaps.root_snapshot(),
+            transaction_number: self.transaction_number,
+            context_u128: self.context_u128,
+        }
+    }
+
+    pub(crate) fn restore_from_snapshot(&mut self, snapshot: StateSnapshot) {
+        self.registers = snapshot.registers;
+        self.register_pointer_flags = snapshot.register_pointer_flags;
+        self.flags = snapshot.flags;
+        self.current_frame = snapshot.current_frame;
+        self.previous_frames = vec![];
+        self.heaps.restore_from_snapshot(snapshot.heaps);
+        self.transaction_number = snapshot.transaction_number;
+        self.context_u128 = snapshot.context_u128;
+    }
 }
 
 impl Addressable for State {
@@ -140,4 +164,16 @@ impl Addressable for State {
     fn in_kernel_mode(&self) -> bool {
         self.current_frame.is_kernel
     }
+}
+
+/// Snapshot of the VM [`State`].
+#[derive(Debug)]
+pub(crate) struct StateSnapshot {
+    registers: [U256; 16],
+    register_pointer_flags: u16,
+    flags: Flags,
+    current_frame: Callframe,
+    heaps: HeapsSnapshot,
+    transaction_number: u16,
+    context_u128: u128,
 }
