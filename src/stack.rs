@@ -1,86 +1,75 @@
-use std::collections::HashMap;
+use crate::bitset::Bitset;
 use u256::U256;
 
 #[derive(Debug, Clone, PartialEq)]
-struct StackPage {
-    words: Box<[U256; 128]>,
-    pointer_bitset: u128,
-}
-
-impl Default for StackPage {
-    fn default() -> Self {
-        let words: Box<[U256]> = vec![U256::zero(); 128].into();
-        Self {
-            words: words.try_into().unwrap(),
-            pointer_bitset: 0,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct Stack {
-    pages: HashMap<usize, StackPage>,
+    words: Vec<U256>,
+    pointer_bitset: Box<Bitset>,
 }
 
 impl Stack {
-    // Preallocate the first page in any case.
+    /// Number of pre-allocated words in the stack.
+    const INITIAL_WORD_CAPACITY: usize = 128; // 4kB
+
     fn new() -> Self {
         Self {
-            pages: HashMap::from([(0, StackPage::default())]),
+            words: vec![U256::zero(); Self::INITIAL_WORD_CAPACITY],
+            pointer_bitset: Box::default(),
         }
     }
 
     pub(crate) fn get(&self, slot: u16) -> U256 {
-        let slot = slot as usize;
-        let (page_idx, offset_on_page) = (slot >> 7, slot & 127);
-        if let Some(page) = self.pages.get(&page_idx) {
-            page.words[offset_on_page]
-        } else {
-            U256::zero()
-        }
+        self.words.get(slot as usize).copied().unwrap_or_default()
     }
 
     pub(crate) fn get_with_pointer_flag(&self, slot: u16) -> (U256, bool) {
-        let slot = slot as usize;
-        let (page_idx, offset_on_page) = (slot >> 7, slot & 127);
-        if let Some(page) = self.pages.get(&page_idx) {
-            let bitmask = 1_u128 << offset_on_page;
-            (
-                page.words[offset_on_page],
-                page.pointer_bitset & bitmask != 0,
-            )
-        } else {
-            (U256::zero(), false)
-        }
+        let value = self.words.get(slot as usize).copied().unwrap_or_default();
+        (value, self.pointer_bitset.get(slot))
     }
 
     pub(crate) fn set(&mut self, slot: u16, value: U256, is_pointer: bool) {
-        let slot = slot as usize;
-        let (page_idx, offset_on_page) = (slot >> 7, slot & 127);
-        let page = self.pages.entry(page_idx).or_default();
-        page.words[offset_on_page] = value;
-
-        let bitmask = 1_u128 << offset_on_page;
         if is_pointer {
-            page.pointer_bitset |= bitmask;
+            self.pointer_bitset.set(slot);
         } else {
-            page.pointer_bitset &= !bitmask;
+            self.pointer_bitset.clear(slot);
         }
+
+        let slot = slot as usize;
+        if self.words.len() <= slot {
+            self.words.resize(slot + 1, U256::zero());
+        }
+        self.words[slot] = value;
+    }
+
+    fn zero(&mut self) {
+        self.words.fill(U256::zero());
+        self.pointer_bitset = Box::default();
     }
 }
 
 #[derive(Default)]
 pub struct StackPool {
-    _data: (),
+    stacks: Vec<Stack>,
 }
 
 impl StackPool {
     pub fn get(&mut self) -> Stack {
-        Stack::new()
+        self.stacks
+            .pop()
+            .map(|mut stack| {
+                stack.zero();
+                stack
+            })
+            .unwrap_or_else(Stack::new)
     }
 
-    pub fn recycle(&mut self, _stack: Stack) {
-        // Does nothing
+    pub fn recycle(&mut self, mut stack: Stack) {
+        // We don't want to have large stacks reused because zeroizing them would require non-trivial effort.
+        const MAX_STACK_CAPACITY_TO_REUSE: usize = 1_024; // 32kB
+
+        stack.words.truncate(MAX_STACK_CAPACITY_TO_REUSE);
+        stack.words.shrink_to(MAX_STACK_CAPACITY_TO_REUSE);
+        self.stacks.push(stack);
     }
 }
 
