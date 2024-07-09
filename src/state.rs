@@ -10,7 +10,7 @@ use crate::{
 };
 use u256::{H160, U256};
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct State {
     pub registers: [U256; 16],
     pub(crate) register_pointer_flags: u16,
