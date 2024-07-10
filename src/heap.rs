@@ -1,8 +1,8 @@
 use crate::instruction_handlers::HeapInterface;
 use std::{
-    collections::HashMap,
     ops::{Index, IndexMut, Range},
 };
+use ahash::HashMap;
 use u256::U256;
 use zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND;
 

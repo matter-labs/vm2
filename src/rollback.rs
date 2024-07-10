@@ -1,4 +1,5 @@
-use std::collections::BTreeMap;
+use ahash::HashMap;
+use std::hash::Hash;
 
 /// A trait for things that can be rolled back to snapshots
 pub(crate) trait Rollback {
@@ -9,34 +10,34 @@ pub(crate) trait Rollback {
 }
 
 #[derive(Default)]
-pub struct RollbackableMap<K: Ord, V> {
-    map: BTreeMap<K, V>,
+pub struct RollbackableMap<K, V> {
+    map: HashMap<K, V>,
     old_entries: Vec<(K, Option<V>)>,
 }
 
-impl<K: Ord + Clone, V: Clone> RollbackableMap<K, V> {
+impl<K: Eq + Hash + Copy, V: Copy> RollbackableMap<K, V> {
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
-        let old_value = self.map.insert(key.clone(), value);
-        self.old_entries.push((key.clone(), old_value.clone()));
+        let old_value = self.map.insert(key, value);
+        self.old_entries.push((key, old_value));
         old_value
     }
 
     pub(crate) fn changes_after(
         &self,
         snapshot: <Self as Rollback>::Snapshot,
-    ) -> BTreeMap<K, (Option<V>, V)> {
-        let mut changes = BTreeMap::new();
-        for (key, old_value) in self.old_entries[snapshot..].iter().rev() {
+    ) -> HashMap<K, (Option<V>, V)> {
+        let mut changes = HashMap::default();
+        for &(key, old_value) in self.old_entries[snapshot..].iter().rev() {
             changes
-                .entry(key.clone())
-                .and_modify(|(old, _): &mut (Option<V>, V)| old.clone_from(old_value))
-                .or_insert((old_value.clone(), self.map.get(key).unwrap().clone()));
+                .entry(key)
+                .and_modify(|(old, _)| *old = old_value)
+                .or_insert((old_value, self.map[&key]));
         }
         changes
     }
 }
 
-impl<K: Ord, V> Rollback for RollbackableMap<K, V> {
+impl<K: Eq + Hash + Copy, V: Copy> Rollback for RollbackableMap<K, V> {
     type Snapshot = usize;
 
     fn snapshot(&self) -> Self::Snapshot {
@@ -58,15 +59,15 @@ impl<K: Ord, V> Rollback for RollbackableMap<K, V> {
     }
 }
 
-impl<K: Ord, V> AsRef<BTreeMap<K, V>> for RollbackableMap<K, V> {
-    fn as_ref(&self) -> &BTreeMap<K, V> {
+impl<K, V> AsRef<HashMap<K, V>> for RollbackableMap<K, V> {
+    fn as_ref(&self) -> &HashMap<K, V> {
         &self.map
     }
 }
 
 pub type RollbackableSet<T> = RollbackableMap<T, ()>;
 
-impl<T: Ord + Clone> RollbackableSet<T> {
+impl<T: Eq + Hash + Copy> RollbackableSet<T> {
     pub fn add(&mut self, key: T) {
         self.insert(key, ());
     }

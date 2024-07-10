@@ -14,6 +14,7 @@ enum_dispatch = "0.3"
 arbitrary = { version = "1", features = ["derive"], optional = true }
 zk_evm = { git = "https://github.com/matter-labs/era-zk_evm.git", branch = "jms-remove-assert", optional = true }
 anyhow = { version = "1", optional = true }
+ahash = "0.8"
 
 [dev-dependencies]
 divan = "0.1"

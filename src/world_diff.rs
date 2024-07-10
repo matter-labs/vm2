@@ -1,5 +1,4 @@
-use std::collections::BTreeMap;
-
+use ahash::HashMap;
 use crate::{
     rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackablePod, RollbackableSet},
     World,
@@ -28,7 +27,7 @@ pub struct WorldDiff {
     written_storage_slots: RollbackableSet<(H160, U256)>,
 
     // This is never rolled back. It is just a cache to avoid asking these from DB every time.
-    storage_initial_values: BTreeMap<(H160, U256), Option<U256>>,
+    storage_initial_values: HashMap<(H160, U256), Option<U256>>,
 }
 
 pub struct ExternalSnapshot {
@@ -71,8 +70,10 @@ impl WorldDiff {
             .storage_changes
             .as_ref()
             .get(&(contract, key))
-            .cloned()
-            .unwrap_or_else(|| world.read_storage(contract, key).unwrap_or_default());
+            .copied()
+            .unwrap_or_else(|| {
+                self.read_and_cache_initial_value(world, contract, key).unwrap_or_default()
+            });
 
         let refund = if world.is_free_storage_slot(&contract, &key)
             || self.read_storage_slots.contains(&(contract, key))
@@ -86,6 +87,18 @@ impl WorldDiff {
         (value, refund)
     }
 
+    fn read_and_cache_initial_value(
+        &mut self,
+        world: &mut dyn World,
+        contract: H160,
+        key: U256,
+    ) -> Option<U256> {
+        *self
+            .storage_initial_values
+            .entry((contract, key))
+            .or_insert_with(|| world.read_storage(contract, key))
+    }
+
     /// Returns the refund based the hot/cold status of the storage slot and the change in pubdata.
     pub(crate) fn write_storage(
         &mut self,
@@ -96,16 +109,12 @@ impl WorldDiff {
     ) -> u32 {
         self.storage_changes.insert((contract, key), value);
 
-        let initial_value = self
-            .storage_initial_values
-            .entry((contract, key))
-            .or_insert_with(|| world.read_storage(contract, key));
-
+        let initial_value = self.read_and_cache_initial_value(world, contract, key);
         if world.is_free_storage_slot(&contract, &key) {
             return WARM_WRITE_REFUND;
         }
 
-        let update_cost = world.cost_of_writing_storage(*initial_value, value);
+        let update_cost = world.cost_of_writing_storage(initial_value, value);
         let prepaid = self
             .paid_changes
             .insert((contract, key), update_cost)
@@ -133,10 +142,11 @@ impl WorldDiff {
         refund
     }
 
-    pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
+    pub fn get_storage_state(&self) -> &HashMap<(H160, U256), U256> {
         self.storage_changes.as_ref()
     }
 
+    /// Changes are returned in no particular order; the caller must not rely on any specific ordering used.
     pub fn get_storage_changes(
         &self,
     ) -> impl Iterator<Item = ((H160, U256), (Option<U256>, U256))> + '_ {
@@ -152,6 +162,7 @@ impl WorldDiff {
             })
     }
 
+    /// Changes are returned in no particular order; the caller must not rely on any specific ordering used.
     pub fn get_storage_changes_after(
         &self,
         snapshot: &Snapshot,
@@ -212,7 +223,7 @@ impl WorldDiff {
         self.l2_to_l1_logs.logs_after(snapshot.l2_to_l1_logs)
     }
 
-    pub fn get_decommitted_hashes(&self) -> &BTreeMap<U256, ()> {
+    pub fn get_decommitted_hashes(&self) -> &HashMap<U256, ()> {
         self.decommitted_hashes.as_ref()
     }
 
@@ -321,6 +332,7 @@ const COLD_WRITE_AFTER_WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
     use proptest::prelude::*;
 
     proptest! {
