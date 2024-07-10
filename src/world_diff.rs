@@ -20,7 +20,9 @@ pub struct WorldDiff {
     transient_storage_changes: RollbackableMap<(H160, U256), U256>,
     events: RollbackableLog<Event>,
     l2_to_l1_logs: RollbackableLog<L2ToL1Log>,
-    pub pubdata: RollbackablePod<i32>,
+    pub(crate) pubdata: RollbackablePod<i32>,
+    storage_refunds: RollbackableLog<u32>,
+    pubdata_costs: RollbackableLog<i32>,
 
     // The fields below are only rolled back when the whole VM is rolled back.
     pub(crate) decommitted_hashes: RollbackableSet<U256>,
@@ -67,11 +69,34 @@ impl WorldDiff {
         contract: H160,
         key: U256,
     ) -> (U256, u32) {
+        let (value, refund) = self.read_storage_inner(world, contract, key);
+        self.storage_refunds.push(refund);
+        (value, refund)
+    }
+
+    /// Same as [`Self::read_storage()`], but without recording the refund value (which is important
+    /// because the storage is read not only from the `sload` op handler, but also from the `farcall` op handler;
+    /// the latter must not record a refund as per previous VM versions).
+    pub(crate) fn read_storage_without_refund(
+        &mut self,
+        world: &mut dyn World,
+        contract: H160,
+        key: U256,
+    ) -> U256 {
+        self.read_storage_inner(world, contract, key).0
+    }
+
+    fn read_storage_inner(
+        &mut self,
+        world: &mut dyn World,
+        contract: H160,
+        key: U256,
+    ) -> (U256, u32) {
         let value = self
             .storage_changes
             .as_ref()
             .get(&(contract, key))
-            .cloned()
+            .copied()
             .unwrap_or_else(|| world.read_storage(contract, key).unwrap_or_default());
 
         let refund = if world.is_free_storage_slot(&contract, &key)
@@ -82,7 +107,7 @@ impl WorldDiff {
             self.read_storage_slots.add((contract, key));
             0
         };
-
+        self.pubdata_costs.push(0);
         (value, refund)
     }
 
@@ -102,6 +127,8 @@ impl WorldDiff {
             .or_insert_with(|| world.read_storage(contract, key));
 
         if world.is_free_storage_slot(&contract, &key) {
+            self.storage_refunds.push(WARM_WRITE_REFUND);
+            self.pubdata_costs.push(0);
             return WARM_WRITE_REFUND;
         }
 
@@ -128,9 +155,23 @@ impl WorldDiff {
             }
         };
 
-        self.pubdata.0 += (update_cost as i32) - (prepaid as i32);
-
+        let pubdata_cost = (update_cost as i32) - (prepaid as i32);
+        self.pubdata.0 += pubdata_cost;
+        self.storage_refunds.push(refund);
+        self.pubdata_costs.push(pubdata_cost);
         refund
+    }
+
+    pub fn pubdata(&self) -> i32 {
+        self.pubdata.0
+    }
+
+    pub fn storage_refunds(&self) -> &[u32] {
+        self.storage_refunds.as_ref()
+    }
+
+    pub fn pubdata_costs(&self) -> &[i32] {
+        self.pubdata_costs.as_ref()
     }
 
     pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
@@ -173,17 +214,16 @@ impl WorldDiff {
     }
 
     pub(crate) fn read_transient_storage(&mut self, contract: H160, key: U256) -> U256 {
-        let value = self
-            .transient_storage_changes
+        self.pubdata_costs.push(0);
+        self.transient_storage_changes
             .as_ref()
             .get(&(contract, key))
-            .cloned()
-            .unwrap_or_default();
-
-        value
+            .copied()
+            .unwrap_or_default()
     }
 
     pub(crate) fn write_transient_storage(&mut self, contract: H160, key: U256, value: U256) {
+        self.pubdata_costs.push(0);
         self.transient_storage_changes
             .insert((contract, key), value);
     }
@@ -227,27 +267,23 @@ impl WorldDiff {
             l2_to_l1_logs: self.l2_to_l1_logs.snapshot(),
             transient_storage_changes: self.transient_storage_changes.snapshot(),
             pubdata: self.pubdata.snapshot(),
+            storage_refunds: self.storage_refunds.snapshot(),
+            pubdata_costs: self.pubdata_costs.snapshot(),
         }
     }
 
-    pub(crate) fn rollback(
-        &mut self,
-        Snapshot {
-            storage_changes,
-            paid_changes,
-            events,
-            l2_to_l1_logs,
-            transient_storage_changes,
-            pubdata,
-        }: Snapshot,
-    ) {
-        self.storage_changes.rollback(storage_changes);
-        self.paid_changes.rollback(paid_changes);
-        self.events.rollback(events);
-        self.l2_to_l1_logs.rollback(l2_to_l1_logs);
+    pub(crate) fn rollback(&mut self, snapshot: Snapshot, rollback_io_history: bool) {
+        self.storage_changes.rollback(snapshot.storage_changes);
+        self.paid_changes.rollback(snapshot.paid_changes);
+        self.events.rollback(snapshot.events);
+        self.l2_to_l1_logs.rollback(snapshot.l2_to_l1_logs);
         self.transient_storage_changes
-            .rollback(transient_storage_changes);
-        self.pubdata.rollback(pubdata);
+            .rollback(snapshot.transient_storage_changes);
+        self.pubdata.rollback(snapshot.pubdata);
+        if rollback_io_history {
+            self.storage_refunds.rollback(snapshot.storage_refunds);
+            self.pubdata_costs.rollback(snapshot.pubdata_costs);
+        }
     }
 
     /// This function must only be called during the initial frame
@@ -269,7 +305,7 @@ impl WorldDiff {
     }
 
     pub(crate) fn external_rollback(&mut self, snapshot: ExternalSnapshot) {
-        self.rollback(snapshot.internal_snapshot);
+        self.rollback(snapshot.internal_snapshot, true);
         self.decommitted_hashes
             .rollback(snapshot.decommitted_hashes);
         self.read_storage_slots
@@ -303,6 +339,8 @@ pub struct Snapshot {
     l2_to_l1_logs: <RollbackableLog<L2ToL1Log> as Rollback>::Snapshot,
     transient_storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
     pubdata: <RollbackablePod<i32> as Rollback>::Snapshot,
+    storage_refunds: <RollbackableLog<u32> as Rollback>::Snapshot,
+    pubdata_costs: <RollbackableLog<i32> as Rollback>::Snapshot,
 }
 
 #[derive(Debug, PartialEq)]

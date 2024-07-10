@@ -19,8 +19,8 @@ impl WorldDiff {
         let mut is_evm = false;
 
         let mut code_info = {
-            let (code_info, _) =
-                self.read_storage(world, deployer_system_contract_address, address);
+            let code_info =
+                self.read_storage_without_refund(world, deployer_system_contract_address, address);
             let mut code_info_bytes = [0; 32];
             code_info.to_big_endian(&mut code_info_bytes);
 
