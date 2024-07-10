@@ -1,11 +1,10 @@
-use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{
         AbsoluteStack, Addressable, AdvanceStackPointer, AnyDestination, AnySource, Arguments,
         CodePage, Destination, DestinationWriter, Immediate1, Register1, Register2, RelativeStack,
         Source,
     },
-    instruction::{Instruction, InstructionResult},
+    instruction::{Handler, Instruction},
     predication::Flags,
     VirtualMachine, World,
 };
@@ -13,21 +12,19 @@ use u256::U256;
 
 fn binop<Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SET_FLAGS: bool>(
     vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
-        let a = In1::get(args, &mut vm.state);
-        let b = Register2::get(args, &mut vm.state);
-        let (a, b) = if SWAP { (b, a) } else { (a, b) };
+    args: &Arguments,
+    _world: &mut dyn World,
+) {
+    let a = In1::get(args, &mut vm.state);
+    let b = Register2::get(args, &mut vm.state);
+    let (a, b) = if SWAP { (b, a) } else { (a, b) };
 
-        let (result, out2, flags) = Op::perform(&a, &b);
-        Out::set(args, &mut vm.state, result);
-        out2.write(args, &mut vm.state);
-        if SET_FLAGS {
-            vm.state.flags = flags;
-        }
-    })
+    let (result, out2, flags) = Op::perform(&a, &b);
+    Out::set(args, &mut vm.state, result);
+    out2.write(args, &mut vm.state);
+    if SET_FLAGS {
+        vm.state.flags = flags;
+    }
 }
 
 pub trait Binop {
@@ -214,7 +211,9 @@ impl Instruction {
         set_flags: bool,
     ) -> Self {
         Self {
-            handler: monomorphize!(binop [Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
+            handler: Handler::Sequential(
+                monomorphize!(binop [Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
+            ),
             arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)

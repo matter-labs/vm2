@@ -1,23 +1,16 @@
-use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Source},
     decommit::address_into_u256,
-    instruction::InstructionResult,
+    instruction::{Handler, Instruction},
     state::State,
-    Instruction, VirtualMachine, World,
+    VirtualMachine, World,
 };
 use u256::U256;
 use zkevm_opcode_defs::VmMetaParameters;
 
-fn context<Op: ContextOp>(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
-        let result = Op::get(&vm.state);
-        Register1::set(args, &mut vm.state, result)
-    })
+fn context<Op: ContextOp>(vm: &mut VirtualMachine, args: &Arguments, _world: &mut dyn World) {
+    let result = Op::get(&vm.state);
+    Register1::set(args, &mut vm.state, result);
 }
 
 trait ContextOp {
@@ -66,66 +59,42 @@ impl ContextOp for SP {
     }
 }
 
-fn context_meta(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
-        let result = VmMetaParameters {
-            heap_size: vm.state.current_frame.heap_size,
-            aux_heap_size: vm.state.current_frame.aux_heap_size,
-            this_shard_id: 0, // TODO properly implement shards
-            caller_shard_id: 0,
-            code_shard_id: 0,
-            // This field is actually pubdata!
-            aux_field_0: if vm.state.current_frame.is_kernel {
-                vm.world_diff.pubdata.0 as u32
-            } else {
-                0
-            },
-        }
-        .to_u256();
+fn context_meta(vm: &mut VirtualMachine, args: &Arguments, _world: &mut dyn World) {
+    let result = VmMetaParameters {
+        heap_size: vm.state.current_frame.heap_size,
+        aux_heap_size: vm.state.current_frame.aux_heap_size,
+        this_shard_id: 0, // TODO properly implement shards
+        caller_shard_id: 0,
+        code_shard_id: 0,
+        // This field is actually pubdata!
+        aux_field_0: if vm.state.current_frame.is_kernel {
+            vm.world_diff.pubdata.0 as u32
+        } else {
+            0
+        },
+    }
+    .to_u256();
 
-        Register1::set(args, &mut vm.state, result);
-    })
+    Register1::set(args, &mut vm.state, result);
 }
 
-fn set_context_u128(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
-        let value = Register1::get(args, &mut vm.state).low_u128();
-        vm.state.set_context_u128(value);
-    })
+fn set_context_u128(vm: &mut VirtualMachine, args: &Arguments, _world: &mut dyn World) {
+    let value = Register1::get(args, &mut vm.state).low_u128();
+    vm.state.set_context_u128(value);
 }
 
-fn increment_tx_number(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, _, _| {
-        vm.start_new_tx();
-    })
+fn increment_tx_number(vm: &mut VirtualMachine, _args: &Arguments, _world: &mut dyn World) {
+    vm.start_new_tx();
 }
 
-fn aux_mutating(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |_, _, _| {
-        // This instruction just crashes or nops
-    })
+fn aux_mutating(_vm: &mut VirtualMachine, _args: &Arguments, _world: &mut dyn World) {
+    // This instruction just crashes or nops
 }
 
 impl Instruction {
     fn from_context<Op: ContextOp>(out: Register1, arguments: Arguments) -> Self {
         Self {
-            handler: context::<Op>,
+            handler: Handler::Sequential(context::<Op>),
             arguments: arguments.write_destination(&out),
         }
     }
@@ -150,25 +119,25 @@ impl Instruction {
     }
     pub fn from_context_meta(out: Register1, arguments: Arguments) -> Self {
         Self {
-            handler: context_meta,
+            handler: Handler::Sequential(context_meta),
             arguments: arguments.write_destination(&out),
         }
     }
     pub fn from_set_context_u128(src: Register1, arguments: Arguments) -> Self {
         Self {
-            handler: set_context_u128,
+            handler: Handler::Sequential(set_context_u128),
             arguments: arguments.write_source(&src),
         }
     }
     pub fn from_increment_tx_number(arguments: Arguments) -> Self {
         Self {
-            handler: increment_tx_number,
+            handler: Handler::Sequential(increment_tx_number),
             arguments,
         }
     }
     pub fn from_aux_mutating(arguments: Arguments) -> Self {
         Self {
-            handler: aux_mutating,
+            handler: Handler::Sequential(aux_mutating),
             arguments,
         }
     }

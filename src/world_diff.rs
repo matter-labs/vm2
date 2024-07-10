@@ -1,8 +1,8 @@
-use ahash::HashMap;
 use crate::{
     rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackablePod, RollbackableSet},
     World,
 };
+use ahash::HashMap;
 use u256::{H160, U256};
 use zkevm_opcode_defs::system_params::{
     STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST, STORAGE_ACCESS_WARM_READ_COST,
@@ -72,7 +72,8 @@ impl WorldDiff {
             .get(&(contract, key))
             .copied()
             .unwrap_or_else(|| {
-                self.read_and_cache_initial_value(world, contract, key).unwrap_or_default()
+                self.read_and_cache_initial_value(world, contract, key)
+                    .unwrap_or_default()
             });
 
         let refund = if world.is_free_storage_slot(&contract, &key)
@@ -332,8 +333,8 @@ const COLD_WRITE_AFTER_WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeMap;
     use proptest::prelude::*;
+    use std::collections::BTreeMap;
 
     proptest! {
         #[test]

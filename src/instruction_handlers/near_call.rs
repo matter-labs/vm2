@@ -1,6 +1,6 @@
 use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Source},
-    instruction::InstructionResult,
+    instruction::{Handler, InstructionResult},
     predication::Flags,
     Instruction, VirtualMachine, World,
 };
@@ -46,7 +46,7 @@ impl Instruction {
         arguments: Arguments,
     ) -> Self {
         Self {
-            handler: near_call,
+            handler: Handler::Jump(near_call),
             arguments: arguments
                 .write_source(&gas)
                 .write_source(&destination)

@@ -16,9 +16,25 @@ impl Debug for Instruction {
     }
 }
 
-pub(crate) type Handler =
-    fn(&mut VirtualMachine, *const Instruction, &mut dyn World) -> InstructionResult;
+#[derive(Debug)]
+pub(crate) enum Handler {
+    Sequential(SequentialHandler),
+    Fallible(FallibleHandler),
+    Jump(JumpHandler),
+}
+
 pub(crate) type InstructionResult = Result<*const Instruction, ExecutionEnd>;
+pub(crate) type SequentialHandler = fn(&mut VirtualMachine, &Arguments, &mut dyn World);
+pub(crate) type FallibleHandler =
+    fn(&mut VirtualMachine, &Arguments, &mut dyn World) -> Result<(), PanicOrHook>;
+pub(crate) type JumpHandler =
+    fn(&mut VirtualMachine, *const Instruction, &mut dyn World) -> InstructionResult;
+
+#[derive(Debug)]
+pub(crate) enum PanicOrHook {
+    Panic,
+    Hook(u32),
+}
 
 #[derive(Debug, PartialEq)]
 pub enum ExecutionEnd {
@@ -35,7 +51,7 @@ pub enum ExecutionEnd {
 
 pub fn jump_to_beginning() -> Instruction {
     Instruction {
-        handler: jump_to_beginning_handler,
+        handler: Handler::Jump(jump_to_beginning_handler),
         arguments: Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
     }
 }

@@ -4,7 +4,7 @@ use crate::{
         AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Destination,
         Immediate1, Register1, RelativeStack, Source,
     },
-    instruction::{Instruction, InstructionResult},
+    instruction::{Handler, Instruction, InstructionResult},
     VirtualMachine, World,
 };
 
@@ -33,7 +33,7 @@ use super::monomorphization::*;
 impl Instruction {
     pub fn from_jump(source: AnySource, destination: Register1, arguments: Arguments) -> Self {
         Self {
-            handler: monomorphize!(jump match_source source),
+            handler: Handler::Jump(monomorphize!(jump match_source source)),
             arguments: arguments
                 .write_source(&source)
                 .write_destination(&destination),

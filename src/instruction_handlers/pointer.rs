@@ -1,45 +1,41 @@
-use super::{common::instruction_boilerplate_with_panic, PANIC};
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
         Destination, Immediate1, Register1, Register2, RelativeStack, Source,
     },
     fat_pointer::FatPointer,
-    instruction::InstructionResult,
-    Instruction, VirtualMachine, World,
+    instruction::{Handler, Instruction, PanicOrHook},
+    VirtualMachine, World,
 };
 use u256::U256;
 
 fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
-        let ((a, a_is_pointer), (b, b_is_pointer)) = if SWAP {
-            (
-                Register2::get_with_pointer_flag(args, &mut vm.state),
-                In1::get_with_pointer_flag_and_erasing(args, &mut vm.state),
-            )
-        } else {
-            (
-                In1::get_with_pointer_flag(args, &mut vm.state),
-                Register2::get_with_pointer_flag_and_erasing(args, &mut vm.state),
-            )
-        };
+    args: &Arguments,
+    _world: &mut dyn World,
+) -> Result<(), PanicOrHook> {
+    let ((a, a_is_pointer), (b, b_is_pointer)) = if SWAP {
+        (
+            Register2::get_with_pointer_flag(args, &mut vm.state),
+            In1::get_with_pointer_flag_and_erasing(args, &mut vm.state),
+        )
+    } else {
+        (
+            In1::get_with_pointer_flag(args, &mut vm.state),
+            Register2::get_with_pointer_flag_and_erasing(args, &mut vm.state),
+        )
+    };
 
-        if !a_is_pointer || b_is_pointer {
-            return Ok(&PANIC);
-        }
+    if !a_is_pointer || b_is_pointer {
+        return Err(PanicOrHook::Panic);
+    }
 
-        let Some(result) = Op::perform(a, b) else {
-            return Ok(&PANIC);
-        };
+    let Some(result) = Op::perform(a, b) else {
+        return Err(PanicOrHook::Panic);
+    };
 
-        Out::set_fat_ptr(args, &mut vm.state, result);
-
-        continue_normally
-    })
+    Out::set_fat_ptr(args, &mut vm.state, result);
+    Ok(())
 }
 
 pub trait PtrOp {
@@ -101,7 +97,9 @@ impl Instruction {
         swap: bool,
     ) -> Self {
         Self {
-            handler: monomorphize!(ptr [Op] match_source src1 match_destination out match_boolean swap),
+            handler: Handler::Fallible(
+                monomorphize!(ptr [Op] match_source src1 match_destination out match_boolean swap),
+            ),
             arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)

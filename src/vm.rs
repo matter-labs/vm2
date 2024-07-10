@@ -1,13 +1,12 @@
-use crate::heap::HeapId;
-use crate::state::StateSnapshot;
-use crate::world_diff::ExternalSnapshot;
 use crate::{
     callframe::{Callframe, FrameRemnant},
     decommit::u256_into_address,
-    instruction_handlers::{free_panic, CallingMode},
+    heap::HeapId,
+    instruction::{Handler, PanicOrHook},
+    instruction_handlers::{free_panic, CallingMode, PANIC},
     stack::StackPool,
-    state::State,
-    world_diff::{Snapshot, WorldDiff},
+    state::{State, StateSnapshot},
+    world_diff::{ExternalSnapshot, Snapshot, WorldDiff},
     ExecutionEnd, Instruction, Program, World,
 };
 use u256::H160;
@@ -95,10 +94,30 @@ impl VirtualMachine {
                 self.print_instruction(instruction);
 
                 if args.predicate().satisfied(&self.state.flags) {
-                    instruction = match ((*instruction).handler)(self, instruction, world) {
-                        Ok(n) => n,
-                        Err(e) => return e,
-                    };
+                    match (*instruction).handler {
+                        Handler::Sequential(handler) => {
+                            handler(self, args, world);
+                            instruction = instruction.add(1);
+                        }
+                        Handler::Fallible(handler) => match handler(self, args, world) {
+                            Ok(()) => instruction = instruction.add(1),
+                            Err(PanicOrHook::Panic) => instruction = &PANIC,
+                            Err(PanicOrHook::Hook(hook)) => {
+                                return ExecutionEnd::SuspendedOnHook {
+                                    hook,
+                                    pc_to_resume_from: self
+                                        .state
+                                        .current_frame
+                                        .pc_to_u16(instruction)
+                                        .wrapping_add(1),
+                                }
+                            }
+                        },
+                        Handler::Jump(handler) => match handler(self, instruction, world) {
+                            Ok(next) => instruction = next,
+                            Err(end) => return end,
+                        },
+                    }
                 } else {
                     instruction = instruction.add(1);
                 }
@@ -148,10 +167,11 @@ impl VirtualMachine {
                 self.print_instruction(instruction);
 
                 if args.predicate().satisfied(&self.state.flags) {
-                    instruction = match ((*instruction).handler)(self, instruction, world) {
+                    /*instruction = match (*instruction).handler.handle(self, instruction, world) {
                         Ok(n) => n,
                         Err(end) => break end,
-                    };
+                    };*/
+                    // FIXME
                 } else {
                     instruction = instruction.add(1);
                 }

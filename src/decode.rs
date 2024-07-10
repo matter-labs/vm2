@@ -1,10 +1,11 @@
+use crate::instruction::{Handler, InstructionResult};
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
         Immediate1, Immediate2, Register, Register1, Register2, RegisterAndImmediate,
         RelativeStack, Source, SourceWriter,
     },
-    instruction::{ExecutionEnd, InstructionResult},
+    instruction::ExecutionEnd,
     instruction_handlers::{
         Add, And, AuxHeap, CallingMode, Div, Heap, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub,
         RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
@@ -39,10 +40,11 @@ fn unimplemented_instruction(variant: Opcode) -> Instruction {
     let variant_as_number: u16 = unsafe { std::mem::transmute(variant) };
     Immediate1(variant_as_number).write_source(&mut arguments);
     Instruction {
-        handler: unimplemented_handler,
+        handler: Handler::Jump(unimplemented_handler),
         arguments,
     }
 }
+
 fn unimplemented_handler(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,

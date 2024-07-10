@@ -7,7 +7,7 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
     decommit::{is_kernel, u256_into_address},
     fat_pointer::FatPointer,
-    instruction::InstructionResult,
+    instruction::{Handler, InstructionResult},
     predication::Flags,
     Instruction, VirtualMachine, World,
 };
@@ -197,11 +197,11 @@ pub(crate) fn get_far_call_calldata(
                     return None;
                 }
                 match target {
-                    ToHeap => {
+                    FatPointerTarget::ToHeap => {
                         grow_heap::<Heap>(&mut vm.state, bound).ok()?;
                         pointer.memory_page = vm.state.current_frame.heap;
                     }
-                    ToAuxHeap => {
+                    FatPointerTarget::ToAuxHeap => {
                         grow_heap::<AuxHeap>(&mut vm.state, bound).ok()?;
                         pointer.memory_page = vm.state.current_frame.aux_heap;
                     }
@@ -211,10 +211,10 @@ pub(crate) fn get_far_call_calldata(
                 // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
                 let bound = u32::MAX;
                 match target {
-                    ToHeap => {
+                    FatPointerTarget::ToHeap => {
                         grow_heap::<Heap>(&mut vm.state, bound).ok()?;
                     }
-                    ToAuxHeap => {
+                    FatPointerTarget::ToAuxHeap => {
                         grow_heap::<AuxHeap>(&mut vm.state, bound).ok()?;
                     }
                 }
@@ -234,15 +234,14 @@ enum FatPointerTarget {
     ToHeap,
     ToAuxHeap,
 }
-use FatPointerTarget::*;
 
 impl FatPointerSource {
     pub const fn from_abi(value: u8) -> Self {
         match value {
-            0 => Self::MakeNewPointer(ToHeap),
+            0 => Self::MakeNewPointer(FatPointerTarget::ToHeap),
             1 => Self::ForwardFatPointer,
-            2 => Self::MakeNewPointer(ToAuxHeap),
-            _ => Self::MakeNewPointer(ToHeap), // default
+            2 => Self::MakeNewPointer(FatPointerTarget::ToAuxHeap),
+            _ => Self::MakeNewPointer(FatPointerTarget::ToHeap), // default
         }
     }
 }
@@ -267,7 +266,9 @@ impl Instruction {
         arguments: Arguments,
     ) -> Self {
         Self {
-            handler: monomorphize!(far_call [MODE] match_boolean is_static match_boolean is_shard),
+            handler: Handler::Jump(
+                monomorphize!(far_call [MODE] match_boolean is_static match_boolean is_shard),
+            ),
             arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)

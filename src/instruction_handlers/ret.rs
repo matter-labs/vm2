@@ -2,7 +2,7 @@ use super::{far_call::get_far_call_calldata, HeapInterface};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     callframe::FrameRemnant,
-    instruction::{ExecutionEnd, InstructionResult},
+    instruction::{ExecutionEnd, Handler, InstructionResult},
     mode_requirements::ModeRequirements,
     predication::Flags,
     Instruction, Predicate, VirtualMachine, World,
@@ -166,7 +166,7 @@ pub(crate) fn panic_from_failed_far_call(
 
 /// Panics, burning all available gas.
 pub const INVALID_INSTRUCTION: Instruction = Instruction {
-    handler: ret::<{ ReturnType::Panic as u8 }, false>,
+    handler: Handler::Jump(ret::<{ ReturnType::Panic as u8 }, false>),
     arguments: Arguments::new(
         Predicate::Always,
         INVALID_INSTRUCTION_COST,
@@ -176,7 +176,7 @@ pub const INVALID_INSTRUCTION: Instruction = Instruction {
 
 pub(crate) const RETURN_COST: u32 = 5;
 pub static PANIC: Instruction = Instruction {
-    handler: ret::<{ ReturnType::Panic as u8 }, false>,
+    handler: Handler::Jump(ret::<{ ReturnType::Panic as u8 }, false>),
     arguments: Arguments::new(Predicate::Always, RETURN_COST, ModeRequirements::none()),
 };
 
@@ -200,7 +200,7 @@ impl Instruction {
         let to_label = label.is_some();
         const RETURN_TYPE: u8 = ReturnType::Normal as u8;
         Self {
-            handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
+            handler: Handler::Jump(monomorphize!(ret [RETURN_TYPE] match_boolean to_label)),
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
@@ -208,7 +208,7 @@ impl Instruction {
         let to_label = label.is_some();
         const RETURN_TYPE: u8 = ReturnType::Revert as u8;
         Self {
-            handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
+            handler: Handler::Jump(monomorphize!(ret [RETURN_TYPE] match_boolean to_label)),
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
@@ -216,7 +216,7 @@ impl Instruction {
         let to_label = label.is_some();
         const RETURN_TYPE: u8 = ReturnType::Panic as u8;
         Self {
-            handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
+            handler: Handler::Jump(monomorphize!(ret [RETURN_TYPE] match_boolean to_label)),
             arguments: arguments.write_source(&label),
         }
     }

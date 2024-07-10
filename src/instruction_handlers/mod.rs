@@ -5,7 +5,6 @@ pub use pointer::{PtrAdd, PtrPack, PtrShrink, PtrSub};
 pub(crate) use ret::{free_panic, PANIC};
 
 mod binop;
-mod common;
 mod context;
 mod decommit;
 mod event;
