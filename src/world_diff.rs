@@ -143,8 +143,16 @@ impl WorldDiff {
         refund
     }
 
-    pub fn get_storage_state(&self) -> &HashMap<(H160, U256), U256> {
-        self.storage_changes.as_ref()
+    pub fn storage_slot(&self, address: H160, key: U256) -> Option<U256> {
+        self.storage_changes.as_ref().get(&(address, key)).copied()
+    }
+
+    /// Iterates over all modified slots in no particular order.
+    pub fn storage_slots(&self) -> impl Iterator<Item = ((H160, U256), U256)> + '_ {
+        self.storage_changes
+            .as_ref()
+            .iter()
+            .map(|(key, value)| (*key, *value))
     }
 
     /// Changes are returned in no particular order; the caller must not rely on any specific ordering used.
