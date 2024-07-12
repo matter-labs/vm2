@@ -252,8 +252,9 @@ impl WorldDiff {
         self.l2_to_l1_logs.logs_after(snapshot.l2_to_l1_logs)
     }
 
-    pub fn get_decommitted_hashes(&self) -> &BTreeMap<U256, ()> {
-        self.decommitted_hashes.as_ref()
+    /// Returns hashes of decommitted contract bytecodes in no particular order.
+    pub fn decommitted_hashes(&self) -> impl Iterator<Item = U256> + '_ {
+        self.decommitted_hashes.as_ref().keys().copied()
     }
 
     /// Get a snapshot for selecting which logs [Self::events_after] & Co output.
