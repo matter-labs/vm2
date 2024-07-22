@@ -53,6 +53,43 @@ impl Stack {
     pub(crate) fn clear_pointer_flag(&mut self, slot: u16) {
         self.pointer_flags.clear(slot);
     }
+
+    pub(crate) fn snapshot(&self) -> StackSnapshot {
+        let mut dirty_prefix_end = 0;
+        for i in 0..NUMBER_OF_DIRTY_AREAS {
+            if self.dirty_areas & (1 << i) != 0 {
+                dirty_prefix_end = i + 1;
+            }
+        }
+
+        StackSnapshot {
+            pointer_flags: self.pointer_flags.clone(),
+            dirty_areas: self.dirty_areas,
+            slots: self.slots[..DIRTY_AREA_SIZE * dirty_prefix_end].into(),
+        }
+    }
+
+    pub(crate) fn rollback(&mut self, snapshot: StackSnapshot) {
+        let StackSnapshot {
+            pointer_flags,
+            dirty_areas,
+            slots,
+        } = snapshot;
+
+        self.zero();
+
+        self.pointer_flags = pointer_flags;
+        self.dirty_areas = dirty_areas;
+        for (me, snapshot) in self.slots.iter_mut().zip(slots.iter()) {
+            *me = *snapshot;
+        }
+    }
+}
+
+pub(crate) struct StackSnapshot {
+    pointer_flags: Bitset,
+    dirty_areas: u64,
+    slots: Box<[U256]>,
 }
 
 impl Clone for Box<Stack> {

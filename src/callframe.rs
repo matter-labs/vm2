@@ -1,5 +1,9 @@
 use crate::{
-    decommit::is_kernel, heap::HeapId, program::Program, stack::Stack, world_diff::Snapshot,
+    decommit::is_kernel,
+    heap::HeapId,
+    program::Program,
+    stack::{Stack, StackSnapshot},
+    world_diff::Snapshot,
     Instruction,
 };
 use u256::H160;
@@ -155,10 +159,66 @@ impl Callframe {
                 .map(|f| f.previous_frame_gas)
                 .sum::<u32>()
     }
+
+    pub(crate) fn snapshot(&self) -> CallframeSnapshot {
+        CallframeSnapshot {
+            stack: self.stack.snapshot(),
+
+            context_u128: self.context_u128,
+            sp: self.sp,
+            gas: self.gas,
+            near_calls: self.near_calls.clone(),
+            heap_size: self.heap_size,
+            aux_heap_size: self.aux_heap_size,
+            heaps_i_am_keeping_alive: self.heaps_i_am_keeping_alive.clone(),
+            world_before_this_frame: self.world_before_this_frame.clone(),
+        }
+    }
+
+    pub fn rollback(&mut self, snapshot: CallframeSnapshot) {
+        let CallframeSnapshot {
+            stack,
+            context_u128,
+            sp,
+            gas,
+            near_calls,
+            heap_size,
+            aux_heap_size,
+            heaps_i_am_keeping_alive,
+            world_before_this_frame,
+        } = snapshot;
+
+        self.stack.rollback(stack);
+
+        self.context_u128 = context_u128;
+        self.sp = sp;
+        self.gas = gas;
+        self.near_calls = near_calls;
+        self.heap_size = heap_size;
+        self.aux_heap_size = aux_heap_size;
+        self.heaps_i_am_keeping_alive = heaps_i_am_keeping_alive;
+        self.world_before_this_frame = world_before_this_frame;
+    }
 }
 
 pub(crate) struct FrameRemnant {
     pub(crate) program_counter: u16,
     pub(crate) exception_handler: u16,
     pub(crate) snapshot: Snapshot,
+}
+
+/// Only contains the fields that can change (other than via tracer).
+pub struct CallframeSnapshot {
+    stack: StackSnapshot,
+
+    context_u128: u128,
+    sp: u16,
+    gas: u32,
+    near_calls: Vec<NearCallFrame>,
+
+    heap_size: u32,
+    aux_heap_size: u32,
+
+    heaps_i_am_keeping_alive: Vec<HeapId>,
+    world_before_this_frame: Snapshot,
 }

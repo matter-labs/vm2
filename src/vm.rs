@@ -1,4 +1,5 @@
 use crate::heap::HeapId;
+use crate::state::StateSnapshot;
 use crate::world_diff::ExternalSnapshot;
 use crate::{
     callframe::{Callframe, FrameRemnant},
@@ -173,19 +174,27 @@ impl VirtualMachine {
     /// # Panics
     /// Calling this function outside of the initial callframe is not allowed.
     pub fn snapshot(&self) -> VmSnapshot {
-        assert!(self.state.previous_frames.is_empty());
+        assert!(
+            self.state.previous_frames.is_empty(),
+            "Snapshotting is only allowed in the bootloader!"
+        );
         VmSnapshot {
             world_snapshot: self.world_diff.external_snapshot(),
-            state_snapshot: self.state.clone(),
+            state_snapshot: self.state.snapshot(),
         }
     }
 
     /// Returns the VM to the state it was in when the snapshot was created.
     /// # Panics
     /// Rolling back snapshots in anything but LIFO order may panic.
+    /// Rolling back outside the initial callframe will panic.
     pub fn rollback(&mut self, snapshot: VmSnapshot) {
+        assert!(
+            self.state.previous_frames.is_empty(),
+            "Rolling back is only allowed in the bootloader!"
+        );
         self.world_diff.external_rollback(snapshot.world_snapshot);
-        self.state = snapshot.state_snapshot;
+        self.state.rollback(snapshot.state_snapshot);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -306,5 +315,5 @@ impl VirtualMachine {
 
 pub struct VmSnapshot {
     world_snapshot: ExternalSnapshot,
-    state_snapshot: State,
+    state_snapshot: StateSnapshot,
 }
