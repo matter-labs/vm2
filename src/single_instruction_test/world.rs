@@ -13,6 +13,10 @@ impl World for MockWorld {
         Program::for_decommit()
     }
 
+    fn decommit_code(&mut self, _hash: U256) -> Vec<u8> {
+        vec![0; 32]
+    }
+
     fn read_storage(&mut self, contract: H160, key: U256) -> Option<U256> {
         *self.storage_slot.get((contract, key))
     }

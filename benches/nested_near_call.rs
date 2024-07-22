@@ -3,7 +3,7 @@ use vm2::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register, Register1, Register2},
     initial_decommit,
     testworld::TestWorld,
-    Instruction,
+    Instruction, ModeRequirements,
     Predicate::Always,
     Program,
 };
@@ -17,7 +17,7 @@ fn nested_near_call(bencher: Bencher) {
             Register1(Register::new(0)),
             Immediate1(0),
             Immediate2(0),
-            Arguments::new(Always, 10),
+            Arguments::new(Always, 10, ModeRequirements::none()),
         )],
         vec![],
     );
@@ -48,19 +48,22 @@ fn nested_near_call(bencher: Bencher) {
 fn nested_near_call_with_storage_write(bencher: Bencher) {
     let program = Program::new(
         vec![
-            Instruction::from_ergs_left(Register1(Register::new(1)), Arguments::new(Always, 5)),
+            Instruction::from_ergs_left(
+                Register1(Register::new(1)),
+                Arguments::new(Always, 5, ModeRequirements::none()),
+            ),
             Instruction::from_sstore(
                 // always use same storage slot to get a warm write discount
                 Register1(Register::new(0)),
                 Register2(Register::new(1)),
-                Arguments::new(Always, 5511), // need to use actual cost to not create free gas from refunds
+                Arguments::new(Always, 5511, ModeRequirements::none()), // need to use actual cost to not create free gas from refunds
             ),
             Instruction::from_near_call(
                 // zero means pass all gas
                 Register1(Register::new(0)),
                 Immediate1(0),
                 Immediate2(0),
-                Arguments::new(Always, 25),
+                Arguments::new(Always, 25, ModeRequirements::none()),
             ),
         ],
         vec![],

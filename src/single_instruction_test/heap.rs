@@ -19,7 +19,7 @@ impl HeapInterface for Heap {
     fn read_u256_partially(&self, range: std::ops::Range<u32>) -> U256 {
         assert!(self.write.is_none());
         let mut result = *self.read.get(range.start);
-        for byte in &mut result[0..range.len()] {
+        for byte in &mut result[0..32 - range.len()] {
             *byte = 0;
         }
         U256::from_little_endian(&result)
@@ -34,6 +34,11 @@ impl HeapInterface for Heap {
         // This is wrong, but this method is only used to get the final return value.
         vec![]
     }
+
+    fn memset(&mut self, src: &[u8]) {
+        let u = U256::from_big_endian(src);
+        self.write_u256(0, u);
+    }
 }
 
 impl<'a> Arbitrary<'a> for Heap {
@@ -45,8 +50,9 @@ impl<'a> Arbitrary<'a> for Heap {
     }
 }
 
-#[derive(Debug, Clone, Arbitrary)]
+#[derive(Debug, Clone)]
 pub struct Heaps {
+    heap_id: HeapId,
     pub(crate) read: MockRead<HeapId, Heap>,
 }
 
@@ -60,10 +66,20 @@ impl Heaps {
     }
 
     pub(crate) fn allocate(&mut self) -> HeapId {
-        HeapId(0)
+        self.heap_id
     }
 
     pub(crate) fn deallocate(&mut self, _: HeapId) {}
+
+    pub(crate) fn from_id(
+        heap_id: HeapId,
+        u: &mut arbitrary::Unstructured<'_>,
+    ) -> arbitrary::Result<Heaps> {
+        Ok(Heaps {
+            heap_id,
+            read: u.arbitrary()?,
+        })
+    }
 }
 
 impl Index<HeapId> for Heaps {

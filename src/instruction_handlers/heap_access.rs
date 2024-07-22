@@ -17,6 +17,7 @@ pub trait HeapInterface {
     fn read_u256_partially(&self, range: Range<u32>) -> U256;
     fn write_u256(&mut self, start_address: u32, value: U256);
     fn read_range_big_endian(&self, range: Range<u32>) -> Vec<u8>;
+    fn memset(&mut self, memory: &[u8]);
 }
 
 pub trait HeapFromState {
@@ -53,23 +54,23 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
     world: &mut dyn World,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
-        let (pointer, is_fat_pointer) = In::get_with_pointer_flag(args, &mut vm.state);
-        if is_fat_pointer {
+        // Pointers need not be masked here even though we do not care about them being pointers.
+        // They will panic, though because they are larger than 2^32.
+        let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
+
+        let address = pointer.low_u32();
+
+        let new_bound = address.wrapping_add(32);
+        if grow_heap::<H>(&mut vm.state, new_bound).is_err() {
             return Ok(&PANIC);
-        }
+        };
+
+        // The heap is always grown even when the index nonsensical.
+        // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
         if pointer > LAST_ADDRESS.into() {
             let _ = vm.state.use_gas(u32::MAX);
             return Ok(&PANIC);
         }
-
-        let address = pointer.low_u32();
-
-        // The size check above ensures this never overflows
-        let new_bound = address + 32;
-
-        if grow_heap::<H>(&mut vm.state, new_bound).is_err() {
-            return Ok(&PANIC);
-        };
 
         let value = H::get_heap(&mut vm.state).read_u256(address);
         Register1::set(args, &mut vm.state, value);
@@ -88,22 +89,22 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
     world: &mut dyn World,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
-        let (pointer, is_fat_pointer) = In::get_with_pointer_flag(args, &mut vm.state);
-        if is_fat_pointer {
-            return Ok(&PANIC);
-        }
-        if pointer > LAST_ADDRESS.into() {
-            let _ = vm.state.use_gas(u32::MAX);
-            return Ok(&PANIC);
-        }
-        let address = pointer.low_u32();
+        // Pointers need not be masked here even though we do not care about them being pointers.
+        // They will panic, though because they are larger than 2^32.
+        let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
 
+        let address = pointer.low_u32();
         let value = Register2::get(args, &mut vm.state);
 
-        // The size check above ensures this never overflows
-        let new_bound = address + 32;
-
+        let new_bound = address.wrapping_add(32);
         if grow_heap::<H>(&mut vm.state, new_bound).is_err() {
+            return Ok(&PANIC);
+        }
+
+        // The heap is always grown even when the index nonsensical.
+        // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
+        if pointer > LAST_ADDRESS.into() {
+            let _ = vm.state.use_gas(u32::MAX);
             return Ok(&PANIC);
         }
 
@@ -128,6 +129,8 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
     })
 }
 
+/// Pays for more heap space. Doesn't acually grow the heap.
+/// That distinction is necessary because the bootloader gets u32::MAX heap for free.
 pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<(), ()> {
     let already_paid = H::get_heap_size(state);
     if *already_paid < new_bound {

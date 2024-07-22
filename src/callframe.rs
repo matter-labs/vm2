@@ -1,6 +1,6 @@
 use crate::{
-    address_into_u256, decommit::is_kernel, heap::HeapId, program::Program, stack::Stack,
-    world_diff::Snapshot, Instruction,
+    decommit::is_kernel, heap::HeapId, program::Program, stack::Stack, world_diff::Snapshot,
+    Instruction,
 };
 use u256::H160;
 use zkevm_opcode_defs::system_params::{NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND};
@@ -14,6 +14,7 @@ pub struct Callframe {
     pub exception_handler: u16,
     pub context_u128: u128,
     pub is_static: bool,
+    pub is_kernel: bool,
 
     pub stack: Box<Stack>,
     pub sp: u16,
@@ -49,10 +50,10 @@ pub struct Callframe {
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct NearCallFrame {
-    call_instruction: u16,
-    exception_handler: u16,
-    previous_frame_sp: u16,
-    previous_frame_gas: u32,
+    pub(crate) call_instruction: u16,
+    pub(crate) exception_handler: u16,
+    pub(crate) previous_frame_sp: u16,
+    pub(crate) previous_frame_gas: u32,
     world_before_this_frame: Snapshot,
 }
 
@@ -74,7 +75,8 @@ impl Callframe {
         is_static: bool,
         world_before_this_frame: Snapshot,
     ) -> Self {
-        let heap_size = if is_kernel(address_into_u256(address)) {
+        let is_kernel = is_kernel(address);
+        let heap_size = if is_kernel {
             NEW_KERNEL_FRAME_MEMORY_STIPEND
         } else {
             NEW_FRAME_MEMORY_STIPEND
@@ -87,6 +89,7 @@ impl Callframe {
             program,
             context_u128,
             is_static,
+            is_kernel,
             stack,
             heap,
             aux_heap,
@@ -94,7 +97,7 @@ impl Callframe {
             aux_heap_size: heap_size,
             calldata_heap,
             heaps_i_am_keeping_alive: vec![],
-            sp: 1024,
+            sp: 0,
             gas,
             stipend,
             exception_handler,
@@ -137,7 +140,7 @@ impl Callframe {
         unsafe { pc.offset_from(self.program.instruction(0).unwrap()) as u16 }
     }
 
-    pub(crate) fn pc_from_u16(&self, index: u16) -> Option<*const Instruction> {
+    pub fn pc_from_u16(&self, index: u16) -> Option<*const Instruction> {
         self.program
             .instruction(index)
             .map(|p| p as *const Instruction)

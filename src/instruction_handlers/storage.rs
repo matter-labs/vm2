@@ -1,7 +1,4 @@
-use super::{
-    common::{instruction_boilerplate, instruction_boilerplate_with_panic},
-    PANIC,
-};
+use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{
         Arguments, Destination, Register1, Register2, Source, SLOAD_COST, SSTORE_COST,
@@ -15,32 +12,17 @@ fn sstore(
     instruction: *const Instruction,
     world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(
-        vm,
-        instruction,
-        world,
-        |vm, args, world, continue_normally| {
-            if vm.state.current_frame.is_static {
-                return Ok(&PANIC);
-            }
+    instruction_boilerplate(vm, instruction, world, |vm, args, world| {
+        let key = Register1::get(args, &mut vm.state);
+        let value = Register2::get(args, &mut vm.state);
 
-            let key = Register1::get(args, &mut vm.state);
-            let value = Register2::get(args, &mut vm.state);
+        let refund = vm
+            .world_diff
+            .write_storage(world, vm.state.current_frame.address, key, value);
 
-            let refund = vm.world_diff.write_storage(
-                world,
-                vm.state.current_frame.address,
-                key,
-                value,
-                vm.state.transaction_number,
-            );
-
-            assert!(refund <= SSTORE_COST);
-            vm.state.current_frame.gas += refund;
-
-            continue_normally
-        },
-    )
+        assert!(refund <= SSTORE_COST);
+        vm.state.current_frame.gas += refund;
+    })
 }
 
 fn sstore_transient(
@@ -48,18 +30,12 @@ fn sstore_transient(
     instruction: *const Instruction,
     world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
-        if vm.state.current_frame.is_static {
-            return Ok(&PANIC);
-        }
-
+    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
 
         vm.world_diff
             .write_transient_storage(vm.state.current_frame.address, key, value);
-
-        continue_normally
     })
 }
 

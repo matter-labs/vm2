@@ -14,6 +14,7 @@ pub struct UniversalVmState {
     transaction_number: u16,
     context_u128: u128,
     frames: Vec<UniversalVmFrame>,
+    will_panic: bool,
 }
 
 #[derive(PartialEq, Debug)]
@@ -63,6 +64,36 @@ impl
 }
 
 fn zk_evm_state_to_universal(vm: &VmLocalState<8, EncodingModeProduction>) -> UniversalVmState {
+    let mut current_frame = zk_evm_frame_to_universal(&vm.callstack.current);
+    // Most of the current frame doesn't matter if we panic, as it is just thrown away
+    // but only sp has proved problematic so far
+    if vm.pending_exception {
+        current_frame.sp = 0;
+    }
+
+    let mut frames = vm
+        .callstack
+        .inner
+        .iter()
+        .skip(1) // zk_evm requires an unused bottom frame
+        .map(zk_evm_frame_to_universal)
+        .chain(std::iter::once(current_frame))
+        .collect::<Vec<_>>();
+
+    // In zk_evm, heap bounds grown in a near call are only propagated on return, so we need to work around that
+    let mut previous_heap_bounds = None;
+    for frame in frames.iter_mut().rev() {
+        if let Some((heap_bound, aux_heap_bound)) = previous_heap_bounds {
+            frame.heap_bound = heap_bound;
+            frame.aux_heap_bound = aux_heap_bound;
+        }
+        if frame.is_near_call {
+            previous_heap_bounds = Some((frame.heap_bound, frame.aux_heap_bound));
+        } else {
+            previous_heap_bounds = None;
+        }
+    }
+
     UniversalVmState {
         registers: vm
             .registers
@@ -78,14 +109,8 @@ fn zk_evm_state_to_universal(vm: &VmLocalState<8, EncodingModeProduction>) -> Un
         ],
         transaction_number: vm.tx_number_in_block,
         context_u128: vm.context_u128_register,
-        frames: vm
-            .callstack
-            .inner
-            .iter()
-            .skip(1) // zk_evm requires an unused bottom frame
-            .chain(std::iter::once(&vm.callstack.current))
-            .map(zk_evm_frame_to_universal)
-            .collect(),
+        frames,
+        will_panic: vm.pending_exception,
     }
 }
 

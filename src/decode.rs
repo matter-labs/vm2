@@ -9,14 +9,16 @@ use crate::{
         Add, And, AuxHeap, CallingMode, Div, Heap, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub,
         RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
     },
-    jump_to_beginning, Instruction, Predicate, VirtualMachine, World,
+    jump_to_beginning,
+    mode_requirements::ModeRequirements,
+    Instruction, Predicate, VirtualMachine, World,
 };
 use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
     ImmMemHandlerFlags, Opcode,
     Operand::*,
-    RegOrImmFlags, FAR_CALL_STATIC_FLAG_IDX, FIRST_MESSAGE_FLAG_IDX, RET_TO_LABEL_BIT_IDX,
-    SET_FLAGS_FLAG_IDX, SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES,
+    RegOrImmFlags, FAR_CALL_SHARD_FLAG_IDX, FAR_CALL_STATIC_FLAG_IDX, FIRST_MESSAGE_FLAG_IDX,
+    RET_TO_LABEL_BIT_IDX, SET_FLAGS_FLAG_IDX, SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES,
     SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
 };
 
@@ -33,7 +35,7 @@ pub fn decode_program(raw: &[u64], is_bootloader: bool) -> Vec<Instruction> {
 }
 
 fn unimplemented_instruction(variant: Opcode) -> Instruction {
-    let mut arguments = Arguments::new(Predicate::Always, 0);
+    let mut arguments = Arguments::new(Predicate::Always, 0, ModeRequirements::none());
     let variant_as_number: u16 = unsafe { std::mem::transmute(variant) };
     Immediate1(variant_as_number).write_source(&mut arguments);
     Instruction {
@@ -68,7 +70,14 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
         zkevm_opcode_defs::Condition::Ne => crate::Predicate::IfNotEQ,
         zkevm_opcode_defs::Condition::GtOrLt => crate::Predicate::IfGtOrLT,
     };
-    let arguments = Arguments::new(predicate, parsed.variant.ergs_price());
+    let arguments = Arguments::new(
+        predicate,
+        parsed.variant.ergs_price(),
+        ModeRequirements::new(
+            parsed.variant.requires_kernel_mode(),
+            !parsed.variant.can_be_used_in_static_context(),
+        ),
+    );
 
     let stack_in = RegisterAndImmediate {
         immediate: parsed.imm_0,
@@ -149,7 +158,9 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
             zkevm_opcode_defs::ShiftOpcode::Rol => binop!(RotateLeft, ()),
             zkevm_opcode_defs::ShiftOpcode::Ror => binop!(RotateRight, ()),
         },
-        zkevm_opcode_defs::Opcode::Jump(_) => Instruction::from_jump(src1, arguments),
+        zkevm_opcode_defs::Opcode::Jump(_) => {
+            Instruction::from_jump(src1, out.try_into().unwrap(), arguments)
+        }
         zkevm_opcode_defs::Opcode::Context(x) => match x {
             zkevm_opcode_defs::ContextOpcode::This => {
                 Instruction::from_this(out.try_into().unwrap(), arguments)
@@ -178,7 +189,9 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
             zkevm_opcode_defs::ContextOpcode::IncrementTxNumber => {
                 Instruction::from_increment_tx_number(arguments)
             }
-            x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Context(x)),
+            zkevm_opcode_defs::ContextOpcode::AuxMutating0 => {
+                Instruction::from_aux_mutating(arguments)
+            }
         },
         zkevm_opcode_defs::Opcode::Ptr(x) => match x {
             zkevm_opcode_defs::PtrOpcode::Add => ptr!(PtrAdd),
@@ -209,6 +222,7 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
                 src2,
                 Immediate1(parsed.imm_0),
                 parsed.variant.flags[FAR_CALL_STATIC_FLAG_IDX],
+                parsed.variant.flags[FAR_CALL_SHARD_FLAG_IDX],
                 arguments,
             )
         }
@@ -269,7 +283,12 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
                 out.try_into().unwrap(),
                 arguments,
             ),
-            x => unimplemented_instruction(zkevm_opcode_defs::Opcode::Log(x)),
+            zkevm_opcode_defs::LogOpcode::Decommit => Instruction::from_decommit(
+                src1.try_into().unwrap(),
+                src2,
+                out.try_into().unwrap(),
+                arguments,
+            ),
         },
         zkevm_opcode_defs::Opcode::UMA(x) => {
             let increment = parsed.variant.flags[UMA_INCREMENT_FLAG_IDX];

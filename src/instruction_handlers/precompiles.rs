@@ -28,8 +28,6 @@ fn precompile_call(
     world: &mut dyn World,
 ) -> InstructionResult {
     instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
-        // TODO check that we're in a system call
-
         // The user gets to decide how much gas to burn
         // This is safe because system contracts are trusted
         let aux_data = PrecompileAuxData::from_u256(Register2::get(args, &mut vm.state));

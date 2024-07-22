@@ -1,7 +1,4 @@
-use super::{
-    common::{instruction_boilerplate, instruction_boilerplate_with_panic},
-    free_panic,
-};
+use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Source},
     decommit::address_into_u256,
@@ -82,8 +79,11 @@ fn context_meta(
             caller_shard_id: 0,
             code_shard_id: 0,
             // This field is actually pubdata!
-            // TODO PLA-893: This should be zero when not in kernel mode
-            aux_field_0: vm.world_diff.pubdata.0 as u32,
+            aux_field_0: if vm.state.current_frame.is_kernel {
+                vm.world_diff.pubdata.0 as u32
+            } else {
+                0
+            },
         }
         .to_u256();
 
@@ -96,21 +96,10 @@ fn set_context_u128(
     instruction: *const Instruction,
     world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(
-        vm,
-        instruction,
-        world,
-        |vm, args, world, continue_normally| {
-            if vm.state.current_frame.is_static {
-                return free_panic(vm, world);
-            }
-
-            let value = Register1::get(args, &mut vm.state).low_u128();
-            vm.state.set_context_u128(value);
-
-            continue_normally
-        },
-    )
+    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
+        let value = Register1::get(args, &mut vm.state).low_u128();
+        vm.state.set_context_u128(value);
+    })
 }
 
 fn increment_tx_number(
@@ -120,6 +109,16 @@ fn increment_tx_number(
 ) -> InstructionResult {
     instruction_boilerplate(vm, instruction, world, |vm, _, _| {
         vm.start_new_tx();
+    })
+}
+
+fn aux_mutating(
+    vm: &mut VirtualMachine,
+    instruction: *const Instruction,
+    world: &mut dyn World,
+) -> InstructionResult {
+    instruction_boilerplate(vm, instruction, world, |_, _, _| {
+        // This instruction just crashes or nops
     })
 }
 
@@ -164,6 +163,12 @@ impl Instruction {
     pub fn from_increment_tx_number(arguments: Arguments) -> Self {
         Self {
             handler: increment_tx_number,
+            arguments,
+        }
+    }
+    pub fn from_aux_mutating(arguments: Arguments) -> Self {
+        Self {
+            handler: aux_mutating,
             arguments,
         }
     }

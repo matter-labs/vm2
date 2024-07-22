@@ -3,6 +3,7 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     callframe::FrameRemnant,
     instruction::{ExecutionEnd, InstructionResult},
+    mode_requirements::ModeRequirements,
     predication::Flags,
     Instruction, Predicate, VirtualMachine, World,
 };
@@ -63,8 +64,10 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
             None
         } else {
             let (raw_abi, is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
-            let result = get_far_call_calldata(raw_abi, is_pointer, vm)
-                .filter(|pointer| pointer.memory_page != vm.state.current_frame.calldata_heap);
+            let result = get_far_call_calldata(raw_abi, is_pointer, vm, false).filter(|pointer| {
+                vm.state.current_frame.is_kernel
+                    || pointer.memory_page != vm.state.current_frame.calldata_heap
+            });
 
             if result.is_none() {
                 return_type = ReturnType::Panic;
@@ -167,13 +170,17 @@ pub(crate) fn panic_from_failed_far_call(
 /// Panics, burning all available gas.
 pub const INVALID_INSTRUCTION: Instruction = Instruction {
     handler: ret::<{ ReturnType::Panic as u8 }, false>,
-    arguments: Arguments::new(Predicate::Always, INVALID_INSTRUCTION_COST),
+    arguments: Arguments::new(
+        Predicate::Always,
+        INVALID_INSTRUCTION_COST,
+        ModeRequirements::none(),
+    ),
 };
 
-const RETURN_COST: u32 = 5;
-pub const PANIC: Instruction = Instruction {
+pub(crate) const RETURN_COST: u32 = 5;
+pub static PANIC: Instruction = Instruction {
     handler: ret::<{ ReturnType::Panic as u8 }, false>,
-    arguments: Arguments::new(Predicate::Always, RETURN_COST),
+    arguments: Arguments::new(Predicate::Always, RETURN_COST, ModeRequirements::none()),
 };
 
 /// Turn the current instruction into a panic at no extra cost. (Great value, I know.)
