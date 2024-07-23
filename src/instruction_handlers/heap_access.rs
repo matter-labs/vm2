@@ -7,7 +7,7 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::InstructionResult,
     state::State,
-    ExecutionEnd, Instruction, VirtualMachine, World,
+    ExecutionEnd, HeapId, Instruction, VirtualMachine, World,
 };
 use std::ops::Range;
 use u256::U256;
@@ -21,14 +21,14 @@ pub trait HeapInterface {
 }
 
 pub trait HeapFromState {
-    fn get_heap(state: &mut State) -> &mut impl HeapInterface;
+    fn get_heap(state: &State) -> HeapId;
     fn get_heap_size(state: &mut State) -> &mut u32;
 }
 
 pub struct Heap;
 impl HeapFromState for Heap {
-    fn get_heap(state: &mut State) -> &mut impl HeapInterface {
-        &mut state.heaps[state.current_frame.heap]
+    fn get_heap(state: &State) -> HeapId {
+        state.current_frame.heap
     }
     fn get_heap_size(state: &mut State) -> &mut u32 {
         &mut state.current_frame.heap_size
@@ -37,8 +37,8 @@ impl HeapFromState for Heap {
 
 pub struct AuxHeap;
 impl HeapFromState for AuxHeap {
-    fn get_heap(state: &mut State) -> &mut impl HeapInterface {
-        &mut state.heaps[state.current_frame.aux_heap]
+    fn get_heap(state: &State) -> HeapId {
+        state.current_frame.aux_heap
     }
     fn get_heap_size(state: &mut State) -> &mut u32 {
         &mut state.current_frame.aux_heap_size
@@ -72,7 +72,8 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
             return Ok(&PANIC);
         }
 
-        let value = H::get_heap(&mut vm.state).read_u256(address);
+        let heap = H::get_heap(&vm.state);
+        let value = vm.state.heaps[heap].read_u256(address);
         Register1::set(args, &mut vm.state, value);
 
         if INCREMENT {
@@ -108,7 +109,8 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
             return Ok(&PANIC);
         }
 
-        H::get_heap(&mut vm.state).write_u256(address, value);
+        let heap = H::get_heap(&vm.state);
+        vm.state.heaps.write_u256(heap, address, value);
 
         if INCREMENT {
             Register1::set(args, &mut vm.state, pointer + 32)

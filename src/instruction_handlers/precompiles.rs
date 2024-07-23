@@ -96,7 +96,7 @@ impl Memory for Heaps {
 
         let start = query.location.index.0 * 32;
         if query.rw_flag {
-            self[page].write_u256(start, query.value);
+            self.write_u256(page, start, query.value);
         } else {
             query.value = self[page].read_u256(start);
             query.value_is_pointer = false;

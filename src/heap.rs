@@ -63,7 +63,10 @@ impl HeapInterface for Heap {
 }
 
 #[derive(Debug, Clone)]
-pub struct Heaps(Vec<Heap>);
+pub struct Heaps {
+    heaps: Vec<Heap>,
+    bootloader_heap_rollback_info: Vec<(u32, U256)>,
+}
 
 pub(crate) const CALLDATA_HEAP: HeapId = HeapId(1);
 pub const FIRST_HEAP: HeapId = HeapId(2);
@@ -73,23 +76,47 @@ impl Heaps {
     pub(crate) fn new(calldata: Vec<u8>) -> Self {
         // The first heap can never be used because heap zero
         // means the current heap in precompile calls
-        Self(vec![
+        Self{heaps:vec![
             Heap(vec![]),
             Heap(calldata),
             Heap(vec![]),
             Heap(vec![]),
-        ])
+        ], bootloader_heap_rollback_info: vec![]}
     }
 
     pub(crate) fn allocate(&mut self) -> HeapId {
-        let id = HeapId(self.0.len() as u32);
-        self.0
+        let id = HeapId(self.heaps.len() as u32);
+        self.heaps
             .push(Heap(vec![0; NEW_FRAME_MEMORY_STIPEND as usize]));
         id
     }
 
+    pub(crate) fn allocate_with_content(&mut self, content: &[u8]) -> HeapId {
+        let id = self.allocate();
+        self.heaps[id.0 as usize].memset(content);
+        id
+    }
+
     pub(crate) fn deallocate(&mut self, heap: HeapId) {
-        self.0[heap.0 as usize].0 = vec![];
+        self.heaps[heap.0 as usize].0 = vec![];
+    }
+
+    pub fn write_u256(&mut self, heap: HeapId, start_address: u32, value: U256) {
+        if heap == FIRST_HEAP {
+            self.bootloader_heap_rollback_info
+                .push((start_address, self[heap].read_u256(start_address)));
+        }
+        self.heaps[heap.0 as usize].write_u256(start_address, value);
+    }
+
+    pub(crate) fn snapshot(&self) -> usize {
+        self.bootloader_heap_rollback_info.len()
+    }
+
+    pub(crate) fn rollback(&mut self, snapshot: usize) {
+        for (address, value) in self.bootloader_heap_rollback_info.drain(snapshot..) {
+            self.heaps[FIRST_HEAP.0 as usize].write_u256(address, value);
+        }
     }
 }
 
@@ -97,20 +124,20 @@ impl Index<HeapId> for Heaps {
     type Output = Heap;
 
     fn index(&self, index: HeapId) -> &Self::Output {
-        &self.0[index.0 as usize]
+        &self.heaps[index.0 as usize]
     }
 }
 
 impl IndexMut<HeapId> for Heaps {
     fn index_mut(&mut self, index: HeapId) -> &mut Self::Output {
-        &mut self.0[index.0 as usize]
+        &mut self.heaps[index.0 as usize]
     }
 }
 
 impl PartialEq for Heaps {
     fn eq(&self, other: &Self) -> bool {
-        for i in 0..self.0.len().max(other.0.len()) {
-            if self.0.get(i).unwrap_or(&Heap(vec![])) != other.0.get(i).unwrap_or(&Heap(vec![])) {
+        for i in 0..self.heaps.len().max(other.heaps.len()) {
+            if self.heaps.get(i).unwrap_or(&Heap(vec![])) != other.heaps.get(i).unwrap_or(&Heap(vec![])) {
                 return false;
             }
         }

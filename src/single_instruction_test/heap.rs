@@ -1,7 +1,7 @@
 use super::mock_array::MockRead;
 use crate::instruction_handlers::HeapInterface;
 use arbitrary::Arbitrary;
-use std::ops::{Index, IndexMut};
+use std::ops::Index;
 use u256::U256;
 
 #[derive(Debug, Clone)]
@@ -69,6 +69,12 @@ impl Heaps {
         self.heap_id
     }
 
+    pub(crate) fn allocate_with_content(&mut self, content: &[u8]) -> HeapId {
+        let id = self.allocate();
+        self.read.get_mut(id).memset(content);
+        id
+    }
+
     pub(crate) fn deallocate(&mut self, _: HeapId) {}
 
     pub(crate) fn from_id(
@@ -80,6 +86,18 @@ impl Heaps {
             read: u.arbitrary()?,
         })
     }
+
+    pub fn write_u256(&mut self, heap: HeapId, start_address: u32, value: U256) {
+        self.read.get_mut(heap).write_u256(start_address, value);
+    }
+
+    pub(crate) fn snapshot(&self) -> usize {
+        unimplemented!()
+    }
+
+    pub(crate) fn rollback(&mut self, _: usize) {
+        unimplemented!()
+    }
 }
 
 impl Index<HeapId> for Heaps {
@@ -87,12 +105,6 @@ impl Index<HeapId> for Heaps {
 
     fn index(&self, index: HeapId) -> &Self::Output {
         self.read.get(index)
-    }
-}
-
-impl IndexMut<HeapId> for Heaps {
-    fn index_mut(&mut self, index: HeapId) -> &mut Self::Output {
-        self.read.get_mut(index)
     }
 }
 

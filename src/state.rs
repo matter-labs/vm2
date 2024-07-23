@@ -2,7 +2,6 @@ use crate::{
     addressing_modes::Addressable,
     callframe::{Callframe, CallframeSnapshot},
     fat_pointer::FatPointer,
-    heap::Heap,
     heap::{Heaps, CALLDATA_HEAP, FIRST_AUX_HEAP, FIRST_HEAP},
     predication::Flags,
     program::Program,
@@ -109,34 +108,32 @@ impl State {
     }
 
     pub(crate) fn snapshot(&self) -> StateSnapshot {
+        //assert!(self.heaps[self.current_frame.aux_heap].is_empty());
         StateSnapshot {
             registers: self.registers,
             register_pointer_flags: self.register_pointer_flags,
             flags: self.flags.clone(),
             current_frame: self.current_frame.snapshot(),
-            bootloader_heap: self.heaps[self.current_frame.heap].clone(),
-            bootloader_aux_heap: self.heaps[self.current_frame.aux_heap].clone(),
+            bootloader_heap_snapshot: self.heaps.snapshot(),
             transaction_number: self.transaction_number,
             context_u128: self.context_u128,
         }
     }
 
     pub(crate) fn rollback(&mut self, snapshot: StateSnapshot) {
+        //assert!(self.heaps[self.current_frame.aux_heap].is_empty());
         let StateSnapshot {
             registers,
             register_pointer_flags,
             flags,
             current_frame,
-            bootloader_heap,
-            bootloader_aux_heap,
+            bootloader_heap_snapshot,
             transaction_number,
             context_u128,
         } = snapshot;
 
         self.current_frame.rollback(current_frame);
-        self.heaps[self.current_frame.heap] = bootloader_heap;
-        self.heaps[self.current_frame.aux_heap] = bootloader_aux_heap;
-
+        self.heaps.rollback(bootloader_heap_snapshot);
         self.registers = registers;
         self.register_pointer_flags = register_pointer_flags;
         self.flags = flags;
@@ -190,8 +187,7 @@ pub(crate) struct StateSnapshot {
 
     current_frame: CallframeSnapshot,
 
-    bootloader_heap: Heap,
-    bootloader_aux_heap: Heap,
+    bootloader_heap_snapshot: usize,
     transaction_number: u16,
 
     context_u128: u128,
