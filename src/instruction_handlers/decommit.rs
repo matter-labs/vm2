@@ -33,7 +33,10 @@ fn decommit(
             return;
         }
 
-        let program = vm.world_diff.decommit_opcode(world, code_hash);
+        let (program, is_fresh) = vm.world_diff.decommit_opcode(world, code_hash);
+        if !is_fresh {
+            vm.state.current_frame.gas += extra_cost;
+        }
 
         let heap = vm.state.heaps.allocate();
         vm.state.current_frame.heaps_i_am_keeping_alive.push(heap);
@@ -49,6 +52,7 @@ fn decommit(
         Register1::set_fat_ptr(args, &mut vm.state, value);
     })
 }
+
 impl Instruction {
     pub fn from_decommit(
         abi: Register1,

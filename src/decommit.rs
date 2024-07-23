@@ -19,8 +19,8 @@ impl WorldDiff {
         let mut is_evm = false;
 
         let mut code_info = {
-            let (code_info, _) =
-                self.read_storage(world, deployer_system_contract_address, address);
+            let code_info =
+                self.read_storage_without_refund(world, deployer_system_contract_address, address);
             let mut code_info_bytes = [0; 32];
             code_info.to_big_endian(&mut code_info_bytes);
 
@@ -77,11 +77,12 @@ impl WorldDiff {
         Some((UnpaidDecommit { cost, code_key }, is_evm))
     }
 
-    pub(crate) fn decommit_opcode(&mut self, world: &mut dyn World, code_hash: U256) -> Vec<u8> {
-        let mut code_info_bytes = [0; 32];
-        code_hash.to_big_endian(&mut code_info_bytes);
-        self.decommitted_hashes.insert(code_hash, ());
-        world.decommit_code(code_hash)
+    /// Returns the decommitted contract code and a flag set to `true` if this is a fresh decommit (i.e.,
+    /// the code wasn't decommitted previously in the same VM run).
+    #[doc(hidden)] // should be used for testing purposes only; can break VM operation otherwise
+    pub fn decommit_opcode(&mut self, world: &mut dyn World, code_hash: U256) -> (Vec<u8>, bool) {
+        let was_decommitted = self.decommitted_hashes.insert(code_hash, ()).is_some();
+        (world.decommit_code(code_hash), !was_decommitted)
     }
 
     pub(crate) fn pay_for_decommit(
