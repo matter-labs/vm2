@@ -38,6 +38,8 @@ pub struct ExternalSnapshot {
     pub(crate) decommitted_hashes: <RollbackableMap<U256, ()> as Rollback>::Snapshot,
     read_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
     written_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
+    storage_refunds: <RollbackableLog<u32> as Rollback>::Snapshot,
+    pubdata_costs: <RollbackableLog<i32> as Rollback>::Snapshot,
 }
 
 /// There is no address field because nobody is interested in events that don't come
@@ -268,12 +270,10 @@ impl WorldDiff {
             l2_to_l1_logs: self.l2_to_l1_logs.snapshot(),
             transient_storage_changes: self.transient_storage_changes.snapshot(),
             pubdata: self.pubdata.snapshot(),
-            storage_refunds: self.storage_refunds.snapshot(),
-            pubdata_costs: self.pubdata_costs.snapshot(),
         }
     }
 
-    pub(crate) fn rollback(&mut self, snapshot: Snapshot, rollback_io_history: bool) {
+    pub(crate) fn rollback(&mut self, snapshot: Snapshot) {
         self.storage_changes.rollback(snapshot.storage_changes);
         self.paid_changes.rollback(snapshot.paid_changes);
         self.events.rollback(snapshot.events);
@@ -281,10 +281,6 @@ impl WorldDiff {
         self.transient_storage_changes
             .rollback(snapshot.transient_storage_changes);
         self.pubdata.rollback(snapshot.pubdata);
-        if rollback_io_history {
-            self.storage_refunds.rollback(snapshot.storage_refunds);
-            self.pubdata_costs.rollback(snapshot.pubdata_costs);
-        }
     }
 
     /// This function must only be called during the initial frame
@@ -302,11 +298,15 @@ impl WorldDiff {
             decommitted_hashes: self.decommitted_hashes.snapshot(),
             read_storage_slots: self.read_storage_slots.snapshot(),
             written_storage_slots: self.written_storage_slots.snapshot(),
+            storage_refunds: self.storage_refunds.snapshot(),
+            pubdata_costs: self.pubdata_costs.snapshot(),
         }
     }
 
     pub(crate) fn external_rollback(&mut self, snapshot: ExternalSnapshot) {
-        self.rollback(snapshot.internal_snapshot, true);
+        self.rollback(snapshot.internal_snapshot);
+        self.storage_refunds.rollback(snapshot.storage_refunds);
+        self.pubdata_costs.rollback(snapshot.pubdata_costs);
         self.decommitted_hashes
             .rollback(snapshot.decommitted_hashes);
         self.read_storage_slots
@@ -340,8 +340,6 @@ pub struct Snapshot {
     l2_to_l1_logs: <RollbackableLog<L2ToL1Log> as Rollback>::Snapshot,
     transient_storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
     pubdata: <RollbackablePod<i32> as Rollback>::Snapshot,
-    storage_refunds: <RollbackableLog<u32> as Rollback>::Snapshot,
-    pubdata_costs: <RollbackableLog<i32> as Rollback>::Snapshot,
 }
 
 #[derive(Debug, PartialEq)]
