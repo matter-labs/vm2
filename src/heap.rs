@@ -76,12 +76,10 @@ impl Heaps {
     pub(crate) fn new(calldata: Vec<u8>) -> Self {
         // The first heap can never be used because heap zero
         // means the current heap in precompile calls
-        Self{heaps:vec![
-            Heap(vec![]),
-            Heap(calldata),
-            Heap(vec![]),
-            Heap(vec![]),
-        ], bootloader_heap_rollback_info: vec![]}
+        Self {
+            heaps: vec![Heap(vec![]), Heap(calldata), Heap(vec![]), Heap(vec![])],
+            bootloader_heap_rollback_info: vec![],
+        }
     }
 
     pub(crate) fn allocate(&mut self) -> HeapId {
@@ -137,7 +135,9 @@ impl IndexMut<HeapId> for Heaps {
 impl PartialEq for Heaps {
     fn eq(&self, other: &Self) -> bool {
         for i in 0..self.heaps.len().max(other.heaps.len()) {
-            if self.heaps.get(i).unwrap_or(&Heap(vec![])) != other.heaps.get(i).unwrap_or(&Heap(vec![])) {
+            if self.heaps.get(i).unwrap_or(&Heap(vec![]))
+                != other.heaps.get(i).unwrap_or(&Heap(vec![]))
+            {
                 return false;
             }
         }
