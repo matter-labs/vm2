@@ -1,5 +1,5 @@
 use crate::instruction_handlers::HeapInterface;
-use std::ops::{Index, IndexMut, Range};
+use std::ops::{Index, Range};
 use u256::U256;
 use zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND;
 
@@ -19,12 +19,6 @@ impl HeapId {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Heap(Vec<u8>);
-
-impl Heap {
-    pub fn reserve(&mut self, additional: usize) {
-        self.0.reserve_exact(additional);
-    }
-}
 
 impl HeapInterface for Heap {
     fn read_u256(&self, start_address: u32) -> U256 {
@@ -121,12 +115,6 @@ impl Index<HeapId> for Heaps {
 
     fn index(&self, index: HeapId) -> &Self::Output {
         &self.heaps[index.0 as usize]
-    }
-}
-
-impl IndexMut<HeapId> for Heaps {
-    fn index_mut(&mut self, index: HeapId) -> &mut Self::Output {
-        &mut self.heaps[index.0 as usize]
     }
 }
 
