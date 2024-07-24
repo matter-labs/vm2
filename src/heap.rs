@@ -57,9 +57,6 @@ impl HeapInterface for Heap {
         }
         result
     }
-    fn memset(&mut self, src: &[u8]) {
-        self.0 = src.to_vec();
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -83,15 +80,16 @@ impl Heaps {
     }
 
     pub(crate) fn allocate(&mut self) -> HeapId {
-        let id = HeapId(self.heaps.len() as u32);
-        self.heaps
-            .push(Heap(vec![0; NEW_FRAME_MEMORY_STIPEND as usize]));
-        id
+        self.allocate_inner(vec![0; NEW_FRAME_MEMORY_STIPEND as usize])
     }
 
     pub(crate) fn allocate_with_content(&mut self, content: &[u8]) -> HeapId {
-        let id = self.allocate();
-        self.heaps[id.0 as usize].memset(content);
+        self.allocate_inner(content.to_vec())
+    }
+
+    fn allocate_inner(&mut self, memory: Vec<u8>) -> HeapId {
+        let id = HeapId(self.heaps.len() as u32);
+        self.heaps.push(Heap(memory));
         id
     }
 

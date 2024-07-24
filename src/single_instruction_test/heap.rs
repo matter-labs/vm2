@@ -34,11 +34,6 @@ impl HeapInterface for Heap {
         // This is wrong, but this method is only used to get the final return value.
         vec![]
     }
-
-    fn memset(&mut self, src: &[u8]) {
-        let u = U256::from_big_endian(src);
-        self.write_u256(0, u);
-    }
 }
 
 impl<'a> Arbitrary<'a> for Heap {
@@ -71,7 +66,9 @@ impl Heaps {
 
     pub(crate) fn allocate_with_content(&mut self, content: &[u8]) -> HeapId {
         let id = self.allocate();
-        self.read.get_mut(id).memset(content);
+        self.read
+            .get_mut(id)
+            .write_u256(0, U256::from_big_endian(content));
         id
     }
 
