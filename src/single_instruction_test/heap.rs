@@ -10,6 +10,13 @@ pub struct Heap {
     pub(crate) write: Option<(u32, U256)>,
 }
 
+impl Heap {
+    fn write_u256(&mut self, start_address: u32, value: U256) {
+        assert!(self.write.is_none());
+        self.write = Some((start_address, value));
+    }
+}
+
 impl HeapInterface for Heap {
     fn read_u256(&self, start_address: u32) -> U256 {
         assert!(self.write.is_none());
@@ -23,11 +30,6 @@ impl HeapInterface for Heap {
             *byte = 0;
         }
         U256::from_little_endian(&result)
-    }
-
-    fn write_u256(&mut self, start_address: u32, value: U256) {
-        assert!(self.write.is_none());
-        self.write = Some((start_address, value));
     }
 
     fn read_range_big_endian(&self, _: std::ops::Range<u32>) -> Vec<u8> {

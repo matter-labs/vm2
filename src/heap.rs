@@ -20,6 +20,19 @@ impl HeapId {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Heap(Vec<u8>);
 
+impl Heap {
+    fn write_u256(&mut self, start_address: u32, value: U256) {
+        let end = (start_address + 32) as usize;
+        if end > self.0.len() {
+            self.0.resize(end, 0);
+        }
+
+        let mut bytes = [0; 32];
+        value.to_big_endian(&mut bytes);
+        self.0[start_address as usize..end].copy_from_slice(&bytes);
+    }
+}
+
 impl HeapInterface for Heap {
     fn read_u256(&self, start_address: u32) -> U256 {
         self.read_u256_partially(start_address..start_address + 32)
@@ -32,16 +45,6 @@ impl HeapInterface for Heap {
             bytes[i] = self.0[j];
         }
         U256::from_big_endian(&bytes)
-    }
-    fn write_u256(&mut self, start_address: u32, value: U256) {
-        let end = (start_address + 32) as usize;
-        if end > self.0.len() {
-            self.0.resize(end, 0);
-        }
-
-        let mut bytes = [0; 32];
-        value.to_big_endian(&mut bytes);
-        self.0[start_address as usize..end].copy_from_slice(&bytes);
     }
     fn read_range_big_endian(&self, range: Range<u32>) -> Vec<u8> {
         let end = (range.end as usize).min(self.0.len());
