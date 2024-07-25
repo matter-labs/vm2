@@ -317,7 +317,13 @@ impl WorldDiff {
 
     pub(crate) fn delete_history(&mut self) {
         self.storage_changes.delete_history();
+        self.paid_changes.delete_history();
+        self.transient_storage_changes.delete_history();
         self.events.delete_history();
+        self.l2_to_l1_logs.delete_history();
+        self.pubdata.delete_history();
+        self.storage_refunds.delete_history();
+        self.pubdata_costs.delete_history();
         self.decommitted_hashes.delete_history();
         self.read_storage_slots.delete_history();
         self.written_storage_slots.delete_history();
