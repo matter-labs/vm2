@@ -315,11 +315,7 @@ impl WorldDiff {
             .rollback(snapshot.written_storage_slots);
     }
 
-    /// This must only be called when it is known that the VM cannot be rolled back,
-    /// so there must not be any external snapshots and the callstack
-    /// should ideally be empty, though in practice it sometimes contains
-    /// a near call inside the bootloader.
-    pub fn delete_history(&mut self) {
+    pub(crate) fn delete_history(&mut self) {
         self.storage_changes.delete_history();
         self.events.delete_history();
         self.decommitted_hashes.delete_history();

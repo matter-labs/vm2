@@ -113,7 +113,7 @@ impl State {
             registers: self.registers,
             register_pointer_flags: self.register_pointer_flags,
             flags: self.flags.clone(),
-            current_frame: self.current_frame.snapshot(),
+            bootloader_frame: self.current_frame.snapshot(),
             bootloader_heap_snapshot: self.heaps.snapshot(),
             transaction_number: self.transaction_number,
             context_u128: self.context_u128,
@@ -126,19 +126,23 @@ impl State {
             registers,
             register_pointer_flags,
             flags,
-            current_frame,
+            bootloader_frame,
             bootloader_heap_snapshot,
             transaction_number,
             context_u128,
         } = snapshot;
 
-        self.current_frame.rollback(current_frame);
+        self.current_frame.rollback(bootloader_frame);
         self.heaps.rollback(bootloader_heap_snapshot);
         self.registers = registers;
         self.register_pointer_flags = register_pointer_flags;
         self.flags = flags;
         self.transaction_number = transaction_number;
         self.context_u128 = context_u128;
+    }
+
+    pub(crate) fn delete_history(&mut self) {
+        self.heaps.delete_history();
     }
 }
 
@@ -185,7 +189,7 @@ pub(crate) struct StateSnapshot {
 
     flags: Flags,
 
-    current_frame: CallframeSnapshot,
+    bootloader_frame: CallframeSnapshot,
 
     bootloader_heap_snapshot: usize,
     transaction_number: u16,

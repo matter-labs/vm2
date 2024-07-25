@@ -197,6 +197,15 @@ impl VirtualMachine {
         self.state.rollback(snapshot.state_snapshot);
     }
 
+    /// This must only be called when it is known that the VM cannot be rolled back,
+    /// so there must not be any external snapshots and the callstack
+    /// should ideally be empty, though in practice it sometimes contains
+    /// a near call inside the bootloader.
+    pub fn delete_history(&mut self) {
+        self.world_diff.delete_history();
+        self.state.delete_history();
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_frame<const CALLING_MODE: u8>(
         &mut self,

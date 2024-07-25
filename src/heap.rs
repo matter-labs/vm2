@@ -113,6 +113,10 @@ impl Heaps {
             self.heaps[FIRST_HEAP.0 as usize].write_u256(address, value);
         }
     }
+
+    pub(crate) fn delete_history(&mut self) {
+        self.bootloader_heap_rollback_info.clear();
+    }
 }
 
 impl Index<HeapId> for Heaps {

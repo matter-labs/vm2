@@ -101,6 +101,10 @@ impl Heaps {
     pub(crate) fn rollback(&mut self, _: usize) {
         unimplemented!()
     }
+
+    pub(crate) fn delete_history(&mut self) {
+        unimplemented!()
+    }
 }
 
 impl Index<HeapId> for Heaps {
