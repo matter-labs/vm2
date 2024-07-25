@@ -29,6 +29,10 @@ impl Heap {
 
         value.to_big_endian(&mut self.0[start_address as usize..end]);
     }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 impl HeapInterface for Heap {

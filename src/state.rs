@@ -108,7 +108,7 @@ impl State {
     }
 
     pub(crate) fn snapshot(&self) -> StateSnapshot {
-        //assert!(self.heaps[self.current_frame.aux_heap].is_empty());
+        assert!(self.heaps[self.current_frame.aux_heap].is_empty());
         StateSnapshot {
             registers: self.registers,
             register_pointer_flags: self.register_pointer_flags,
@@ -121,7 +121,7 @@ impl State {
     }
 
     pub(crate) fn rollback(&mut self, snapshot: StateSnapshot) {
-        //assert!(self.heaps[self.current_frame.aux_heap].is_empty());
+        assert!(self.heaps[self.current_frame.aux_heap].is_empty());
         let StateSnapshot {
             registers,
             register_pointer_flags,
