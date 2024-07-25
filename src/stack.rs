@@ -75,9 +75,7 @@ impl Stack {
 
         self.pointer_flags = pointer_flags;
         self.dirty_areas = dirty_areas;
-        for (me, snapshot) in self.slots.iter_mut().zip(slots.iter()) {
-            *me = *snapshot;
-        }
+        self.slots[..slots.len()].copy_from_slice(&slots);
     }
 }
 
