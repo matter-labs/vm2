@@ -55,12 +55,7 @@ impl Stack {
     }
 
     pub(crate) fn snapshot(&self) -> StackSnapshot {
-        let mut dirty_prefix_end = 0;
-        for i in 0..NUMBER_OF_DIRTY_AREAS {
-            if self.dirty_areas & (1 << i) != 0 {
-                dirty_prefix_end = i + 1;
-            }
-        }
+        let dirty_prefix_end = NUMBER_OF_DIRTY_AREAS - self.dirty_areas.leading_zeros() as usize;
 
         StackSnapshot {
             pointer_flags: self.pointer_flags.clone(),
