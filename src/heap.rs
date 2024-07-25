@@ -27,9 +27,7 @@ impl Heap {
             self.0.resize(end, 0);
         }
 
-        let mut bytes = [0; 32];
-        value.to_big_endian(&mut bytes);
-        self.0[start_address as usize..end].copy_from_slice(&bytes);
+        value.to_big_endian(&mut self.0[start_address as usize..end]);
     }
 }
 
@@ -107,7 +105,7 @@ impl Heaps {
     }
 
     pub(crate) fn rollback(&mut self, snapshot: usize) {
-        for (address, value) in self.bootloader_heap_rollback_info.drain(snapshot..) {
+        for (address, value) in self.bootloader_heap_rollback_info.drain(snapshot..).rev() {
             self.heaps[FIRST_HEAP.0 as usize].write_u256(address, value);
         }
     }

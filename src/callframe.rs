@@ -175,7 +175,7 @@ impl Callframe {
         }
     }
 
-    pub fn rollback(&mut self, snapshot: CallframeSnapshot) {
+    pub(crate) fn rollback(&mut self, snapshot: CallframeSnapshot) {
         let CallframeSnapshot {
             stack,
             context_u128,
@@ -208,7 +208,7 @@ pub(crate) struct FrameRemnant {
 }
 
 /// Only contains the fields that can change (other than via tracer).
-pub struct CallframeSnapshot {
+pub(crate) struct CallframeSnapshot {
     stack: StackSnapshot,
 
     context_u128: u128,
