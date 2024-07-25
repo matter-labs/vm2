@@ -72,6 +72,14 @@ impl Stack {
             && (self.slot_written.is_none()
                 || is_valid_tagged_value((self.value_written, self.pointer_tag_written)))
     }
+
+    pub(crate) fn snapshot(&self) -> StackSnapshot {
+        unimplemented!()
+    }
+
+    pub(crate) fn rollback(&mut self, _: StackSnapshot) {
+        unimplemented!()
+    }
 }
 
 #[derive(Default, Debug)]
@@ -91,3 +99,5 @@ impl StackPool {
 
     pub fn recycle(&mut self, _: Box<Stack>) {}
 }
+
+pub(crate) struct StackSnapshot;

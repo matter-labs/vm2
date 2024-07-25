@@ -8,7 +8,7 @@ use crate::{
     Instruction, VirtualMachine, World,
 };
 
-use super::{common::instruction_boilerplate, HeapInterface};
+use super::common::instruction_boilerplate;
 
 fn decommit(
     vm: &mut VirtualMachine,
@@ -38,9 +38,8 @@ fn decommit(
             vm.state.current_frame.gas += extra_cost;
         }
 
-        let heap = vm.state.heaps.allocate();
+        let heap = vm.state.heaps.allocate_with_content(program.as_ref());
         vm.state.current_frame.heaps_i_am_keeping_alive.push(heap);
-        vm.state.heaps[heap].memset(program.as_ref());
 
         let value = FatPointer {
             offset: 0,

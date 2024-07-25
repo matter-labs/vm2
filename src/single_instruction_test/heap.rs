@@ -1,13 +1,24 @@
 use super::mock_array::MockRead;
 use crate::instruction_handlers::HeapInterface;
 use arbitrary::Arbitrary;
-use std::ops::{Index, IndexMut};
+use std::ops::Index;
 use u256::U256;
 
 #[derive(Debug, Clone)]
 pub struct Heap {
     pub(crate) read: MockRead<u32, [u8; 32]>,
     pub(crate) write: Option<(u32, U256)>,
+}
+
+impl Heap {
+    fn write_u256(&mut self, start_address: u32, value: U256) {
+        assert!(self.write.is_none());
+        self.write = Some((start_address, value));
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        unimplemented!()
+    }
 }
 
 impl HeapInterface for Heap {
@@ -25,19 +36,9 @@ impl HeapInterface for Heap {
         U256::from_little_endian(&result)
     }
 
-    fn write_u256(&mut self, start_address: u32, value: U256) {
-        assert!(self.write.is_none());
-        self.write = Some((start_address, value));
-    }
-
     fn read_range_big_endian(&self, _: std::ops::Range<u32>) -> Vec<u8> {
         // This is wrong, but this method is only used to get the final return value.
         vec![]
-    }
-
-    fn memset(&mut self, src: &[u8]) {
-        let u = U256::from_big_endian(src);
-        self.write_u256(0, u);
     }
 }
 
@@ -69,6 +70,14 @@ impl Heaps {
         self.heap_id
     }
 
+    pub(crate) fn allocate_with_content(&mut self, content: &[u8]) -> HeapId {
+        let id = self.allocate();
+        self.read
+            .get_mut(id)
+            .write_u256(0, U256::from_big_endian(content));
+        id
+    }
+
     pub(crate) fn deallocate(&mut self, _: HeapId) {}
 
     pub(crate) fn from_id(
@@ -80,6 +89,22 @@ impl Heaps {
             read: u.arbitrary()?,
         })
     }
+
+    pub fn write_u256(&mut self, heap: HeapId, start_address: u32, value: U256) {
+        self.read.get_mut(heap).write_u256(start_address, value);
+    }
+
+    pub(crate) fn snapshot(&self) -> usize {
+        unimplemented!()
+    }
+
+    pub(crate) fn rollback(&mut self, _: usize) {
+        unimplemented!()
+    }
+
+    pub(crate) fn delete_history(&mut self) {
+        unimplemented!()
+    }
 }
 
 impl Index<HeapId> for Heaps {
@@ -87,12 +112,6 @@ impl Index<HeapId> for Heaps {
 
     fn index(&self, index: HeapId) -> &Self::Output {
         self.read.get(index)
-    }
-}
-
-impl IndexMut<HeapId> for Heaps {
-    fn index_mut(&mut self, index: HeapId) -> &mut Self::Output {
-        self.read.get_mut(index)
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::{
     addressing_modes::Addressable,
-    callframe::Callframe,
+    callframe::{Callframe, CallframeSnapshot},
     fat_pointer::FatPointer,
     heap::{Heaps, CALLDATA_HEAP, FIRST_AUX_HEAP, FIRST_HEAP},
     predication::Flags,
@@ -106,6 +106,46 @@ impl State {
     pub(crate) fn get_context_u128(&self) -> u128 {
         self.current_frame.context_u128
     }
+
+    pub(crate) fn snapshot(&self) -> StateSnapshot {
+        assert!(self.heaps[self.current_frame.aux_heap].is_empty());
+        StateSnapshot {
+            registers: self.registers,
+            register_pointer_flags: self.register_pointer_flags,
+            flags: self.flags.clone(),
+            bootloader_frame: self.current_frame.snapshot(),
+            bootloader_heap_snapshot: self.heaps.snapshot(),
+            transaction_number: self.transaction_number,
+            context_u128: self.context_u128,
+        }
+    }
+
+    pub(crate) fn rollback(&mut self, snapshot: StateSnapshot) {
+        assert!(self.heaps[self.current_frame.aux_heap].is_empty());
+        let StateSnapshot {
+            registers,
+            register_pointer_flags,
+            flags,
+            bootloader_frame,
+            bootloader_heap_snapshot,
+            transaction_number,
+            context_u128,
+        } = snapshot;
+
+        for heap in self.current_frame.rollback(bootloader_frame) {
+            self.heaps.deallocate(heap);
+        }
+        self.heaps.rollback(bootloader_heap_snapshot);
+        self.registers = registers;
+        self.register_pointer_flags = register_pointer_flags;
+        self.flags = flags;
+        self.transaction_number = transaction_number;
+        self.context_u128 = context_u128;
+    }
+
+    pub(crate) fn delete_history(&mut self) {
+        self.heaps.delete_history();
+    }
 }
 
 impl Addressable for State {
@@ -143,4 +183,18 @@ impl Addressable for State {
     fn in_kernel_mode(&self) -> bool {
         self.current_frame.is_kernel
     }
+}
+
+pub(crate) struct StateSnapshot {
+    registers: [U256; 16],
+    register_pointer_flags: u16,
+
+    flags: Flags,
+
+    bootloader_frame: CallframeSnapshot,
+
+    bootloader_heap_snapshot: usize,
+    transaction_number: u16,
+
+    context_u128: u128,
 }
