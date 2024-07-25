@@ -170,11 +170,16 @@ impl Callframe {
             near_calls: self.near_calls.clone(),
             heap_size: self.heap_size,
             aux_heap_size: self.aux_heap_size,
-            heaps_i_am_keeping_alive: self.heaps_i_am_keeping_alive.clone(),
+            heaps_i_was_keeping_alive: self.heaps_i_am_keeping_alive.len(),
         }
     }
 
-    pub(crate) fn rollback(&mut self, snapshot: CallframeSnapshot) {
+    /// Returns heaps that were created during the period that is rolled back
+    /// and thus can't be referenced anymore and should be deallocated.
+    pub(crate) fn rollback(
+        &mut self,
+        snapshot: CallframeSnapshot,
+    ) -> impl Iterator<Item = HeapId> + '_ {
         let CallframeSnapshot {
             stack,
             context_u128,
@@ -183,7 +188,7 @@ impl Callframe {
             near_calls,
             heap_size,
             aux_heap_size,
-            heaps_i_am_keeping_alive,
+            heaps_i_was_keeping_alive,
         } = snapshot;
 
         self.stack.rollback(stack);
@@ -194,7 +199,9 @@ impl Callframe {
         self.near_calls = near_calls;
         self.heap_size = heap_size;
         self.aux_heap_size = aux_heap_size;
-        self.heaps_i_am_keeping_alive = heaps_i_am_keeping_alive;
+
+        self.heaps_i_am_keeping_alive
+            .drain(heaps_i_was_keeping_alive..)
     }
 }
 
@@ -216,5 +223,5 @@ pub(crate) struct CallframeSnapshot {
     heap_size: u32,
     aux_heap_size: u32,
 
-    heaps_i_am_keeping_alive: Vec<HeapId>,
+    heaps_i_was_keeping_alive: usize,
 }

@@ -132,7 +132,9 @@ impl State {
             context_u128,
         } = snapshot;
 
-        self.current_frame.rollback(bootloader_frame);
+        for heap in self.current_frame.rollback(bootloader_frame) {
+            self.heaps.deallocate(heap);
+        }
         self.heaps.rollback(bootloader_heap_snapshot);
         self.registers = registers;
         self.register_pointer_flags = register_pointer_flags;
