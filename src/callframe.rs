@@ -171,7 +171,6 @@ impl Callframe {
             heap_size: self.heap_size,
             aux_heap_size: self.aux_heap_size,
             heaps_i_am_keeping_alive: self.heaps_i_am_keeping_alive.clone(),
-            world_before_this_frame: self.world_before_this_frame.clone(),
         }
     }
 
@@ -185,7 +184,6 @@ impl Callframe {
             heap_size,
             aux_heap_size,
             heaps_i_am_keeping_alive,
-            world_before_this_frame,
         } = snapshot;
 
         self.stack.rollback(stack);
@@ -197,7 +195,6 @@ impl Callframe {
         self.heap_size = heap_size;
         self.aux_heap_size = aux_heap_size;
         self.heaps_i_am_keeping_alive = heaps_i_am_keeping_alive;
-        self.world_before_this_frame = world_before_this_frame;
     }
 }
 
@@ -220,5 +217,4 @@ pub(crate) struct CallframeSnapshot {
     aux_heap_size: u32,
 
     heaps_i_am_keeping_alive: Vec<HeapId>,
-    world_before_this_frame: Snapshot,
 }
