@@ -1,10 +1,11 @@
 use super::{common::instruction_boilerplate_with_panic, HeapInterface, PANIC};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
-    heap::{HeapId, Heaps},
+    heap::Heaps,
     instruction::InstructionResult,
     Instruction, VirtualMachine, World,
 };
+use eravm_stable_interface::HeapId;
 use zk_evm_abstractions::{
     aux::Timestamp,
     precompiles::{

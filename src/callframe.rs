@@ -1,11 +1,11 @@
 use crate::{
     decommit::is_kernel,
-    heap::HeapId,
     program::Program,
     stack::{Stack, StackSnapshot},
     world_diff::Snapshot,
     Instruction,
 };
+use eravm_stable_interface::HeapId;
 use u256::H160;
 use zkevm_opcode_defs::system_params::{NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND};
 

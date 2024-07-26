@@ -1,24 +1,11 @@
 use crate::{hash_for_debugging, instruction_handlers::HeapInterface};
+use eravm_stable_interface::HeapId;
 use std::{
     fmt, mem,
     ops::{Index, Range},
 };
 use u256::U256;
 use zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND;
-
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub struct HeapId(u32);
-
-impl HeapId {
-    /// Only for dealing with external data structures, never use internally.
-    pub fn from_u32_unchecked(value: u32) -> Self {
-        Self(value)
-    }
-
-    pub fn to_u32(self) -> u32 {
-        self.0
-    }
-}
 
 #[derive(Clone)]
 pub struct Heap(Vec<u8>);
@@ -97,9 +84,9 @@ pub struct Heaps {
     bootloader_aux_rollback_info: Vec<(u32, U256)>,
 }
 
-pub(crate) const CALLDATA_HEAP: HeapId = HeapId(1);
-pub const FIRST_HEAP: HeapId = HeapId(2);
-pub(crate) const FIRST_AUX_HEAP: HeapId = HeapId(3);
+pub(crate) const CALLDATA_HEAP: HeapId = HeapId::from_u32_unchecked(1);
+pub const FIRST_HEAP: HeapId = HeapId::from_u32_unchecked(2);
+pub(crate) const FIRST_AUX_HEAP: HeapId = HeapId::from_u32_unchecked(3);
 
 impl Heaps {
     pub(crate) fn new(calldata: Vec<u8>) -> Self {
@@ -121,13 +108,13 @@ impl Heaps {
     }
 
     fn allocate_inner(&mut self, memory: Vec<u8>) -> HeapId {
-        let id = HeapId(self.heaps.len() as u32);
+        let id = HeapId::from_u32_unchecked(self.heaps.len() as u32);
         self.heaps.push(Heap(memory));
         id
     }
 
     pub(crate) fn deallocate(&mut self, heap: HeapId) {
-        self.heaps[heap.0 as usize].0 = vec![];
+        self.heaps[heap.to_u32() as usize].0 = vec![];
     }
 
     pub fn write_u256(&mut self, heap: HeapId, start_address: u32, value: U256) {
@@ -138,7 +125,7 @@ impl Heaps {
             self.bootloader_aux_rollback_info
                 .push((start_address, self[heap].read_u256(start_address)));
         }
-        self.heaps[heap.0 as usize].write_u256(start_address, value);
+        self.heaps[heap.to_u32() as usize].write_u256(start_address, value);
     }
 
     pub(crate) fn snapshot(&self) -> (usize, usize) {
@@ -150,10 +137,10 @@ impl Heaps {
 
     pub(crate) fn rollback(&mut self, (heap_snap, aux_snap): (usize, usize)) {
         for (address, value) in self.bootloader_heap_rollback_info.drain(heap_snap..).rev() {
-            self.heaps[FIRST_HEAP.0 as usize].write_u256(address, value);
+            self.heaps[FIRST_HEAP.to_u32() as usize].write_u256(address, value);
         }
         for (address, value) in self.bootloader_aux_rollback_info.drain(aux_snap..).rev() {
-            self.heaps[FIRST_AUX_HEAP.0 as usize].write_u256(address, value);
+            self.heaps[FIRST_AUX_HEAP.to_u32() as usize].write_u256(address, value);
         }
     }
 
@@ -167,7 +154,7 @@ impl Index<HeapId> for Heaps {
     type Output = Heap;
 
     fn index(&self, index: HeapId) -> &Self::Output {
-        &self.heaps[index.0 as usize]
+        &self.heaps[index.to_u32() as usize]
     }
 }
 

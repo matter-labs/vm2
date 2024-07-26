@@ -7,6 +7,7 @@ license = "MIT OR Apache-2.0"
 authors = ["The Matter Labs Team <hello@matterlabs.dev>"]
 
 [dependencies]
+eravm-stable-interface = { path = "./eravm-stable-interface" }
 zkevm_opcode_defs = "0.150.0"
 zk_evm_abstractions = "0.150.0"
 u256 = { package = "primitive-types", version = "0.12.1" }

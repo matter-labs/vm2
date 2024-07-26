@@ -1,6 +1,7 @@
 use super::mock_array::MockRead;
 use crate::instruction_handlers::HeapInterface;
 use arbitrary::Arbitrary;
+use eravm_stable_interface::HeapId;
 use std::ops::Index;
 use u256::U256;
 
@@ -53,9 +54,9 @@ pub struct Heaps {
     pub(crate) read: MockRead<HeapId, Heap>,
 }
 
-pub(crate) const CALLDATA_HEAP: HeapId = HeapId(1);
-pub const FIRST_HEAP: HeapId = HeapId(2);
-pub(crate) const FIRST_AUX_HEAP: HeapId = HeapId(3);
+pub(crate) const CALLDATA_HEAP: HeapId = HeapId::from_u32_unchecked(1);
+pub const FIRST_HEAP: HeapId = HeapId::from_u32_unchecked(2);
+pub(crate) const FIRST_AUX_HEAP: HeapId = HeapId::from_u32_unchecked(3);
 
 impl Heaps {
     pub(crate) fn new(_: Vec<u8>) -> Self {
@@ -114,19 +115,5 @@ impl Index<HeapId> for Heaps {
 impl PartialEq for Heaps {
     fn eq(&self, _: &Self) -> bool {
         false
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Debug, Arbitrary)]
-pub struct HeapId(u32);
-
-impl HeapId {
-    /// Only for dealing with external data structures, never use internally.
-    pub fn from_u32_unchecked(value: u32) -> Self {
-        Self(value)
-    }
-
-    pub fn to_u32(self) -> u32 {
-        self.0
     }
 }

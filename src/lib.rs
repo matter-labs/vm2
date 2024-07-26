@@ -26,7 +26,8 @@ use u256::{H160, U256};
 
 pub use decommit::address_into_u256;
 pub use decommit::initial_decommit;
-pub use heap::{HeapId, FIRST_HEAP};
+pub use eravm_stable_interface::HeapId;
+pub use heap::FIRST_HEAP;
 pub use instruction::{jump_to_beginning, ExecutionEnd, Instruction};
 pub use mode_requirements::ModeRequirements;
 pub use predication::Predicate;

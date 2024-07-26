@@ -11,10 +11,6 @@ trait StateInterface {
     fn read_heap_byte(&self, heap: HeapId, index: u32) -> u8;
     fn write_heap_byte(&mut self, heap: HeapId, index: u32, byte: u8);
 
-    // Do you need to be able to allocate a new heap
-    // Related to if we can create new callframes.
-    // Possibly want to pass fat pointer to a newly created heap.
-
     fn flags(&self) -> Flags;
     fn set_flags(&mut self, flags: Flags);
 
@@ -36,7 +32,6 @@ trait StateInterface {
 
     fn events(&self) -> impl Iterator<Item = Event>;
     fn l2_to_l1_logs(&self) -> impl Iterator<Item = L2ToL1Log>;
-    // Why would someone need to add an event? They aren't read by the VM.
 
     fn pubdata(&self) -> i32;
     fn set_pubdata(&mut self, value: i32);
@@ -45,8 +40,6 @@ trait StateInterface {
     fn run_arbitrary_code(code: &[u64]);
 
     fn static_heap(&self) -> HeapId;
-
-    // Do we want to expose the data collected for cold/warm pricing?
 }
 
 pub struct Flags {
@@ -107,8 +100,19 @@ trait Tracer {
     fn after_instruction<S: StateInterface>(&mut self, state: &mut S);
 }
 
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct HeapId(u32);
-// methods elided there is a method to make it from u32
+
+impl HeapId {
+    /// Only for dealing with external data structures, never use internally.
+    pub const fn from_u32_unchecked(value: u32) -> Self {
+        Self(value)
+    }
+
+    pub const fn to_u32(self) -> u32 {
+        self.0
+    }
+}
 
 /// There is no address field because nobody is interested in events that don't come
 /// from the event writer, so we simply do not record events coming frome anywhere else.

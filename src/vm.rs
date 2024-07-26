@@ -1,4 +1,3 @@
-use crate::heap::HeapId;
 use crate::state::StateSnapshot;
 use crate::world_diff::ExternalSnapshot;
 use crate::{
@@ -10,6 +9,7 @@ use crate::{
     world_diff::{Snapshot, WorldDiff},
     ExecutionEnd, Instruction, Program, World,
 };
+use eravm_stable_interface::HeapId;
 use u256::H160;
 
 #[derive(Debug)]
