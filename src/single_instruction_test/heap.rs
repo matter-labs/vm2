@@ -15,10 +15,6 @@ impl Heap {
         assert!(self.write.is_none());
         self.write = Some((start_address, value));
     }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        unimplemented!()
-    }
 }
 
 impl HeapInterface for Heap {
@@ -94,11 +90,11 @@ impl Heaps {
         self.read.get_mut(heap).write_u256(start_address, value);
     }
 
-    pub(crate) fn snapshot(&self) -> usize {
+    pub(crate) fn snapshot(&self) -> (usize, usize) {
         unimplemented!()
     }
 
-    pub(crate) fn rollback(&mut self, _: usize) {
+    pub(crate) fn rollback(&mut self, _: (usize, usize)) {
         unimplemented!()
     }
 

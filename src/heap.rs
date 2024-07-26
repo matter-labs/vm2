@@ -29,10 +29,6 @@ impl Heap {
 
         value.to_big_endian(&mut self.0[start_address as usize..end]);
     }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
 }
 
 impl HeapInterface for Heap {
@@ -62,6 +58,7 @@ impl HeapInterface for Heap {
 pub struct Heaps {
     heaps: Vec<Heap>,
     bootloader_heap_rollback_info: Vec<(u32, U256)>,
+    bootloader_aux_rollback_info: Vec<(u32, U256)>,
 }
 
 pub(crate) const CALLDATA_HEAP: HeapId = HeapId(1);
@@ -75,6 +72,7 @@ impl Heaps {
         Self {
             heaps: vec![Heap(vec![]), Heap(calldata), Heap(vec![]), Heap(vec![])],
             bootloader_heap_rollback_info: vec![],
+            bootloader_aux_rollback_info: vec![],
         }
     }
 
@@ -100,22 +98,32 @@ impl Heaps {
         if heap == FIRST_HEAP {
             self.bootloader_heap_rollback_info
                 .push((start_address, self[heap].read_u256(start_address)));
+        } else if heap == FIRST_AUX_HEAP {
+            self.bootloader_aux_rollback_info
+                .push((start_address, self[heap].read_u256(start_address)));
         }
         self.heaps[heap.0 as usize].write_u256(start_address, value);
     }
 
-    pub(crate) fn snapshot(&self) -> usize {
-        self.bootloader_heap_rollback_info.len()
+    pub(crate) fn snapshot(&self) -> (usize, usize) {
+        (
+            self.bootloader_heap_rollback_info.len(),
+            self.bootloader_aux_rollback_info.len(),
+        )
     }
 
-    pub(crate) fn rollback(&mut self, snapshot: usize) {
-        for (address, value) in self.bootloader_heap_rollback_info.drain(snapshot..).rev() {
+    pub(crate) fn rollback(&mut self, (heap_snap, aux_snap): (usize, usize)) {
+        for (address, value) in self.bootloader_heap_rollback_info.drain(heap_snap..).rev() {
             self.heaps[FIRST_HEAP.0 as usize].write_u256(address, value);
+        }
+        for (address, value) in self.bootloader_aux_rollback_info.drain(aux_snap..).rev() {
+            self.heaps[FIRST_AUX_HEAP.0 as usize].write_u256(address, value);
         }
     }
 
     pub(crate) fn delete_history(&mut self) {
         self.bootloader_heap_rollback_info.clear();
+        self.bootloader_aux_rollback_info.clear();
     }
 }
 
