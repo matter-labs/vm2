@@ -15,10 +15,6 @@ impl Heap {
         assert!(self.write.is_none());
         self.write = Some((start_address, value));
     }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        unimplemented!()
-    }
 }
 
 impl HeapInterface for Heap {
