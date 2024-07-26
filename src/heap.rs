@@ -104,7 +104,7 @@ impl Heaps {
         self.heaps[heap.0 as usize].write_u256(start_address, value);
     }
 
-    pub(crate) fn snapshot(&self) -> usize {
+    pub(crate) fn snapshot(&self) -> (usize, usize) {
         (
             self.bootloader_heap_rollback_info.len(),
             self.bootloader_aux_rollback_info.len(),
