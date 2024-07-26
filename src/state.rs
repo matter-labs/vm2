@@ -191,7 +191,7 @@ pub(crate) struct StateSnapshot {
 
     bootloader_frame: CallframeSnapshot,
 
-    bootloader_heap_snapshot: usize,
+    bootloader_heap_snapshot: (usize, usize),
     transaction_number: u16,
 
     context_u128: u128,

@@ -72,6 +72,7 @@ impl Heaps {
         Self {
             heaps: vec![Heap(vec![]), Heap(calldata), Heap(vec![]), Heap(vec![])],
             bootloader_heap_rollback_info: vec![],
+            bootloader_aux_rollback_info: vec![],
         }
     }
 
