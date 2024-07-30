@@ -18,6 +18,7 @@ mod rollback;
 mod stack;
 mod state;
 pub mod testworld;
+mod tracing;
 mod vm;
 mod world_diff;
 

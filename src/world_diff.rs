@@ -231,6 +231,10 @@ impl WorldDiff {
             .insert((contract, key), value);
     }
 
+    pub fn get_transient_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
+        self.transient_storage_changes.as_ref()
+    }
+
     pub(crate) fn record_event(&mut self, event: Event) {
         self.events.push(event);
     }

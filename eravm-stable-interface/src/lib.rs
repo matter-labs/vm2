@@ -1,6 +1,6 @@
 use u256::{H160, U256};
 
-trait StateInterface {
+pub trait StateInterface {
     fn read_register(&self, register: u8) -> (U256, bool);
     fn set_register(&mut self, register: u8, value: U256, is_pointer: bool);
 
@@ -48,7 +48,7 @@ pub struct Flags {
     pub greater: bool,
 }
 
-trait CallframeInterface {
+pub trait CallframeInterface {
     fn address(&self) -> H160;
     fn set_address(&mut self, address: H160);
     fn code_address(&self) -> H160;
@@ -95,7 +95,7 @@ trait CallframeInterface {
     fn read_code_page(&self, slot: u16) -> U256;
 }
 
-trait Tracer {
+pub trait Tracer {
     fn before_instruction<S: StateInterface>(&mut self, state: &mut S);
     fn after_instruction<S: StateInterface>(&mut self, state: &mut S);
 }
