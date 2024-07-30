@@ -52,6 +52,11 @@ impl Heap {
 
         value.to_big_endian(&mut self.0[start_address as usize..end]);
     }
+
+    /// Needed only by tracers
+    pub(crate) fn read_byte(&self, address: u32) -> u8 {
+        self.0[address as usize]
+    }
 }
 
 impl HeapInterface for Heap {
@@ -126,6 +131,11 @@ impl Heaps {
                 .push((start_address, self[heap].read_u256(start_address)));
         }
         self.heaps[heap.to_u32() as usize].write_u256(start_address, value);
+    }
+
+    /// Needed only by tracers
+    pub(crate) fn write_byte(&mut self, heap: HeapId, address: u32, value: u8) {
+        self.heaps[heap.to_u32() as usize].0[address as usize] = value;
     }
 
     pub(crate) fn snapshot(&self) -> (usize, usize) {

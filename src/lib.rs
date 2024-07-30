@@ -18,6 +18,7 @@ mod rollback;
 mod stack;
 mod state;
 pub mod testworld;
+#[cfg(not(feature = "single_instruction_test"))]
 mod tracing;
 mod vm;
 mod world_diff;

@@ -6,7 +6,7 @@ pub trait StateInterface {
 
     fn number_of_callframes(&self) -> usize;
     /// zero is the current frame, one is the frame before that etc.
-    fn callframe(&mut self, n: usize) -> &mut impl CallframeInterface;
+    fn callframe(&mut self, n: usize) -> impl CallframeInterface + '_;
 
     fn read_heap_byte(&self, heap: HeapId, index: u32) -> u8;
     fn write_heap_byte(&mut self, heap: HeapId, index: u32, byte: u8);
@@ -78,8 +78,8 @@ pub trait CallframeInterface {
 
     fn is_near_call(&self) -> bool;
 
-    fn read_stack(&self, register: u16) -> (U256, bool);
-    fn write_stack(&mut self, register: u16, value: U256, is_pointer: bool);
+    fn read_stack(&self, index: u16) -> (U256, bool);
+    fn write_stack(&mut self, index: u16, value: U256, is_pointer: bool);
 
     fn stack_pointer(&self) -> u16;
     fn set_stack_pointer(&mut self, value: u16);
