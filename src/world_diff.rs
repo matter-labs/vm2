@@ -33,6 +33,7 @@ pub struct WorldDiff {
     storage_initial_values: BTreeMap<(H160, U256), Option<U256>>,
 }
 
+#[derive(Debug)]
 pub struct ExternalSnapshot {
     internal_snapshot: Snapshot,
     pub(crate) decommitted_hashes: <RollbackableMap<U256, ()> as Rollback>::Snapshot,

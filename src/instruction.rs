@@ -1,4 +1,4 @@
-use std::fmt::{self, Debug, Formatter};
+use std::fmt;
 
 use crate::{
     addressing_modes::Arguments, mode_requirements::ModeRequirements, vm::VirtualMachine,
@@ -10,9 +10,12 @@ pub struct Instruction {
     pub(crate) arguments: Arguments,
 }
 
-impl Debug for Instruction {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "Some handler with args {:?}", self.arguments)
+impl fmt::Debug for Instruction {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Instruction")
+            .field("arguments", &self.arguments)
+            .finish_non_exhaustive()
     }
 }
 

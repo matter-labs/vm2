@@ -100,4 +100,5 @@ impl StackPool {
     pub fn recycle(&mut self, _: Box<Stack>) {}
 }
 
+#[derive(Debug)]
 pub(crate) struct StackSnapshot;

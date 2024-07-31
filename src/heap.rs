@@ -1,5 +1,8 @@
-use crate::instruction_handlers::HeapInterface;
-use std::ops::{Index, Range};
+use crate::{hash_for_debugging, instruction_handlers::HeapInterface};
+use std::{
+    fmt, mem,
+    ops::{Index, Range},
+};
 use u256::U256;
 use zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND;
 
@@ -19,6 +22,23 @@ impl HeapId {
 
 #[derive(Clone)]
 pub struct Heap(Vec<u8>);
+
+impl fmt::Debug for Heap {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        const MAX_DEBUGGED_LEN: usize = 256;
+
+        if self.0.len() <= MAX_DEBUGGED_LEN {
+            formatter.debug_tuple("Heap").field(&self.0).finish()
+        } else {
+            formatter
+                .debug_struct("Heap")
+                .field("len", &self.0.len())
+                .field("start", &&self.0[..MAX_DEBUGGED_LEN])
+                .field("hash", &hash_for_debugging(&self.0))
+                .finish_non_exhaustive()
+        }
+    }
+}
 
 // Two heaps are considered equal even if one of them has greater size allocated (provided that all additional bytes
 // are zeroed). This is to account for the case when a bootloader heap is rolled back; heap is never shrunk.
