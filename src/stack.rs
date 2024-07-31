@@ -5,49 +5,12 @@ use std::{
 };
 use u256::U256;
 
-/// Helper wrapper for debugging [`Stack`] / [`StackSnapshot`] contents.
-struct StackStart<I>(I);
-
-impl<I: Iterator<Item = (bool, U256)> + Clone> fmt::Debug for StackStart<I> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut list = formatter.debug_list();
-        for (is_pointer, slot) in self.0.clone() {
-            if is_pointer {
-                list.entry(&FatPointer::from(slot));
-            } else {
-                list.entry(&slot);
-            }
-        }
-        list.finish()
-    }
-}
-
 #[derive(PartialEq)]
 pub struct Stack {
-    /// set of slots that may be interpreted as [crate::fat_pointer::FatPointer].
+    /// set of slots that may be interpreted as [`FatPointer`].
     pointer_flags: Bitset,
     dirty_areas: u64,
     slots: [U256; 1 << 16],
-}
-
-impl fmt::Debug for Stack {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        const DEBUGGED_SLOTS: usize = 256;
-
-        let slots = (0_u16..)
-            .zip(&self.slots)
-            .map(|(idx, slot)| (self.pointer_flags.get(idx), *slot))
-            .take(DEBUGGED_SLOTS);
-        formatter
-            .debug_struct("Stack")
-            .field("start", &StackStart(slots))
-            .field(
-                "pointer_flags.hash",
-                &hash_for_debugging(&self.pointer_flags),
-            )
-            .field("slots.hash", &hash_for_debugging(&self.slots))
-            .finish_non_exhaustive()
-    }
 }
 
 const NUMBER_OF_DIRTY_AREAS: usize = 64;
@@ -125,27 +88,6 @@ pub(crate) struct StackSnapshot {
     slots: Box<[U256]>,
 }
 
-impl fmt::Debug for StackSnapshot {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        const DEBUGGED_SLOTS: usize = 256;
-
-        let slots = (0_u16..)
-            .zip(&self.slots[..])
-            .map(|(idx, slot)| (self.pointer_flags.get(idx), *slot))
-            .take(DEBUGGED_SLOTS);
-        formatter
-            .debug_struct("StackSnapshot")
-            .field("dirty_areas", &self.dirty_areas)
-            .field("start", &StackStart(slots))
-            .field(
-                "pointer_flags.hash",
-                &hash_for_debugging(&self.pointer_flags),
-            )
-            .field("slots.hash", &hash_for_debugging(&self.slots))
-            .finish_non_exhaustive()
-    }
-}
-
 impl Clone for Box<Stack> {
     fn clone(&self) -> Self {
         unsafe {
@@ -176,6 +118,67 @@ impl StackPool {
         self.stacks.push(stack);
     }
 }
+
+// region:Debug implementations
+
+/// Helper wrapper for debugging [`Stack`] / [`StackSnapshot`] contents.
+struct StackStart<I>(I);
+
+impl<I: Iterator<Item = (bool, U256)> + Clone> fmt::Debug for StackStart<I> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut list = formatter.debug_list();
+        for (is_pointer, slot) in self.0.clone() {
+            if is_pointer {
+                list.entry(&FatPointer::from(slot));
+            } else {
+                list.entry(&slot);
+            }
+        }
+        list.finish()
+    }
+}
+
+impl fmt::Debug for Stack {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        const DEBUGGED_SLOTS: usize = 256;
+
+        let slots = (0_u16..)
+            .zip(&self.slots)
+            .map(|(idx, slot)| (self.pointer_flags.get(idx), *slot))
+            .take(DEBUGGED_SLOTS);
+        formatter
+            .debug_struct("Stack")
+            .field("start", &StackStart(slots))
+            .field(
+                "pointer_flags.hash",
+                &hash_for_debugging(&self.pointer_flags),
+            )
+            .field("slots.hash", &hash_for_debugging(&self.slots))
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for StackSnapshot {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        const DEBUGGED_SLOTS: usize = 256;
+
+        let slots = (0_u16..)
+            .zip(&self.slots[..])
+            .map(|(idx, slot)| (self.pointer_flags.get(idx), *slot))
+            .take(DEBUGGED_SLOTS);
+        formatter
+            .debug_struct("StackSnapshot")
+            .field("dirty_areas", &self.dirty_areas)
+            .field("start", &StackStart(slots))
+            .field(
+                "pointer_flags.hash",
+                &hash_for_debugging(&self.pointer_flags),
+            )
+            .field("slots.hash", &hash_for_debugging(&self.slots))
+            .finish_non_exhaustive()
+    }
+}
+// endregion
 
 #[cfg(test)]
 mod tests {
