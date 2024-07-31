@@ -370,11 +370,14 @@ mod tests {
             first_changes in arbitrary_storage_changes(),
             second_changes in arbitrary_storage_changes(),
         ) {
-            let mut world_diff = WorldDiff::default();
-            world_diff.storage_initial_values = initial_values
+            let storage_initial_values = initial_values
                 .iter()
                 .map(|(key, value)| (*key, Some(*value)))
                 .collect();
+            let mut world_diff = WorldDiff {
+                storage_initial_values,
+                ..WorldDiff::default()
+            };
 
             let checkpoint1 = world_diff.snapshot();
             for (key, value) in &first_changes {

@@ -65,6 +65,7 @@ pub trait World {
 
 /// Deterministic (across program runs and machines) hash that can be used for `Debug` implementations
 /// to concisely represent large amounts of data.
+#[cfg_attr(feature = "single_instruction_test", allow(dead_code))] // Currently used entirely in types overridden by `single_instruction_test` feature
 pub(crate) fn hash_for_debugging(value: &impl Hash) -> u64 {
     let mut hasher = DefaultHasher::new();
     value.hash(&mut hasher);

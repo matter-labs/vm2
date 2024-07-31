@@ -16,7 +16,7 @@ fn program_from_file(filename: &str) -> Program {
             false,
         ),
         blob.chunks_exact(32)
-            .map(|chunk| U256::from_big_endian(chunk.try_into().unwrap()))
+            .map(U256::from_big_endian)
             .collect::<Vec<_>>(),
     )
 }
