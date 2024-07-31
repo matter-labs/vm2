@@ -49,7 +49,7 @@ impl PartialEq for Heap {
         if shorter_bytes.len() > longer_bytes.len() {
             mem::swap(&mut shorter_bytes, &mut longer_bytes);
         }
-        *shorter_bytes == longer_bytes[..shorter_bytes.len()]
+        shorter_bytes[..] == longer_bytes[..shorter_bytes.len()]
             && longer_bytes[shorter_bytes.len()..]
                 .iter()
                 .all(|&byte| byte == 0)
@@ -171,7 +171,8 @@ impl Index<HeapId> for Heaps {
     }
 }
 
-// Since we never remove `Heap`s (even after rollbacks), we allow additional empty heaps at the end of `Heaps`.
+// Since we never remove `Heap` entries (even after rollbacks – although we do deallocate heaps in this case),
+// we allow additional empty heaps at the end of `Heaps`.
 impl PartialEq for Heaps {
     fn eq(&self, other: &Self) -> bool {
         for i in 0..self.heaps.len().max(other.heaps.len()) {
