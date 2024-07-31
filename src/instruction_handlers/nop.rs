@@ -5,12 +5,8 @@ use crate::{
     Instruction, VirtualMachine, World,
 };
 
-fn nop(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
+fn nop(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
+    instruction_boilerplate(vm, world, |vm, args, _| {
         // nop's addressing modes can move the stack pointer!
         AdvanceStackPointer::get(args, &mut vm.state);
         vm.state.current_frame.sp = vm

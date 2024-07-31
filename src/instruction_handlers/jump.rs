@@ -1,4 +1,4 @@
-use super::ret::INVALID_INSTRUCTION;
+use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Destination,
@@ -8,24 +8,15 @@ use crate::{
     VirtualMachine, World,
 };
 
-fn jump<In: Source>(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    _: &mut dyn World,
-) -> InstructionResult {
-    unsafe {
-        let args = &(*instruction).arguments;
+fn jump<In: Source>(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
+    instruction_boilerplate(vm, world, |vm, args, _| {
         let target = In::get(args, &mut vm.state).low_u32() as u16;
 
-        let next_instruction = vm.state.current_frame.pc_to_u16(instruction) + 1;
+        let next_instruction = vm.state.current_frame.get_pc_as_u16() + 1;
         Register1::set(args, &mut vm.state, next_instruction.into());
 
-        if let Some(instruction) = vm.state.current_frame.program.instruction(target) {
-            Ok(instruction)
-        } else {
-            Ok(&INVALID_INSTRUCTION)
-        }
-    }
+        vm.state.current_frame.set_pc_from_u16(target);
+    })
 }
 
 use super::monomorphization::*;

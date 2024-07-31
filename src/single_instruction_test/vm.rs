@@ -1,22 +1,16 @@
 use super::{heap::Heaps, stack::StackPool};
 use crate::{
     callframe::Callframe, fat_pointer::FatPointer, instruction::InstructionResult,
-    instruction_handlers::free_panic, HeapId, Instruction, Settings, State, VirtualMachine, World,
+    instruction_handlers::free_panic, HeapId, Settings, State, VirtualMachine, World,
 };
 use arbitrary::Arbitrary;
 use std::fmt::Debug;
 use u256::U256;
 
 impl VirtualMachine {
-    fn get_first_instruction(&self) -> *const Instruction {
-        self.state.current_frame.program.instruction(0).unwrap()
-    }
-
     pub fn run_single_instruction(&mut self, world: &mut dyn World) -> InstructionResult {
-        let instruction = self.get_first_instruction();
-
         unsafe {
-            let args = &(*instruction).arguments;
+            let args = &(*self.state.current_frame.pc).arguments;
 
             if self.state.use_gas(args.get_static_gas_cost()).is_err()
                 || !args.mode_requirements().met(
@@ -28,9 +22,10 @@ impl VirtualMachine {
             }
 
             if args.predicate().satisfied(&self.state.flags) {
-                ((*instruction).handler)(self, instruction, world)
+                ((*self.state.current_frame.pc).handler)(self, world)
             } else {
-                Ok(instruction.add(1))
+                self.state.current_frame.pc = self.state.current_frame.pc.add(1);
+                None
             }
         }
     }
@@ -86,7 +81,7 @@ impl<'a> Arbitrary<'a> for VirtualMachine {
                 current_frame,
                 // Exiting the final frame is different in vm2 on purpose,
                 // so always generate two frames to avoid that.
-                previous_frames: vec![(0, Callframe::dummy())],
+                previous_frames: vec![Callframe::dummy()],
                 heaps,
                 transaction_number: u.arbitrary()?,
                 context_u128: u.arbitrary()?,

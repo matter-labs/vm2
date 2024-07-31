@@ -27,8 +27,8 @@ impl State {
         println!("Current frame:");
         self.current_frame.print_mock_info();
 
-        if let Some((pc, previous)) = self.previous_frames.first() {
-            println!("Previous frame (pc at {pc}):");
+        if let Some(previous) = self.previous_frames.first() {
+            println!("Previous frame (pc at {}):", previous.get_pc_as_u16());
             previous.print_mock_info();
         }
     }

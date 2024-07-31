@@ -1,4 +1,5 @@
 use super::{
+    common::instruction_boilerplate,
     heap_access::grow_heap,
     ret::{panic_from_failed_far_call, RETURN_COST},
     AuxHeap, Heap,
@@ -36,119 +37,118 @@ pub enum CallingMode {
 /// not in the caller!
 fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>(
     vm: &mut VirtualMachine,
-    instruction: *const Instruction,
     world: &mut dyn World,
 ) -> InstructionResult {
-    let args = unsafe { &(*instruction).arguments };
+    instruction_boilerplate(vm, world, |vm, args, world| {
+        let (raw_abi, raw_abi_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
 
-    let (raw_abi, raw_abi_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
+        let address_mask: U256 = U256::MAX >> (256 - 160);
+        let destination_address = Register2::get(args, &mut vm.state) & address_mask;
+        let exception_handler = Immediate1::get(args, &mut vm.state).low_u32() as u16;
 
-    let address_mask: U256 = U256::MAX >> (256 - 160);
-    let destination_address = Register2::get(args, &mut vm.state) & address_mask;
-    let exception_handler = Immediate1::get(args, &mut vm.state).low_u32() as u16;
+        let mut abi = get_far_call_arguments(raw_abi);
+        abi.is_constructor_call = abi.is_constructor_call && vm.state.current_frame.is_kernel;
+        abi.is_system_call =
+            abi.is_system_call && is_kernel(u256_into_address(destination_address));
 
-    let mut abi = get_far_call_arguments(raw_abi);
-    abi.is_constructor_call = abi.is_constructor_call && vm.state.current_frame.is_kernel;
-    abi.is_system_call = abi.is_system_call && is_kernel(u256_into_address(destination_address));
+        let mut mandated_gas =
+            if abi.is_system_call && destination_address == ADDRESS_MSG_VALUE.into() {
+                MSG_VALUE_SIMULATOR_ADDITIVE_COST
+            } else {
+                0
+            };
 
-    let mut mandated_gas = if abi.is_system_call && destination_address == ADDRESS_MSG_VALUE.into()
-    {
-        MSG_VALUE_SIMULATOR_ADDITIVE_COST
-    } else {
-        0
-    };
+        let failing_part = (|| {
+            let decommit_result = vm.world_diff.decommit(
+                world,
+                destination_address,
+                vm.settings.default_aa_code_hash,
+                vm.settings.evm_interpreter_code_hash,
+                abi.is_constructor_call,
+            );
 
-    let failing_part = (|| {
-        let decommit_result = vm.world_diff.decommit(
-            world,
-            destination_address,
-            vm.settings.default_aa_code_hash,
-            vm.settings.evm_interpreter_code_hash,
-            abi.is_constructor_call,
-        );
+            // calldata has to be constructed even if we already know we will panic because
+            // overflowing start + length makes the heap resize even when already panicking.
+            let already_failed = decommit_result.is_none() || IS_SHARD && abi.shard_id != 0;
 
-        // calldata has to be constructed even if we already know we will panic because
-        // overflowing start + length makes the heap resize even when already panicking.
-        let already_failed = decommit_result.is_none() || IS_SHARD && abi.shard_id != 0;
+            let maybe_calldata =
+                get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm, already_failed);
 
-        let maybe_calldata = get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm, already_failed);
+            // mandated gas is passed even if it means transferring more than the 63/64 rule allows
+            if let Some(gas_left) = vm.state.current_frame.gas.checked_sub(mandated_gas) {
+                vm.state.current_frame.gas = gas_left;
+            } else {
+                // If the gas is insufficient, the rest is burned
+                vm.state.current_frame.gas = 0;
+                mandated_gas = 0;
+                return None;
+            };
 
-        // mandated gas is passed even if it means transferring more than the 63/64 rule allows
-        if let Some(gas_left) = vm.state.current_frame.gas.checked_sub(mandated_gas) {
-            vm.state.current_frame.gas = gas_left;
-        } else {
-            // If the gas is insufficient, the rest is burned
-            vm.state.current_frame.gas = 0;
-            mandated_gas = 0;
-            return None;
+            let calldata = maybe_calldata?;
+            let (unpaid_decommit, is_evm) = decommit_result?;
+            let program = vm.world_diff.pay_for_decommit(
+                world,
+                unpaid_decommit,
+                &mut vm.state.current_frame.gas,
+            )?;
+
+            Some((calldata, program, is_evm))
+        })();
+
+        let maximum_gas = vm.state.current_frame.gas / 64 * 63;
+        let normally_passed_gas = abi.gas_to_pass.min(maximum_gas);
+        vm.state.current_frame.gas -= normally_passed_gas;
+        let new_frame_gas = normally_passed_gas + mandated_gas;
+
+        let Some((calldata, program, is_evm_interpreter)) = failing_part else {
+            vm.state.current_frame.gas += new_frame_gas.saturating_sub(RETURN_COST);
+            panic_from_failed_far_call(vm, exception_handler);
+            return;
         };
 
-        let calldata = maybe_calldata?;
-        let (unpaid_decommit, is_evm) = decommit_result?;
-        let program = vm.world_diff.pay_for_decommit(
-            world,
-            unpaid_decommit,
-            &mut vm.state.current_frame.gas,
-        )?;
+        let stipend = if is_evm_interpreter {
+            EVM_SIMULATOR_STIPEND
+        } else {
+            0
+        };
+        let new_frame_gas = new_frame_gas
+            .checked_add(stipend)
+            .expect("stipend must not cause overflow");
 
-        Some((calldata, program, is_evm))
-    })();
+        let new_frame_is_static = IS_STATIC || vm.state.current_frame.is_static;
+        vm.push_frame::<CALLING_MODE>(
+            u256_into_address(destination_address),
+            program,
+            new_frame_gas,
+            stipend,
+            exception_handler,
+            new_frame_is_static && !is_evm_interpreter,
+            calldata.memory_page,
+            vm.world_diff.snapshot(),
+        );
 
-    let maximum_gas = vm.state.current_frame.gas / 64 * 63;
-    let normally_passed_gas = abi.gas_to_pass.min(maximum_gas);
-    vm.state.current_frame.gas -= normally_passed_gas;
-    let new_frame_gas = normally_passed_gas + mandated_gas;
+        vm.state.flags = Flags::new(false, false, false);
 
-    let Some((calldata, program, is_evm_interpreter)) = failing_part else {
-        vm.state.current_frame.gas += new_frame_gas.saturating_sub(RETURN_COST);
-        return panic_from_failed_far_call(vm, exception_handler);
-    };
+        if abi.is_system_call {
+            // r3 to r12 are kept but they lose their pointer flags
+            vm.state.registers[13] = U256::zero();
+            vm.state.registers[14] = U256::zero();
+            vm.state.registers[15] = U256::zero();
+        } else {
+            vm.state.registers = [U256::zero(); 16];
+        }
 
-    let stipend = if is_evm_interpreter {
-        EVM_SIMULATOR_STIPEND
-    } else {
-        0
-    };
-    let new_frame_gas = new_frame_gas
-        .checked_add(stipend)
-        .expect("stipend must not cause overflow");
+        // Only r1 is a pointer
+        vm.state.register_pointer_flags = 2;
+        vm.state.registers[1] = calldata.into_u256();
 
-    let new_frame_is_static = IS_STATIC || vm.state.current_frame.is_static;
-    vm.push_frame::<CALLING_MODE>(
-        instruction,
-        u256_into_address(destination_address),
-        program,
-        new_frame_gas,
-        stipend,
-        exception_handler,
-        new_frame_is_static && !is_evm_interpreter,
-        calldata.memory_page,
-        vm.world_diff.snapshot(),
-    );
+        let is_static_call_to_evm_interpreter = new_frame_is_static && is_evm_interpreter;
+        let call_type = (u8::from(is_static_call_to_evm_interpreter) << 2)
+            | (u8::from(abi.is_system_call) << 1)
+            | u8::from(abi.is_constructor_call);
 
-    vm.state.flags = Flags::new(false, false, false);
-
-    if abi.is_system_call {
-        // r3 to r12 are kept but they lose their pointer flags
-        vm.state.registers[13] = U256::zero();
-        vm.state.registers[14] = U256::zero();
-        vm.state.registers[15] = U256::zero();
-    } else {
-        vm.state.registers = [U256::zero(); 16];
-    }
-
-    // Only r1 is a pointer
-    vm.state.register_pointer_flags = 2;
-    vm.state.registers[1] = calldata.into_u256();
-
-    let is_static_call_to_evm_interpreter = new_frame_is_static && is_evm_interpreter;
-    let call_type = (u8::from(is_static_call_to_evm_interpreter) << 2)
-        | (u8::from(abi.is_system_call) << 1)
-        | u8::from(abi.is_constructor_call);
-
-    vm.state.registers[2] = call_type.into();
-
-    Ok(vm.state.current_frame.program.instruction(0).unwrap())
+        vm.state.registers[2] = call_type.into();
+    })
 }
 
 pub(crate) struct FarCallABI {

@@ -10,12 +10,8 @@ use crate::{
 
 use super::common::instruction_boilerplate;
 
-fn decommit(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, world| {
+fn decommit(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
+    instruction_boilerplate(vm, world, |vm, args, world| {
         let code_hash = Register1::get(args, &mut vm.state);
         let extra_cost = Register2::get(args, &mut vm.state).low_u32();
 

@@ -1,4 +1,4 @@
-use super::{common::instruction_boilerplate_with_panic, HeapInterface, PANIC};
+use super::{common::instruction_boilerplate, HeapInterface, PANIC};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     heap::Heaps,
@@ -23,17 +23,14 @@ use zkevm_opcode_defs::{
     PrecompileAuxData, PrecompileCallABI,
 };
 
-fn precompile_call(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
+fn precompile_call(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
+    instruction_boilerplate(vm, world, |vm, args, _| {
         // The user gets to decide how much gas to burn
         // This is safe because system contracts are trusted
         let aux_data = PrecompileAuxData::from_u256(Register2::get(args, &mut vm.state));
         let Ok(()) = vm.state.use_gas(aux_data.extra_ergs_cost) else {
-            return Ok(&PANIC);
+            vm.state.current_frame.pc = &PANIC;
+            return;
         };
         vm.world_diff.pubdata.0 += aux_data.extra_pubdata_cost as i32;
 
@@ -82,8 +79,6 @@ fn precompile_call(
         }
 
         Register1::set(args, &mut vm.state, 1.into());
-
-        continue_normally
     })
 }
 

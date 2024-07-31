@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use super::{stack::Stack, state_to_zk_evm::vm2_state_to_zk_evm_state, MockWorld};
-use crate::{
-    zkevm_opcode_defs::decoding::EncodingModeProduction, Instruction, VirtualMachine, World,
-};
+use crate::{zkevm_opcode_defs::decoding::EncodingModeProduction, VirtualMachine, World};
 use u256::U256;
 use zk_evm::{
     abstractions::{DecommittmentProcessor, Memory, MemoryType, PrecompilesProcessor, Storage},
@@ -28,16 +26,12 @@ type ZkEvmState = VmState<
     EncodingModeProduction,
 >;
 
-pub fn vm2_to_zk_evm(
-    vm: &VirtualMachine,
-    world: MockWorld,
-    program_counter: *const Instruction,
-) -> ZkEvmState {
+pub fn vm2_to_zk_evm(vm: &VirtualMachine, world: MockWorld) -> ZkEvmState {
     let mut event_sink = InMemoryEventSink::new();
     event_sink.start_frame(zk_evm::aux_structures::Timestamp(0));
 
     VmState {
-        local_state: vm2_state_to_zk_evm_state(&vm.state, program_counter),
+        local_state: vm2_state_to_zk_evm_state(&vm.state),
         block_properties: BlockProperties {
             default_aa_code_hash: U256::from_big_endian(&vm.settings.default_aa_code_hash),
             evm_simulator_code_hash: U256::from_big_endian(&vm.settings.evm_interpreter_code_hash),

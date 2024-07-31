@@ -19,9 +19,8 @@ impl fmt::Debug for Instruction {
     }
 }
 
-pub(crate) type Handler =
-    fn(&mut VirtualMachine, *const Instruction, &mut dyn World) -> InstructionResult;
-pub(crate) type InstructionResult = Result<*const Instruction, ExecutionEnd>;
+pub(crate) type Handler = fn(&mut VirtualMachine, &mut dyn World) -> InstructionResult;
+pub(crate) type InstructionResult = Option<ExecutionEnd>;
 
 #[derive(Debug, PartialEq)]
 pub enum ExecutionEnd {
@@ -30,10 +29,7 @@ pub enum ExecutionEnd {
     Panicked,
 
     /// Returned when the bootloader writes to the heap location [crate::Settings::hook_address]
-    SuspendedOnHook {
-        hook: u32,
-        pc_to_resume_from: u16,
-    },
+    SuspendedOnHook(u32),
 }
 
 pub fn jump_to_beginning() -> Instruction {
@@ -42,11 +38,8 @@ pub fn jump_to_beginning() -> Instruction {
         arguments: Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
     }
 }
-fn jump_to_beginning_handler(
-    vm: &mut VirtualMachine,
-    _: *const Instruction,
-    _: &mut dyn World,
-) -> InstructionResult {
+fn jump_to_beginning_handler(vm: &mut VirtualMachine, _: &mut dyn World) -> InstructionResult {
     let first_instruction = vm.state.current_frame.program.instruction(0).unwrap();
-    Ok(first_instruction)
+    vm.state.current_frame.pc = first_instruction;
+    None
 }

@@ -8,12 +8,8 @@ use crate::{
 use u256::H160;
 use zkevm_opcode_defs::ADDRESS_EVENT_WRITER;
 
-fn event(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
+fn event(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
+    instruction_boilerplate(vm, world, |vm, args, _| {
         if vm.state.current_frame.address == H160::from_low_u64_be(ADDRESS_EVENT_WRITER as u64) {
             let key = Register1::get(args, &mut vm.state);
             let value = Register2::get(args, &mut vm.state);
@@ -30,12 +26,8 @@ fn event(
     })
 }
 
-fn l2_to_l1(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
+fn l2_to_l1(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
+    instruction_boilerplate(vm, world, |vm, args, _| {
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
         let is_service = Immediate1::get(args, &mut vm.state).low_u32() == 1;

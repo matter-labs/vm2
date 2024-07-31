@@ -1,7 +1,6 @@
 use crate::{
     callframe::{Callframe, NearCallFrame},
     instruction_handlers::PANIC,
-    Instruction,
 };
 use std::iter;
 use u256::U256;
@@ -13,7 +12,6 @@ use zkevm_opcode_defs::decoding::EncodingModeProduction;
 
 pub(crate) fn vm2_state_to_zk_evm_state(
     state: &crate::State,
-    program_counter: *const Instruction,
 ) -> VmLocalState<8, EncodingModeProduction> {
     // zk_evm requires an unused bottom frame
     let mut callframes: Vec<_> = iter::once(CallStackEntry::empty_context())
@@ -21,7 +19,7 @@ pub(crate) fn vm2_state_to_zk_evm_state(
             state
                 .previous_frames
                 .iter()
-                .map(|x| x.1.clone())
+                .cloned()
                 .chain(iter::once(state.current_frame.clone()))
                 .flat_map(vm2_frame_to_zk_evm_frames),
         )
@@ -49,7 +47,7 @@ pub(crate) fn vm2_state_to_zk_evm_state(
         memory_page_counter: 3000,
         absolute_execution_step: 0,
         tx_number_in_block: state.transaction_number,
-        pending_exception: program_counter == &PANIC,
+        pending_exception: state.current_frame.pc == &PANIC,
         previous_super_pc: 0, // Same as current pc so the instruction is read from previous_code_word
         context_u128_register: state.context_u128,
         callstack: Callstack {
@@ -86,15 +84,16 @@ fn vm2_frame_to_zk_evm_frames(frame: Callframe) -> impl Iterator<Item = CallStac
 
     let mut result = vec![far_frame];
     for NearCallFrame {
-        call_instruction,
         exception_handler,
         previous_frame_sp,
         previous_frame_gas,
+        previous_frame_pc,
         ..
     } in frame.near_calls
     {
         let last = result.last_mut().unwrap();
-        last.pc = call_instruction;
+        last.pc =
+            unsafe { previous_frame_pc.offset_from(frame.program.instruction(0).unwrap()) as u16 };
         last.sp = previous_frame_sp;
         last.ergs_remaining = previous_frame_gas;
 

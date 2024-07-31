@@ -1,4 +1,4 @@
-use super::{common::instruction_boilerplate_with_panic, PANIC};
+use super::{common::instruction_boilerplate, PANIC};
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
@@ -12,10 +12,9 @@ use u256::U256;
 
 fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     vm: &mut VirtualMachine,
-    instruction: *const Instruction,
     world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
+    instruction_boilerplate(vm, world, |vm, args, _| {
         let ((a, a_is_pointer), (b, b_is_pointer)) = if SWAP {
             (
                 Register2::get_with_pointer_flag(args, &mut vm.state),
@@ -29,16 +28,16 @@ fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
         };
 
         if !a_is_pointer || b_is_pointer {
-            return Ok(&PANIC);
+            vm.state.current_frame.pc = &PANIC;
+            return;
         }
 
         let Some(result) = Op::perform(a, b) else {
-            return Ok(&PANIC);
+            vm.state.current_frame.pc = &PANIC;
+            return;
         };
 
         Out::set_fat_ptr(args, &mut vm.state, result);
-
-        continue_normally
     })
 }
 

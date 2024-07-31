@@ -27,6 +27,8 @@ impl<'a> Arbitrary<'a> for Callframe {
         // but the calldata heap must be different from the heap and aux heap
         let calldata_heap = HeapId::from_u32_unchecked(u.int_in_range(0..=base_page - 1)?);
 
+        let program: Program = u.arbitrary()?;
+
         let mut me = Self {
             address,
             code_address: u.arbitrary()?,
@@ -41,7 +43,8 @@ impl<'a> Arbitrary<'a> for Callframe {
             gas: u.int_in_range(0..=u32::MAX - EVM_SIMULATOR_STIPEND)?,
             stipend: u.arbitrary()?,
             near_calls: vec![],
-            program: u.arbitrary()?,
+            pc: program.instruction(0).unwrap(),
+            program,
             heap: HeapId::from_u32_unchecked(base_page + 2),
             aux_heap: HeapId::from_u32_unchecked(base_page + 3),
             heap_size: u.arbitrary()?,
@@ -53,7 +56,6 @@ impl<'a> Arbitrary<'a> for Callframe {
         if u.arbitrary()? {
             me.push_near_call(
                 u.arbitrary::<u32>()?.min(me.gas),
-                me.program.instruction(0).unwrap(),
                 u.arbitrary()?,
                 WorldDiff::default().snapshot(),
             );
@@ -81,6 +83,7 @@ impl Callframe {
             gas: 0,
             stipend: 0,
             near_calls: vec![],
+            pc: &crate::instruction_handlers::PANIC,
             program: Program::for_decommit(),
             heap: FIRST_AUX_HEAP,
             aux_heap: FIRST_AUX_HEAP,

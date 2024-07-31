@@ -1,4 +1,7 @@
-use super::{common::instruction_boilerplate_with_panic, PANIC};
+use super::{
+    common::{instruction_boilerplate, instruction_boilerplate_ext},
+    PANIC,
+};
 use crate::{
     addressing_modes::{
         Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
@@ -48,10 +51,9 @@ const LAST_ADDRESS: u32 = u32::MAX - 32;
 
 fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
     vm: &mut VirtualMachine,
-    instruction: *const Instruction,
     world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
+    instruction_boilerplate(vm, world, |vm, args, _| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
@@ -60,14 +62,16 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
 
         let new_bound = address.wrapping_add(32);
         if grow_heap::<H>(&mut vm.state, new_bound).is_err() {
-            return Ok(&PANIC);
+            vm.state.current_frame.pc = &PANIC;
+            return;
         };
 
         // The heap is always grown even when the index nonsensical.
         // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
         if pointer > LAST_ADDRESS.into() {
             let _ = vm.state.use_gas(u32::MAX);
-            return Ok(&PANIC);
+            vm.state.current_frame.pc = &PANIC;
+            return;
         }
 
         let heap = H::get_heap(&vm.state);
@@ -77,17 +81,14 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
         if INCREMENT {
             Register2::set(args, &mut vm.state, pointer + 32)
         }
-
-        continue_normally
     })
 }
 
 fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENABLED: bool>(
     vm: &mut VirtualMachine,
-    instruction: *const Instruction,
     world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
+    instruction_boilerplate_ext(vm, world, |vm, args, _| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
@@ -97,14 +98,16 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
 
         let new_bound = address.wrapping_add(32);
         if grow_heap::<H>(&mut vm.state, new_bound).is_err() {
-            return Ok(&PANIC);
+            vm.state.current_frame.pc = &PANIC;
+            return None;
         }
 
         // The heap is always grown even when the index nonsensical.
         // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
         if pointer > LAST_ADDRESS.into() {
             let _ = vm.state.use_gas(u32::MAX);
-            return Ok(&PANIC);
+            vm.state.current_frame.pc = &PANIC;
+            return None;
         }
 
         let heap = H::get_heap(&vm.state);
@@ -115,16 +118,9 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
         }
 
         if HOOKING_ENABLED && address == vm.settings.hook_address {
-            Err(ExecutionEnd::SuspendedOnHook {
-                hook: value.as_u32(),
-                pc_to_resume_from: vm
-                    .state
-                    .current_frame
-                    .pc_to_u16(instruction)
-                    .wrapping_add(1),
-            })
+            Some(ExecutionEnd::SuspendedOnHook(value.as_u32()))
         } else {
-            continue_normally
+            None
         }
     })
 }
@@ -144,13 +140,13 @@ pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<
 
 fn load_pointer<const INCREMENT: bool>(
     vm: &mut VirtualMachine,
-    instruction: *const Instruction,
     world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
+    instruction_boilerplate(vm, world, |vm, args, _| {
         let (input, input_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
         if !input_is_pointer {
-            return Ok(&PANIC);
+            vm.state.current_frame.pc = &PANIC;
+            return;
         }
         let pointer = FatPointer::from(input);
 
@@ -158,7 +154,8 @@ fn load_pointer<const INCREMENT: bool>(
         // but if offset + 32 is not representable, we panic, even if we could've read some bytes.
         // This is not a bug, this is how it must work to be backwards compatible.
         if pointer.offset > LAST_ADDRESS {
-            return Ok(&PANIC);
+            vm.state.current_frame.pc = &PANIC;
+            return;
         };
 
         let start = pointer.start + pointer.offset.min(pointer.length);
@@ -171,8 +168,6 @@ fn load_pointer<const INCREMENT: bool>(
             // This addition does not overflow because we checked that the offset is small enough above.
             Register2::set_fat_ptr(args, &mut vm.state, input + 32)
         }
-
-        continue_normally
     })
 }
 

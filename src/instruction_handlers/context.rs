@@ -9,12 +9,8 @@ use crate::{
 use u256::U256;
 use zkevm_opcode_defs::VmMetaParameters;
 
-fn context<Op: ContextOp>(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
+fn context<Op: ContextOp>(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
+    instruction_boilerplate(vm, world, |vm, args, _| {
         let result = Op::get(&vm.state);
         Register1::set(args, &mut vm.state, result)
     })
@@ -66,12 +62,8 @@ impl ContextOp for SP {
     }
 }
 
-fn context_meta(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
+fn context_meta(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
+    instruction_boilerplate(vm, world, |vm, args, _| {
         let result = VmMetaParameters {
             heap_size: vm.state.current_frame.heap_size,
             aux_heap_size: vm.state.current_frame.aux_heap_size,
@@ -91,33 +83,21 @@ fn context_meta(
     })
 }
 
-fn set_context_u128(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
+fn set_context_u128(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
+    instruction_boilerplate(vm, world, |vm, args, _| {
         let value = Register1::get(args, &mut vm.state).low_u128();
         vm.state.set_context_u128(value);
     })
 }
 
-fn increment_tx_number(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, _, _| {
+fn increment_tx_number(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
+    instruction_boilerplate(vm, world, |vm, _, _| {
         vm.start_new_tx();
     })
 }
 
-fn aux_mutating(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |_, _, _| {
+fn aux_mutating(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
+    instruction_boilerplate(vm, world, |_, _, _| {
         // This instruction just crashes or nops
     })
 }

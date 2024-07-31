@@ -43,18 +43,15 @@ fn unimplemented_instruction(variant: Opcode) -> Instruction {
         arguments,
     }
 }
-fn unimplemented_handler(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    _: &mut dyn World,
-) -> InstructionResult {
+fn unimplemented_handler(vm: &mut VirtualMachine, _: &mut dyn World) -> InstructionResult {
     let variant: Opcode = unsafe {
         std::mem::transmute(
-            Immediate1::get(&(*instruction).arguments, &mut vm.state).low_u32() as u16,
+            Immediate1::get(&(*vm.state.current_frame.pc).arguments, &mut vm.state).low_u32()
+                as u16,
         )
     };
     eprintln!("Unimplemented instruction: {:?}!", variant);
-    Err(ExecutionEnd::Panicked)
+    Some(ExecutionEnd::Panicked)
 }
 
 pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {

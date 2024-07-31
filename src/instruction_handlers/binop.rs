@@ -13,10 +13,9 @@ use u256::U256;
 
 fn binop<Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SET_FLAGS: bool>(
     vm: &mut VirtualMachine,
-    instruction: *const Instruction,
     world: &mut dyn World,
 ) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
+    instruction_boilerplate(vm, world, |vm, args, _| {
         let a = In1::get(args, &mut vm.state);
         let b = Register2::get(args, &mut vm.state);
         let (a, b) = if SWAP { (b, a) } else { (a, b) };

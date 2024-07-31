@@ -1,5 +1,6 @@
 use crate::{
     decommit::is_kernel,
+    instruction_handlers::INVALID_INSTRUCTION,
     program::Program,
     stack::{Stack, StackSnapshot},
     world_diff::Snapshot,
@@ -28,6 +29,7 @@ pub struct Callframe {
 
     pub(crate) near_calls: Vec<NearCallFrame>,
 
+    pub pc: *const Instruction,
     pub(crate) program: Program,
 
     pub heap: HeapId,
@@ -54,10 +56,10 @@ pub struct Callframe {
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct NearCallFrame {
-    pub(crate) call_instruction: u16,
     pub(crate) exception_handler: u16,
     pub(crate) previous_frame_sp: u16,
     pub(crate) previous_frame_gas: u32,
+    pub(crate) previous_frame_pc: *const Instruction,
     world_before_this_frame: Snapshot,
 }
 
@@ -90,6 +92,7 @@ impl Callframe {
             address,
             code_address,
             caller,
+            pc: program.instruction(0).unwrap(),
             program,
             context_u128,
             is_static,
@@ -113,15 +116,14 @@ impl Callframe {
     pub(crate) fn push_near_call(
         &mut self,
         gas_to_call: u32,
-        old_pc: *const Instruction,
         exception_handler: u16,
         world_before_this_frame: Snapshot,
     ) {
         self.near_calls.push(NearCallFrame {
-            call_instruction: self.pc_to_u16(old_pc),
             exception_handler,
             previous_frame_sp: self.sp,
             previous_frame_gas: self.gas - gas_to_call,
+            previous_frame_pc: self.pc,
             world_before_this_frame,
         });
         self.gas = gas_to_call;
@@ -131,23 +133,26 @@ impl Callframe {
         self.near_calls.pop().map(|f| {
             self.sp = f.previous_frame_sp;
             self.gas = f.previous_frame_gas;
+            self.pc = f.previous_frame_pc;
 
             FrameRemnant {
-                program_counter: f.call_instruction,
                 exception_handler: f.exception_handler,
                 snapshot: f.world_before_this_frame,
             }
         })
     }
 
-    pub(crate) fn pc_to_u16(&self, pc: *const Instruction) -> u16 {
-        unsafe { pc.offset_from(self.program.instruction(0).unwrap()) as u16 }
+    pub(crate) fn get_pc_as_u16(&self) -> u16 {
+        unsafe { self.pc.offset_from(self.program.instruction(0).unwrap()) as u16 }
     }
 
-    pub fn pc_from_u16(&self, index: u16) -> Option<*const Instruction> {
-        self.program
+    /// Sets the next instruction to execute to the instruction at the given index.
+    /// If the index is out of bounds, the invalid instruction is used.
+    pub fn set_pc_from_u16(&mut self, index: u16) {
+        self.pc = self
+            .program
             .instruction(index)
-            .map(|p| p as *const Instruction)
+            .unwrap_or(&INVALID_INSTRUCTION)
     }
 
     /// The total amount of gas in this frame, including gas currently inaccessible because of a near call.
@@ -206,7 +211,6 @@ impl Callframe {
 }
 
 pub(crate) struct FrameRemnant {
-    pub(crate) program_counter: u16,
     pub(crate) exception_handler: u16,
     pub(crate) snapshot: Snapshot,
 }

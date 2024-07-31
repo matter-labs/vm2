@@ -21,7 +21,7 @@ pub struct State {
 
     /// Contains indices to the far call instructions currently being executed.
     /// They are needed to continue execution from the correct spot upon return.
-    pub previous_frames: Vec<(u16, Callframe)>,
+    pub previous_frames: Vec<Callframe>,
 
     pub heaps: Heaps,
 
@@ -95,7 +95,7 @@ impl State {
             + self
                 .previous_frames
                 .iter()
-                .map(|(_, frame)| frame.contained_gas())
+                .map(|frame| frame.contained_gas())
                 .sum::<u32>()
     }
 

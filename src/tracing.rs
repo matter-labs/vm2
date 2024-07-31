@@ -5,6 +5,7 @@ use crate::{
     VirtualMachine,
 };
 use eravm_stable_interface::*;
+use std::cmp::Ordering;
 
 impl StateInterface for VirtualMachine {
     fn read_register(&self, register: u8) -> (u256::U256, bool) {
@@ -25,29 +26,30 @@ impl StateInterface for VirtualMachine {
         self.state
             .previous_frames
             .iter()
-            .map(|(_, frame)| frame.near_calls.len() + 1)
+            .map(|frame| frame.near_calls.len() + 1)
             .sum::<usize>()
             + self.state.current_frame.near_calls.len()
             + 1
     }
 
     fn callframe(&mut self, n: usize) -> impl CallframeInterface + '_ {
-        for far_frame in std::iter::once(&mut self.state.current_frame).chain(
-            self.state
-                .previous_frames
-                .iter_mut()
-                .map(|(_, frame)| frame),
-        ) {
-            if n < far_frame.near_calls.len() {
-                return CallframeWrapper {
-                    frame: far_frame,
-                    near_call: Some(n),
-                };
-            } else if n == far_frame.near_calls.len() {
-                return CallframeWrapper {
-                    frame: far_frame,
-                    near_call: None,
-                };
+        for far_frame in std::iter::once(&mut self.state.current_frame)
+            .chain(self.state.previous_frames.iter_mut())
+        {
+            match n.cmp(&far_frame.near_calls.len()) {
+                Ordering::Less => {
+                    return CallframeWrapper {
+                        frame: far_frame,
+                        near_call: Some(n),
+                    }
+                }
+                Ordering::Equal => {
+                    return CallframeWrapper {
+                        frame: far_frame,
+                        near_call: None,
+                    }
+                }
+                _ => {}
             }
         }
         panic!("Callframe index out of bounds")
@@ -97,15 +99,15 @@ impl StateInterface for VirtualMachine {
             .map(|(key, value)| (*key, *value))
     }
 
-    fn get_storage(&self, address: u256::H160, slot: u256::U256) -> Option<(u256::U256, u32)> {
+    fn get_storage(&self, _address: u256::H160, _slot: u256::U256) -> Option<(u256::U256, u32)> {
         todo!() // Do we really want to expose the pubdata?
     }
 
-    fn get_storage_initial_value(&self, address: u256::H160, slot: u256::U256) -> u256::U256 {
+    fn get_storage_initial_value(&self, _address: u256::H160, _slot: u256::U256) -> u256::U256 {
         todo!() // Do we really want to expose the caching?
     }
 
-    fn write_storage(&mut self, address: u256::H160, slot: u256::U256, value: u256::U256) {
+    fn write_storage(&mut self, _address: u256::H160, _slot: u256::U256, _value: u256::U256) {
         todo!()
     }
 
@@ -128,9 +130,9 @@ impl StateInterface for VirtualMachine {
 
     fn write_transient_storage(
         &mut self,
-        address: u256::H160,
-        slot: u256::U256,
-        value: u256::U256,
+        _address: u256::H160,
+        _slot: u256::U256,
+        _value: u256::U256,
     ) {
         todo!()
     }
@@ -164,7 +166,7 @@ impl StateInterface for VirtualMachine {
         self.world_diff.pubdata.0 = value;
     }
 
-    fn run_arbitrary_code(code: &[u64]) {
+    fn run_arbitrary_code(_code: &[u64]) {
         todo!()
     }
 
@@ -303,15 +305,25 @@ impl CallframeInterface for CallframeWrapper<'_> {
     }
 
     fn program_counter(&self) -> Option<u16> {
-        if let Some(call) = self.near_call_on_top() {
-            Some(call.call_instruction)
+        let pointer = if let Some(call) = self.near_call_on_top() {
+            call.previous_frame_pc
         } else {
-            todo!()
+            self.frame.pc
+        };
+
+        let offset = unsafe { pointer.offset_from(self.frame.program.instruction(0).unwrap()) };
+        if offset < 0
+            || offset > u16::MAX as isize
+            || self.frame.program.instruction(offset as u16).is_none()
+        {
+            None
+        } else {
+            Some(offset as u16)
         }
     }
 
     fn set_program_counter(&mut self, value: u16) {
-        todo!()
+        self.frame.set_pc_from_u16(value);
     }
 
     fn exception_handler(&self) -> u16 {

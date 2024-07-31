@@ -2,7 +2,7 @@ pub use binop::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, Shif
 pub use far_call::CallingMode;
 pub use heap_access::{AuxHeap, Heap, HeapInterface};
 pub use pointer::{PtrAdd, PtrPack, PtrShrink, PtrSub};
-pub(crate) use ret::{free_panic, PANIC};
+pub(crate) use ret::{free_panic, INVALID_INSTRUCTION, PANIC};
 
 mod binop;
 mod common;
