@@ -394,7 +394,7 @@ mod tests {
                         StorageChange {
                             before: initial_values.get(key).copied(),
                             after: *value,
-                            is_initial: initial_values.get(key).is_none(),
+                            is_initial: !initial_values.contains_key(key),
                         }
                     ))
                     .collect()
@@ -415,7 +415,7 @@ mod tests {
                         StorageChange {
                             before: first_changes.get(key).or(initial_values.get(key)).copied(),
                             after: *value,
-                            is_initial: initial_values.get(key).is_none(),
+                            is_initial: !initial_values.contains_key(key),
                         }
                     ))
                     .collect()
