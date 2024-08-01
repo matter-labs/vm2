@@ -1,3 +1,5 @@
+#![cfg(not(feature = "single_instruction_test"))]
+
 use u256::U256;
 use vm2::{
     decode::decode_program, initial_decommit, testworld::TestWorld, ExecutionEnd, Program,

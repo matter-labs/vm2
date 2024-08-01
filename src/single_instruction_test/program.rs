@@ -36,10 +36,6 @@ impl<'a> Arbitrary<'a> for Program {
 }
 
 impl Program {
-    pub fn new(_instructions: Vec<Instruction>, _code_page: Vec<U256>) -> Self {
-        unimplemented!("Not used during fuzzing")
-    }
-
     pub fn instruction(&self, n: u16) -> Option<&Instruction> {
         if n == 0 {
             Some(&self.first_instruction.get(n).as_ref()[0])
