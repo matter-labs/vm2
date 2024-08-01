@@ -183,16 +183,13 @@ impl Addressable for State {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct StateSnapshot {
     registers: [U256; 16],
     register_pointer_flags: u16,
-
     flags: Flags,
-
     bootloader_frame: CallframeSnapshot,
-
     bootloader_heap_snapshot: (usize, usize),
     transaction_number: u16,
-
     context_u128: u128,
 }

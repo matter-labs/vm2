@@ -322,6 +322,7 @@ impl VirtualMachine {
     }
 }
 
+#[derive(Debug)]
 pub struct VmSnapshot {
     world_snapshot: ExternalSnapshot,
     state_snapshot: StateSnapshot,

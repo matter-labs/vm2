@@ -1,3 +1,5 @@
+#![cfg(not(feature = "single_instruction_test"))]
+
 use proptest::prelude::*;
 use vm2::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register, Register1},
