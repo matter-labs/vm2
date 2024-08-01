@@ -80,7 +80,7 @@ impl VirtualMachine {
                 }
 
                 #[cfg(feature = "trace")]
-                self.print_instruction(self.state.current_frame.instruction);
+                self.print_instruction(self.state.current_frame.pc);
 
                 if args.predicate().satisfied(&self.state.flags) {
                     if let Some(end) = ((*self.state.current_frame.pc).handler)(self, world) {
@@ -269,7 +269,7 @@ impl VirtualMachine {
     }
 
     #[cfg(feature = "trace")]
-    fn print_instruction(&self, instruction: *const Instruction) {
+    fn print_instruction(&self, instruction: *const crate::instruction::Instruction) {
         print!("{:?}: ", unsafe {
             instruction.offset_from(self.state.current_frame.program.instruction(0).unwrap())
         });
