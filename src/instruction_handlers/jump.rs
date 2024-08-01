@@ -12,7 +12,7 @@ fn jump<In: Source>(vm: &mut VirtualMachine, world: &mut dyn World) -> Instructi
     instruction_boilerplate(vm, world, |vm, args, _| {
         let target = In::get(args, &mut vm.state).low_u32() as u16;
 
-        let next_instruction = vm.state.current_frame.get_pc_as_u16() + 1;
+        let next_instruction = vm.state.current_frame.get_pc_as_u16();
         Register1::set(args, &mut vm.state, next_instruction.into());
 
         vm.state.current_frame.set_pc_from_u16(target);
