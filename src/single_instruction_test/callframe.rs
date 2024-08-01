@@ -83,7 +83,7 @@ impl Callframe {
             gas: 0,
             stipend: 0,
             near_calls: vec![],
-            pc: &crate::instruction_handlers::PANIC,
+            pc: &crate::instruction_handlers::INVALID_INSTRUCTION,
             program: Program::for_decommit(),
             heap: FIRST_AUX_HEAP,
             aux_heap: FIRST_AUX_HEAP,
