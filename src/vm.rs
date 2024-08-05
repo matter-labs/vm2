@@ -282,7 +282,7 @@ impl<T> VirtualMachine<T> {
     }
 
     #[cfg(feature = "trace")]
-    fn print_instruction(&self, instruction: *const crate::instruction::Instruction) {
+    fn print_instruction(&self, instruction: *const crate::instruction::Instruction<T>) {
         print!("{:?}: ", unsafe {
             instruction.offset_from(self.state.current_frame.program.instruction(0).unwrap())
         });
