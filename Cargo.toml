@@ -14,7 +14,8 @@ enum_dispatch = "0.3"
 
 # Optional dependencies (used for fuzzing)
 arbitrary = { version = "1", features = ["derive"], optional = true }
-zk_evm = { version = "0.150.0", optional = true } # FIXME: update `jms-remove-assert`?
+# The commit incorporates a fix necessary for fuzzing to work correctly.
+zk_evm = { git = "https://github.com/matter-labs/era-zk_evm.git", rev = "60dbfee86fcad6c0b75f80601595e5d4f7a30a36", optional = true }
 anyhow = { version = "1", optional = true }
 
 [dev-dependencies]
@@ -32,3 +33,9 @@ single_instruction_test = ["arbitrary", "u256/arbitrary", "zk_evm", "anyhow"]
 
 [workspace]
 members = [".", "afl-fuzz"]
+
+# Temprorarily patch `zk_evm_abstractions` dependency of `zk_evm` so that it's compatible with the direct dependency.
+# Necessary until `zk_evm` is published with the fix mentioned above. `single_instruction_test` feature that requires `zk_evm`
+# is not expected to be used externally, so this patch has a limited scope.
+[patch.'https://github.com/matter-labs/era-zk_evm_abstractions']
+zk_evm_abstractions = { version = "0.150.0" }
