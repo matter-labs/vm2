@@ -7,6 +7,7 @@ use crate::{
     predication::Flags,
     Instruction, Predicate, VirtualMachine, World,
 };
+use eravm_stable_interface::opcodes;
 use u256::U256;
 
 #[repr(u8)]
@@ -32,11 +33,12 @@ impl ReturnType {
     }
 }
 
-fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
-    vm: &mut VirtualMachine,
-    world: &mut dyn World,
+fn ret<T, const RETURN_TYPE: u8, const TO_LABEL: bool>(
+    vm: &mut VirtualMachine<T>,
+    world: &mut dyn World<T>,
+    tracer: &mut T,
 ) -> InstructionResult {
-    instruction_boilerplate_ext(vm, world, |vm, args, _| {
+    instruction_boilerplate_ext::<opcodes::Ret, _>(vm, world, tracer, |vm, args, _| {
         let mut return_type = ReturnType::from_u8(RETURN_TYPE);
         let near_call_leftover_gas = vm.state.current_frame.gas;
 
@@ -135,7 +137,7 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
 /// Formally, a far call pushes a new frame and returns from it immediately if it panics.
 /// This function instead panics without popping a frame to save on allocation.
 /// TODO: when tracers are implemented, this function should count as a separate instruction!
-pub(crate) fn panic_from_failed_far_call(vm: &mut VirtualMachine, exception_handler: u16) {
+pub(crate) fn panic_from_failed_far_call<T>(vm: &mut VirtualMachine<T>, exception_handler: u16) {
     // Gas is already subtracted in the far call code.
     // No need to roll back, as no changes are made in this "frame".
 
@@ -150,20 +152,14 @@ pub(crate) fn panic_from_failed_far_call(vm: &mut VirtualMachine, exception_hand
 }
 
 /// Panics, burning all available gas.
-pub const INVALID_INSTRUCTION: Instruction = Instruction {
-    handler: ret::<{ ReturnType::Panic as u8 }, false>,
-    arguments: Arguments::new(
-        Predicate::Always,
-        INVALID_INSTRUCTION_COST,
-        ModeRequirements::none(),
-    ),
-};
+static INVALID_INSTRUCTION: Instruction<()> = Instruction::from_invalid();
+
+pub fn invalid_instruction<'a, T>() -> &'a Instruction<T> {
+    // Safety: the handler of an invalid instruction is never read.
+    unsafe { &*(&INVALID_INSTRUCTION as *const Instruction<()>).cast() }
+}
 
 pub(crate) const RETURN_COST: u32 = 5;
-pub static PANIC: Instruction = Instruction {
-    handler: ret::<{ ReturnType::Panic as u8 }, false>,
-    arguments: Arguments::new(Predicate::Always, RETURN_COST, ModeRequirements::none()),
-};
 
 /// Turn the current instruction into a panic at no extra cost. (Great value, I know.)
 ///
@@ -174,18 +170,22 @@ pub static PANIC: Instruction = Instruction {
 /// - the far call stack overflows
 ///
 /// For all other panics, point the instruction pointer at [PANIC] instead.
-pub(crate) fn free_panic(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
-    ret::<{ ReturnType::Panic as u8 }, false>(vm, world)
+pub(crate) fn free_panic<T>(
+    vm: &mut VirtualMachine<T>,
+    world: &mut dyn World<T>,
+    tracer: &mut T,
+) -> InstructionResult {
+    ret::<T, { ReturnType::Panic as u8 }, false>(vm, world, tracer)
 }
 
 use super::monomorphization::*;
 
-impl Instruction {
+impl<T> Instruction<T> {
     pub fn from_ret(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         const RETURN_TYPE: u8 = ReturnType::Normal as u8;
         Self {
-            handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
+            handler: monomorphize!(ret [T RETURN_TYPE] match_boolean to_label),
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
@@ -193,7 +193,7 @@ impl Instruction {
         let to_label = label.is_some();
         const RETURN_TYPE: u8 = ReturnType::Revert as u8;
         Self {
-            handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
+            handler: monomorphize!(ret [T RETURN_TYPE] match_boolean to_label),
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
@@ -201,12 +201,20 @@ impl Instruction {
         let to_label = label.is_some();
         const RETURN_TYPE: u8 = ReturnType::Panic as u8;
         Self {
-            handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
+            handler: monomorphize!(ret [T RETURN_TYPE] match_boolean to_label),
             arguments: arguments.write_source(&label),
         }
     }
 
-    pub fn from_invalid() -> Self {
-        INVALID_INSTRUCTION
+    pub const fn from_invalid() -> Self {
+        Self {
+            // This field is never read because the instruction fails at the gas cost stage.
+            handler: ret::<T, { ReturnType::Panic as u8 }, false>,
+            arguments: Arguments::new(
+                Predicate::Always,
+                INVALID_INSTRUCTION_COST,
+                ModeRequirements::none(),
+            ),
+        }
     }
 }

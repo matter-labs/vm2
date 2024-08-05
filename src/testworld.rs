@@ -8,13 +8,13 @@ use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
 
-pub struct TestWorld {
+pub struct TestWorld<T> {
     pub address_to_hash: BTreeMap<U256, U256>,
-    pub hash_to_contract: BTreeMap<U256, Program>,
+    pub hash_to_contract: BTreeMap<U256, Program<T>>,
 }
 
-impl TestWorld {
-    pub fn new(contracts: &[(Address, Program)]) -> Self {
+impl<T> TestWorld<T> {
+    pub fn new(contracts: &[(Address, Program<T>)]) -> Self {
         let mut address_to_hash = BTreeMap::new();
         let mut hash_to_contract = BTreeMap::new();
         for (i, (address, code)) in contracts.iter().enumerate() {
@@ -39,8 +39,8 @@ impl TestWorld {
     }
 }
 
-impl World for TestWorld {
-    fn decommit(&mut self, hash: u256::U256) -> Program {
+impl<T> World<T> for TestWorld<T> {
+    fn decommit(&mut self, hash: u256::U256) -> Program<T> {
         if let Some(program) = self.hash_to_contract.get(&hash) {
             program.clone()
         } else {

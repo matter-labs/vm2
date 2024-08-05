@@ -8,8 +8,8 @@ pub struct MockWorld {
     storage_slot: MockRead<(H160, U256), Option<U256>>,
 }
 
-impl World for MockWorld {
-    fn decommit(&mut self, _hash: U256) -> Program {
+impl<T> World<T> for MockWorld {
+    fn decommit(&mut self, _hash: U256) -> Program<T> {
         Program::for_decommit()
     }
 

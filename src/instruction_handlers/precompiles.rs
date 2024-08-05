@@ -1,11 +1,11 @@
-use super::{common::instruction_boilerplate, HeapInterface, PANIC};
+use super::{common::instruction_boilerplate, HeapInterface};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     heap::Heaps,
     instruction::InstructionResult,
     Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::HeapId;
+use eravm_stable_interface::{opcodes, HeapId};
 use zk_evm_abstractions::{
     aux::Timestamp,
     precompiles::{
@@ -23,13 +23,17 @@ use zkevm_opcode_defs::{
     PrecompileAuxData, PrecompileCallABI,
 };
 
-fn precompile_call(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
-    instruction_boilerplate(vm, world, |vm, args, _| {
+fn precompile_call<T>(
+    vm: &mut VirtualMachine<T>,
+    world: &mut dyn World<T>,
+    tracer: &mut T,
+) -> InstructionResult {
+    instruction_boilerplate::<opcodes::PrecompileCall, _>(vm, world, tracer, |vm, args, _| {
         // The user gets to decide how much gas to burn
         // This is safe because system contracts are trusted
         let aux_data = PrecompileAuxData::from_u256(Register2::get(args, &mut vm.state));
         let Ok(()) = vm.state.use_gas(aux_data.extra_ergs_cost) else {
-            vm.state.current_frame.pc = &PANIC;
+            vm.state.current_frame.pc = &*vm.panic;
             return;
         };
         vm.world_diff.pubdata.0 += aux_data.extra_pubdata_cost as i32;
@@ -117,7 +121,7 @@ impl Memory for Heaps {
     }
 }
 
-impl Instruction {
+impl<T> Instruction<T> {
     pub fn from_precompile_call(
         abi: Register1,
         burn: Register2,

@@ -11,11 +11,12 @@ use crate::{
 };
 use u256::U256;
 
-fn binop<Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SET_FLAGS: bool>(
-    vm: &mut VirtualMachine,
-    world: &mut dyn World,
+fn binop<T, Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SET_FLAGS: bool>(
+    vm: &mut VirtualMachine<T>,
+    world: &mut dyn World<T>,
+    tracer: &mut T,
 ) -> InstructionResult {
-    instruction_boilerplate(vm, world, |vm, args, _| {
+    instruction_boilerplate::<Op, _>(vm, world, tracer, |vm, args, _| {
         let a = In1::get(args, &mut vm.state);
         let b = Register2::get(args, &mut vm.state);
         let (a, b) = if SWAP { (b, a) } else { (a, b) };
@@ -201,7 +202,7 @@ impl Binop for Div {
 
 use super::monomorphization::*;
 
-impl Instruction {
+impl<T> Instruction<T> {
     #[inline(always)]
     pub fn from_binop<Op: Binop>(
         src1: AnySource,
@@ -213,7 +214,7 @@ impl Instruction {
         set_flags: bool,
     ) -> Self {
         Self {
-            handler: monomorphize!(binop [Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
+            handler: monomorphize!(binop [T Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
             arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)

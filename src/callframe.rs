@@ -1,6 +1,6 @@
 use crate::{
     decommit::is_kernel,
-    instruction_handlers::INVALID_INSTRUCTION,
+    instruction_handlers::invalid_instruction,
     program::Program,
     stack::{Stack, StackSnapshot},
     world_diff::Snapshot,
@@ -10,8 +10,8 @@ use eravm_stable_interface::HeapId;
 use u256::H160;
 use zkevm_opcode_defs::system_params::{NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND};
 
-#[derive(Clone, PartialEq, Debug)]
-pub struct Callframe {
+#[derive(PartialEq, Debug)]
+pub struct Callframe<T> {
     pub address: H160,
     pub code_address: H160,
     pub caller: H160,
@@ -29,8 +29,8 @@ pub struct Callframe {
 
     pub(crate) near_calls: Vec<NearCallFrame>,
 
-    pub pc: *const Instruction,
-    pub(crate) program: Program,
+    pub pc: *const Instruction<T>,
+    pub(crate) program: Program<T>,
 
     pub heap: HeapId,
     pub aux_heap: HeapId,
@@ -59,17 +59,17 @@ pub(crate) struct NearCallFrame {
     pub(crate) exception_handler: u16,
     pub(crate) previous_frame_sp: u16,
     pub(crate) previous_frame_gas: u32,
-    pub(crate) previous_frame_pc: *const Instruction,
+    pub(crate) previous_frame_pc: u16,
     world_before_this_frame: Snapshot,
 }
 
-impl Callframe {
+impl<T> Callframe<T> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         address: H160,
         code_address: H160,
         caller: H160,
-        program: Program,
+        program: Program<T>,
         stack: Box<Stack>,
         heap: HeapId,
         aux_heap: HeapId,
@@ -123,7 +123,7 @@ impl Callframe {
             exception_handler,
             previous_frame_sp: self.sp,
             previous_frame_gas: self.gas - gas_to_call,
-            previous_frame_pc: self.pc,
+            previous_frame_pc: self.get_pc_as_u16(),
             world_before_this_frame,
         });
         self.gas = gas_to_call;
@@ -133,7 +133,7 @@ impl Callframe {
         self.near_calls.pop().map(|f| {
             self.sp = f.previous_frame_sp;
             self.gas = f.previous_frame_gas;
-            self.pc = f.previous_frame_pc;
+            self.set_pc_from_u16(f.previous_frame_pc);
 
             FrameRemnant {
                 exception_handler: f.exception_handler,
@@ -152,7 +152,7 @@ impl Callframe {
         self.pc = self
             .program
             .instruction(index)
-            .unwrap_or(&INVALID_INSTRUCTION)
+            .unwrap_or(invalid_instruction())
     }
 
     /// The total amount of gas in this frame, including gas currently inaccessible because of a near call.
@@ -226,4 +226,32 @@ pub(crate) struct CallframeSnapshot {
     heap_size: u32,
     aux_heap_size: u32,
     heaps_i_was_keeping_alive: usize,
+}
+
+impl<T> Clone for Callframe<T> {
+    fn clone(&self) -> Self {
+        Self {
+            address: self.address,
+            code_address: self.code_address,
+            caller: self.caller,
+            exception_handler: self.exception_handler,
+            context_u128: self.context_u128,
+            is_static: self.is_static,
+            is_kernel: self.is_kernel,
+            stack: self.stack.clone(),
+            sp: self.sp,
+            gas: self.gas,
+            stipend: self.stipend,
+            near_calls: self.near_calls.clone(),
+            pc: self.pc,
+            program: self.program.clone(),
+            heap: self.heap,
+            aux_heap: self.aux_heap,
+            heap_size: self.heap_size,
+            aux_heap_size: self.aux_heap_size,
+            calldata_heap: self.calldata_heap,
+            heaps_i_am_keeping_alive: self.heaps_i_am_keeping_alive.clone(),
+            world_before_this_frame: self.world_before_this_frame.clone(),
+        }
+    }
 }

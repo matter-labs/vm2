@@ -1,14 +1,19 @@
 use super::{heap::Heaps, stack::StackPool};
 use crate::{
-    callframe::Callframe, fat_pointer::FatPointer, instruction::InstructionResult,
-    instruction_handlers::free_panic, HeapId, Settings, State, VirtualMachine, World,
+    addressing_modes::Arguments, callframe::Callframe, fat_pointer::FatPointer,
+    instruction::InstructionResult, instruction_handlers::free_panic, HeapId, Instruction,
+    ModeRequirements, Predicate, Settings, State, VirtualMachine, World,
 };
 use arbitrary::Arbitrary;
 use std::fmt::Debug;
 use u256::U256;
 
-impl VirtualMachine {
-    pub fn run_single_instruction(&mut self, world: &mut dyn World) -> InstructionResult {
+impl<T> VirtualMachine<T> {
+    pub fn run_single_instruction(
+        &mut self,
+        world: &mut dyn World<T>,
+        tracer: &mut T,
+    ) -> InstructionResult {
         unsafe {
             let args = &(*self.state.current_frame.pc).arguments;
 
@@ -18,11 +23,11 @@ impl VirtualMachine {
                     self.state.current_frame.is_static,
                 )
             {
-                return free_panic(self, world);
+                return free_panic(self, world, tracer);
             }
 
             if args.predicate().satisfied(&self.state.flags) {
-                ((*self.state.current_frame.pc).handler)(self, world)
+                ((*self.state.current_frame.pc).handler)(self, world, tracer)
             } else {
                 self.state.current_frame.pc = self.state.current_frame.pc.add(1);
                 None
@@ -54,9 +59,9 @@ impl VirtualMachine {
     }
 }
 
-impl<'a> Arbitrary<'a> for VirtualMachine {
+impl<'a, T> Arbitrary<'a> for VirtualMachine<T> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        let current_frame: Callframe = u.arbitrary()?;
+        let current_frame: Callframe<T> = u.arbitrary()?;
 
         let mut registers = [U256::zero(); 16];
         let mut register_pointer_flags = 0;
@@ -89,6 +94,10 @@ impl<'a> Arbitrary<'a> for VirtualMachine {
             settings: u.arbitrary()?,
             world_diff: Default::default(),
             stack_pool: StackPool {},
+            panic: Box::new(Instruction::from_panic(
+                None,
+                Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+            )),
         })
     }
 }
@@ -144,7 +153,7 @@ impl<'a> Arbitrary<'a> for Settings {
     }
 }
 
-impl Debug for VirtualMachine {
+impl<T> Debug for VirtualMachine<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "print useful debugging information here!")
     }

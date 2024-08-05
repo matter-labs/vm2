@@ -18,7 +18,6 @@ mod rollback;
 mod stack;
 mod state;
 pub mod testworld;
-#[cfg(not(feature = "single_instruction_test"))]
 mod tracing;
 mod vm;
 mod world_diff;
@@ -49,10 +48,10 @@ use single_instruction_test::stack;
 #[cfg(feature = "single_instruction_test")]
 pub use zkevm_opcode_defs;
 
-pub trait World {
+pub trait World<T> {
     /// This will be called *every* time a contract is called. Caching and decoding is
     /// the world implementor's job.
-    fn decommit(&mut self, hash: U256) -> Program;
+    fn decommit(&mut self, hash: U256) -> Program<T>;
 
     fn decommit_code(&mut self, hash: U256) -> Vec<u8>;
 

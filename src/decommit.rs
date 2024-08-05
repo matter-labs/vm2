@@ -5,9 +5,9 @@ use zkevm_opcode_defs::{
 };
 
 impl WorldDiff {
-    pub(crate) fn decommit(
+    pub(crate) fn decommit<T>(
         &mut self,
-        world: &mut dyn World,
+        world: &mut dyn World<T>,
         address: U256,
         default_aa_code_hash: [u8; 32],
         evm_interpreter_code_hash: [u8; 32],
@@ -80,17 +80,21 @@ impl WorldDiff {
     /// Returns the decommitted contract code and a flag set to `true` if this is a fresh decommit (i.e.,
     /// the code wasn't decommitted previously in the same VM run).
     #[doc(hidden)] // should be used for testing purposes only; can break VM operation otherwise
-    pub fn decommit_opcode(&mut self, world: &mut dyn World, code_hash: U256) -> (Vec<u8>, bool) {
+    pub fn decommit_opcode<T>(
+        &mut self,
+        world: &mut dyn World<T>,
+        code_hash: U256,
+    ) -> (Vec<u8>, bool) {
         let was_decommitted = self.decommitted_hashes.insert(code_hash, ()).is_some();
         (world.decommit_code(code_hash), !was_decommitted)
     }
 
-    pub(crate) fn pay_for_decommit(
+    pub(crate) fn pay_for_decommit<T>(
         &mut self,
-        world: &mut dyn World,
+        world: &mut dyn World<T>,
         decommit: UnpaidDecommit,
         gas: &mut u32,
-    ) -> Option<Program> {
+    ) -> Option<Program<T>> {
         if decommit.cost > *gas {
             // Unlike all other gas costs, this one is not paid if low on gas.
             return None;
@@ -109,7 +113,7 @@ pub(crate) struct UnpaidDecommit {
 /// May be used to load code when the VM first starts up.
 /// Doesn't check for any errors.
 /// Doesn't cost anything but also doesn't make the code free in future decommits.
-pub fn initial_decommit(world: &mut impl World, address: H160) -> Program {
+pub fn initial_decommit<T>(world: &mut impl World<T>, address: H160) -> Program<T> {
     let deployer_system_contract_address =
         Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
     let code_info = world

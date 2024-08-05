@@ -5,9 +5,14 @@ use crate::{
     predication::Flags,
     Instruction, VirtualMachine, World,
 };
+use eravm_stable_interface::opcodes;
 
-fn near_call(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
-    instruction_boilerplate(vm, world, |vm, args, _| {
+fn near_call<T>(
+    vm: &mut VirtualMachine<T>,
+    world: &mut dyn World<T>,
+    tracer: &mut T,
+) -> InstructionResult {
+    instruction_boilerplate::<opcodes::NearCall, _>(vm, world, tracer, |vm, args, _| {
         let gas_to_pass = Register1::get(args, &mut vm.state).0[0] as u32;
         let destination = Immediate1::get(args, &mut vm.state);
         let error_handler = Immediate2::get(args, &mut vm.state);
@@ -31,7 +36,7 @@ fn near_call(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResul
     })
 }
 
-impl Instruction {
+impl<T> Instruction<T> {
     pub fn from_near_call(
         gas: Register1,
         destination: Immediate1,

@@ -4,9 +4,14 @@ use crate::{
     instruction::InstructionResult,
     Instruction, VirtualMachine, World,
 };
+use eravm_stable_interface::opcodes;
 
-fn nop(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
-    instruction_boilerplate(vm, world, |vm, args, _| {
+fn nop<T>(
+    vm: &mut VirtualMachine<T>,
+    world: &mut dyn World<T>,
+    tracer: &mut T,
+) -> InstructionResult {
+    instruction_boilerplate::<opcodes::Nop, _>(vm, world, tracer, |vm, args, _| {
         // nop's addressing modes can move the stack pointer!
         AdvanceStackPointer::get(args, &mut vm.state);
         vm.state.current_frame.sp = vm
@@ -17,7 +22,7 @@ fn nop(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
     })
 }
 
-impl Instruction {
+impl<T> Instruction<T> {
     pub fn from_nop(
         pop: AdvanceStackPointer,
         push: AdvanceStackPointer,

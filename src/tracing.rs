@@ -7,7 +7,7 @@ use crate::{
 use eravm_stable_interface::*;
 use std::cmp::Ordering;
 
-impl StateInterface for VirtualMachine {
+impl<T> StateInterface for VirtualMachine<T> {
     fn read_register(&self, register: u8) -> (u256::U256, bool) {
         (
             self.state.registers[register as usize],
@@ -175,12 +175,12 @@ impl StateInterface for VirtualMachine {
     }
 }
 
-struct CallframeWrapper<'a> {
-    frame: &'a mut Callframe,
+struct CallframeWrapper<'a, T> {
+    frame: &'a mut Callframe<T>,
     near_call: Option<usize>,
 }
 
-impl CallframeInterface for CallframeWrapper<'_> {
+impl<T> CallframeInterface for CallframeWrapper<'_, T> {
     fn address(&self) -> u256::H160 {
         self.frame.address
     }
@@ -305,20 +305,22 @@ impl CallframeInterface for CallframeWrapper<'_> {
     }
 
     fn program_counter(&self) -> Option<u16> {
-        let pointer = if let Some(call) = self.near_call_on_top() {
-            call.previous_frame_pc
+        if let Some(call) = self.near_call_on_top() {
+            Some(call.previous_frame_pc)
         } else {
-            self.frame.pc
-        };
-
-        let offset = unsafe { pointer.offset_from(self.frame.program.instruction(0).unwrap()) };
-        if offset < 0
-            || offset > u16::MAX as isize
-            || self.frame.program.instruction(offset as u16).is_none()
-        {
-            None
-        } else {
-            Some(offset as u16)
+            let offset = unsafe {
+                self.frame
+                    .pc
+                    .offset_from(self.frame.program.instruction(0).unwrap())
+            };
+            if offset < 0
+                || offset > u16::MAX as isize
+                || self.frame.program.instruction(offset as u16).is_none()
+            {
+                None
+            } else {
+                Some(offset as u16)
+            }
         }
     }
 
@@ -335,7 +337,7 @@ impl CallframeInterface for CallframeWrapper<'_> {
     }
 }
 
-impl CallframeWrapper<'_> {
+impl<T> CallframeWrapper<'_, T> {
     fn near_call_on_top(&self) -> Option<&NearCallFrame> {
         if self.frame.near_calls.is_empty() || self.near_call == Some(0) {
             None

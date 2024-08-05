@@ -5,18 +5,29 @@ use u256::U256;
 
 use super::mock_array::MockRead;
 
-#[derive(Clone, Debug)]
-pub struct Program {
+#[derive(Debug)]
+pub struct Program<T> {
     pub raw_first_instruction: u64,
 
     // Need a two-instruction array so that incrementing the program counter is safe
-    first_instruction: MockRead<u16, Rc<[Instruction; 2]>>,
-    other_instruction: MockRead<u16, Rc<Option<[Instruction; 2]>>>,
+    first_instruction: MockRead<u16, Rc<[Instruction<T>; 2]>>,
+    other_instruction: MockRead<u16, Rc<Option<[Instruction<T>; 2]>>>,
 
     code_page: Arc<[U256]>,
 }
 
-impl<'a> Arbitrary<'a> for Program {
+impl<T> Clone for Program<T> {
+    fn clone(&self) -> Self {
+        Self {
+            raw_first_instruction: self.raw_first_instruction.clone(),
+            first_instruction: self.first_instruction.clone(),
+            other_instruction: self.other_instruction.clone(),
+            code_page: self.code_page.clone(),
+        }
+    }
+}
+
+impl<'a, T> Arbitrary<'a> for Program<T> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         let raw_first_instruction = u.arbitrary()?;
 
@@ -35,8 +46,8 @@ impl<'a> Arbitrary<'a> for Program {
     }
 }
 
-impl Program {
-    pub fn instruction(&self, n: u16) -> Option<&Instruction> {
+impl<T> Program<T> {
+    pub fn instruction(&self, n: u16) -> Option<&Instruction<T>> {
         if n == 0 {
             Some(&self.first_instruction.get(n).as_ref()[0])
         } else {
@@ -68,7 +79,7 @@ impl Program {
     }
 }
 
-impl PartialEq for Program {
+impl<T> PartialEq for Program<T> {
     fn eq(&self, _: &Self) -> bool {
         false
     }

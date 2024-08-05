@@ -7,9 +7,14 @@ use crate::{
     instruction::{Instruction, InstructionResult},
     VirtualMachine, World,
 };
+use eravm_stable_interface::opcodes;
 
-fn jump<In: Source>(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
-    instruction_boilerplate(vm, world, |vm, args, _| {
+fn jump<T, In: Source>(
+    vm: &mut VirtualMachine<T>,
+    world: &mut dyn World<T>,
+    tracer: &mut T,
+) -> InstructionResult {
+    instruction_boilerplate::<opcodes::Jump, _>(vm, world, tracer, |vm, args, _| {
         let target = In::get(args, &mut vm.state).low_u32() as u16;
 
         let next_instruction = vm.state.current_frame.get_pc_as_u16();
@@ -21,10 +26,10 @@ fn jump<In: Source>(vm: &mut VirtualMachine, world: &mut dyn World) -> Instructi
 
 use super::monomorphization::*;
 
-impl Instruction {
+impl<T> Instruction<T> {
     pub fn from_jump(source: AnySource, destination: Register1, arguments: Arguments) -> Self {
         Self {
-            handler: monomorphize!(jump match_source source),
+            handler: monomorphize!(jump [T] match_source source),
             arguments: arguments
                 .write_source(&source)
                 .write_destination(&destination),

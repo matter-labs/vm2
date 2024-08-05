@@ -6,64 +6,73 @@ use crate::{
     state::State,
     Instruction, VirtualMachine, World,
 };
+use eravm_stable_interface::opcodes;
 use u256::U256;
 use zkevm_opcode_defs::VmMetaParameters;
 
-fn context<Op: ContextOp>(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
-    instruction_boilerplate(vm, world, |vm, args, _| {
+fn context<T, Op: ContextOp>(
+    vm: &mut VirtualMachine<T>,
+    world: &mut dyn World<T>,
+    tracer: &mut T,
+) -> InstructionResult {
+    instruction_boilerplate::<Op, _>(vm, world, tracer, |vm, args, _| {
         let result = Op::get(&vm.state);
         Register1::set(args, &mut vm.state, result)
     })
 }
 
 trait ContextOp {
-    fn get(state: &State) -> U256;
+    fn get<T>(state: &State<T>) -> U256;
 }
 
 struct This;
 impl ContextOp for This {
-    fn get(state: &State) -> U256 {
+    fn get<T>(state: &State<T>) -> U256 {
         address_into_u256(state.current_frame.address)
     }
 }
 
 struct Caller;
 impl ContextOp for Caller {
-    fn get(state: &State) -> U256 {
+    fn get<T>(state: &State<T>) -> U256 {
         address_into_u256(state.current_frame.caller)
     }
 }
 
 struct CodeAddress;
 impl ContextOp for CodeAddress {
-    fn get(state: &State) -> U256 {
+    fn get<T>(state: &State<T>) -> U256 {
         address_into_u256(state.current_frame.code_address)
     }
 }
 
 struct ErgsLeft;
 impl ContextOp for ErgsLeft {
-    fn get(state: &State) -> U256 {
+    fn get<T>(state: &State<T>) -> U256 {
         U256([state.current_frame.gas as u64, 0, 0, 0])
     }
 }
 
 struct U128;
 impl ContextOp for U128 {
-    fn get(state: &State) -> U256 {
+    fn get<T>(state: &State<T>) -> U256 {
         state.get_context_u128().into()
     }
 }
 
 struct SP;
 impl ContextOp for SP {
-    fn get(state: &State) -> U256 {
+    fn get<T>(state: &State<T>) -> U256 {
         state.current_frame.sp.into()
     }
 }
 
-fn context_meta(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
-    instruction_boilerplate(vm, world, |vm, args, _| {
+fn context_meta<T>(
+    vm: &mut VirtualMachine<T>,
+    world: &mut dyn World<T>,
+    tracer: &mut T,
+) -> InstructionResult {
+    instruction_boilerplate::<opcodes::ContextMeta, _>(vm, world, tracer, |vm, args, _| {
         let result = VmMetaParameters {
             heap_size: vm.state.current_frame.heap_size,
             aux_heap_size: vm.state.current_frame.aux_heap_size,
@@ -83,29 +92,41 @@ fn context_meta(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionRe
     })
 }
 
-fn set_context_u128(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
-    instruction_boilerplate(vm, world, |vm, args, _| {
+fn set_context_u128<T>(
+    vm: &mut VirtualMachine<T>,
+    world: &mut dyn World<T>,
+    tracer: &mut T,
+) -> InstructionResult {
+    instruction_boilerplate::<opcodes::SetContextU128, _>(vm, world, tracer, |vm, args, _| {
         let value = Register1::get(args, &mut vm.state).low_u128();
         vm.state.set_context_u128(value);
     })
 }
 
-fn increment_tx_number(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
-    instruction_boilerplate(vm, world, |vm, _, _| {
+fn increment_tx_number<T>(
+    vm: &mut VirtualMachine<T>,
+    world: &mut dyn World<T>,
+    tracer: &mut T,
+) -> InstructionResult {
+    instruction_boilerplate::<opcodes::IncrementTxNumber, _>(vm, world, tracer, |vm, _, _| {
         vm.start_new_tx();
     })
 }
 
-fn aux_mutating(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
-    instruction_boilerplate(vm, world, |_, _, _| {
+fn aux_mutating<T>(
+    vm: &mut VirtualMachine<T>,
+    world: &mut dyn World<T>,
+    tracer: &mut T,
+) -> InstructionResult {
+    instruction_boilerplate::<opcodes::AuxMutating0, _>(vm, world, tracer, |_, _, _| {
         // This instruction just crashes or nops
     })
 }
 
-impl Instruction {
+impl<T> Instruction<T> {
     fn from_context<Op: ContextOp>(out: Register1, arguments: Arguments) -> Self {
         Self {
-            handler: context::<Op>,
+            handler: context::<T, Op>,
             arguments: arguments.write_destination(&out),
         }
     }

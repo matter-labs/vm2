@@ -15,7 +15,7 @@ impl<'a> Arbitrary<'a> for Flags {
     }
 }
 
-impl<'a> Arbitrary<'a> for Callframe {
+impl<'a, T> Arbitrary<'a> for Callframe<T> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         let address: H160 = u.arbitrary()?;
 
@@ -27,7 +27,7 @@ impl<'a> Arbitrary<'a> for Callframe {
         // but the calldata heap must be different from the heap and aux heap
         let calldata_heap = HeapId::from_u32_unchecked(u.int_in_range(0..=base_page - 1)?);
 
-        let program: Program = u.arbitrary()?;
+        let program: Program<T> = u.arbitrary()?;
 
         let mut me = Self {
             address,
@@ -64,7 +64,7 @@ impl<'a> Arbitrary<'a> for Callframe {
     }
 }
 
-impl Callframe {
+impl<T> Callframe<T> {
     pub fn raw_first_instruction(&self) -> u64 {
         self.program.raw_first_instruction
     }
@@ -83,7 +83,7 @@ impl Callframe {
             gas: 0,
             stipend: 0,
             near_calls: vec![],
-            pc: &crate::instruction_handlers::INVALID_INSTRUCTION,
+            pc: std::ptr::null(),
             program: Program::for_decommit(),
             heap: FIRST_AUX_HEAP,
             aux_heap: FIRST_AUX_HEAP,

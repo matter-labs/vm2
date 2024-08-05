@@ -1,4 +1,4 @@
-use super::{common::instruction_boilerplate, PANIC};
+use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
@@ -10,11 +10,12 @@ use crate::{
 };
 use u256::U256;
 
-fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
-    vm: &mut VirtualMachine,
-    world: &mut dyn World,
+fn ptr<T, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
+    vm: &mut VirtualMachine<T>,
+    world: &mut dyn World<T>,
+    tracer: &mut T,
 ) -> InstructionResult {
-    instruction_boilerplate(vm, world, |vm, args, _| {
+    instruction_boilerplate::<Op, _>(vm, world, tracer, |vm, args, _| {
         let ((a, a_is_pointer), (b, b_is_pointer)) = if SWAP {
             (
                 Register2::get_with_pointer_flag(args, &mut vm.state),
@@ -28,12 +29,12 @@ fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
         };
 
         if !a_is_pointer || b_is_pointer {
-            vm.state.current_frame.pc = &PANIC;
+            vm.state.current_frame.pc = &*vm.panic;
             return;
         }
 
         let Some(result) = Op::perform(a, b) else {
-            vm.state.current_frame.pc = &PANIC;
+            vm.state.current_frame.pc = &*vm.panic;
             return;
         };
 
@@ -90,7 +91,7 @@ impl PtrOp for PtrShrink {
 
 use super::monomorphization::*;
 
-impl Instruction {
+impl<T> Instruction<T> {
     #[inline(always)]
     pub fn from_ptr<Op: PtrOp>(
         src1: AnySource,
@@ -100,7 +101,7 @@ impl Instruction {
         swap: bool,
     ) -> Self {
         Self {
-            handler: monomorphize!(ptr [Op] match_source src1 match_destination out match_boolean swap),
+            handler: monomorphize!(ptr [T Op] match_source src1 match_destination out match_boolean swap),
             arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)

@@ -7,13 +7,21 @@ use u256::U256;
 // enable changing the internals later.
 
 /// Cloning this is cheap. It is a handle to memory similar to [`Arc`].
-#[derive(Clone)]
-pub struct Program {
+pub struct Program<T> {
     code_page: Arc<[U256]>,
-    instructions: Arc<[Instruction]>,
+    instructions: Arc<[Instruction<T>]>,
 }
 
-impl fmt::Debug for Program {
+impl<T> Clone for Program<T> {
+    fn clone(&self) -> Self {
+        Self {
+            code_page: self.code_page.clone(),
+            instructions: self.instructions.clone(),
+        }
+    }
+}
+
+impl<T> fmt::Debug for Program<T> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         const DEBUGGED_ITEMS: usize = 16;
 
@@ -36,15 +44,15 @@ impl fmt::Debug for Program {
     }
 }
 
-impl Program {
-    pub fn new(instructions: Vec<Instruction>, code_page: Vec<U256>) -> Self {
+impl<T> Program<T> {
+    pub fn new(instructions: Vec<Instruction<T>>, code_page: Vec<U256>) -> Self {
         Self {
             code_page: code_page.into(),
             instructions: instructions.into(),
         }
     }
 
-    pub fn instruction(&self, n: u16) -> Option<&Instruction> {
+    pub fn instruction(&self, n: u16) -> Option<&Instruction<T>> {
         self.instructions.get::<usize>(n.into())
     }
 
@@ -58,7 +66,7 @@ impl Program {
 // That works well enough for the tests that this is written for.
 // I don't want to implement PartialEq for Instruction because
 // comparing function pointers can work in suprising ways.
-impl PartialEq for Program {
+impl<T> PartialEq for Program<T> {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.code_page, &other.code_page)
             && Arc::ptr_eq(&self.instructions, &other.instructions)

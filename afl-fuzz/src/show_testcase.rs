@@ -27,7 +27,7 @@ fn main() {
         vm.state.current_frame.raw_first_instruction(),
     );
     println!("{}", parsed);
-    vm.run_single_instruction(&mut world);
+    vm.run_single_instruction(&mut world, &mut ());
 
     println!("Mocks that have been touched:");
     vm.print_mock_info();

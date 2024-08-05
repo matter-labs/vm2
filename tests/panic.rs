@@ -48,7 +48,7 @@ proptest! {
             },
         );
 
-        assert_eq!(vm.run(&mut world),
+        assert_eq!(vm.run(&mut world, &mut ()),
             if 1 < label && label < 100 {
                 ExecutionEnd::ProgramFinished(vec![])
             } else {

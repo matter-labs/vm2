@@ -1,3 +1,5 @@
+use crate::addressing_modes::Arguments;
+use crate::instruction_handlers::RETURN_COST;
 use crate::state::StateSnapshot;
 use crate::world_diff::ExternalSnapshot;
 use crate::{
@@ -9,6 +11,7 @@ use crate::{
     world_diff::{Snapshot, WorldDiff},
     ExecutionEnd, Program, World,
 };
+use crate::{Instruction, ModeRequirements, Predicate};
 use eravm_stable_interface::HeapId;
 use u256::H160;
 
@@ -21,22 +24,25 @@ pub struct Settings {
     pub hook_address: u32,
 }
 
-pub struct VirtualMachine {
+pub struct VirtualMachine<T> {
     pub world_diff: WorldDiff,
 
     /// Storing the state in a separate struct is not just cosmetic.
     /// The state couldn't be passed to the world if it was inlined.
-    pub state: State,
+    pub state: State<T>,
 
     pub(crate) settings: Settings,
 
     pub(crate) stack_pool: StackPool,
+
+    // Instructions that are jumped to when things go wrong.
+    pub(crate) panic: Box<Instruction<T>>,
 }
 
-impl VirtualMachine {
+impl<T> VirtualMachine<T> {
     pub fn new(
         address: H160,
-        program: Program,
+        program: Program<T>,
         caller: H160,
         calldata: Vec<u8>,
         gas: u32,
@@ -59,10 +65,14 @@ impl VirtualMachine {
             ),
             settings,
             stack_pool,
+            panic: Box::new(Instruction::from_panic(
+                None,
+                Arguments::new(Predicate::Always, RETURN_COST, ModeRequirements::none()),
+            )),
         }
     }
 
-    pub fn run(&mut self, world: &mut dyn World) -> ExecutionEnd {
+    pub fn run(&mut self, world: &mut dyn World<T>, tracer: &mut T) -> ExecutionEnd {
         unsafe {
             loop {
                 let args = &(*self.state.current_frame.pc).arguments;
@@ -73,7 +83,7 @@ impl VirtualMachine {
                         self.state.current_frame.is_static,
                     )
                 {
-                    if let Some(end) = free_panic(self, world) {
+                    if let Some(end) = free_panic(self, world, tracer) {
                         return end;
                     };
                     continue;
@@ -83,7 +93,8 @@ impl VirtualMachine {
                 self.print_instruction(self.state.current_frame.pc);
 
                 if args.predicate().satisfied(&self.state.flags) {
-                    if let Some(end) = ((*self.state.current_frame.pc).handler)(self, world) {
+                    if let Some(end) = ((*self.state.current_frame.pc).handler)(self, world, tracer)
+                    {
                         return end;
                     };
                 } else {
@@ -101,7 +112,8 @@ impl VirtualMachine {
     /// depending on remaining gas.
     pub fn resume_with_additional_gas_limit(
         &mut self,
-        world: &mut dyn World,
+        world: &mut dyn World<T>,
+        tracer: &mut T,
         gas_limit: u32,
     ) -> Option<(u32, ExecutionEnd)> {
         let minimum_gas = self.state.total_unspent_gas().saturating_sub(gas_limit);
@@ -116,7 +128,7 @@ impl VirtualMachine {
                         self.state.current_frame.is_static,
                     )
                 {
-                    if let Some(e) = free_panic(self, world) {
+                    if let Some(e) = free_panic(self, world, tracer) {
                         break e;
                     };
                     continue;
@@ -126,7 +138,8 @@ impl VirtualMachine {
                 self.print_instruction(self.state.current_frame.pc);
 
                 if args.predicate().satisfied(&self.state.flags) {
-                    if let Some(end) = ((*self.state.current_frame.pc).handler)(self, world) {
+                    if let Some(end) = ((*self.state.current_frame.pc).handler)(self, world, tracer)
+                    {
                         break end;
                     };
                 } else {
@@ -187,7 +200,7 @@ impl VirtualMachine {
     pub(crate) fn push_frame<const CALLING_MODE: u8>(
         &mut self,
         code_address: H160,
-        program: Program,
+        program: Program<T>,
         gas: u32,
         stipend: u32,
         exception_handler: u16,

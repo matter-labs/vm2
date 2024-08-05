@@ -16,6 +16,10 @@ impl Heap {
         assert!(self.write.is_none());
         self.write = Some((start_address, value));
     }
+
+    pub(crate) fn read_byte(&self, _: u32) -> u8 {
+        unimplemented!()
+    }
 }
 
 impl HeapInterface for Heap {
@@ -100,6 +104,10 @@ impl Heaps {
     }
 
     pub(crate) fn delete_history(&mut self) {
+        unimplemented!()
+    }
+
+    pub(crate) fn write_byte(&mut self, _: HeapId, _: u32, _: u8) {
         unimplemented!()
     }
 }

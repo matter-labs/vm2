@@ -11,7 +11,7 @@ fn main() {
 
                 let mut zk_evm = vm2_to_zk_evm(&vm, world.clone());
 
-                vm.run_single_instruction(&mut world);
+                vm.run_single_instruction(&mut world, &mut ());
                 assert!(vm.is_in_valid_state());
 
                 add_heap_to_zk_evm(&mut zk_evm, &vm);

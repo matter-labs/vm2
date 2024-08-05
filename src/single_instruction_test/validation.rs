@@ -10,7 +10,7 @@ pub(crate) fn is_valid_tagged_value((value, is_pointer): (U256, bool)) -> bool {
     }
 }
 
-impl State {
+impl<T> State<T> {
     pub(crate) fn is_valid(&self) -> bool {
         self.current_frame.is_valid()
             && self.previous_frames.iter().all(|frame| frame.is_valid())
@@ -23,7 +23,7 @@ impl State {
     }
 }
 
-impl Callframe {
+impl<T> Callframe<T> {
     pub(crate) fn is_valid(&self) -> bool {
         self.stack.is_valid()
     }

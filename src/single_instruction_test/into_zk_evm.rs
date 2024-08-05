@@ -26,12 +26,12 @@ type ZkEvmState = VmState<
     EncodingModeProduction,
 >;
 
-pub fn vm2_to_zk_evm(vm: &VirtualMachine, world: MockWorld) -> ZkEvmState {
+pub fn vm2_to_zk_evm<T>(vm: &VirtualMachine<T>, world: MockWorld) -> ZkEvmState {
     let mut event_sink = InMemoryEventSink::new();
     event_sink.start_frame(zk_evm::aux_structures::Timestamp(0));
 
     VmState {
-        local_state: vm2_state_to_zk_evm_state(&vm.state),
+        local_state: vm2_state_to_zk_evm_state(&vm.state, &*vm.panic),
         block_properties: BlockProperties {
             default_aa_code_hash: U256::from_big_endian(&vm.settings.default_aa_code_hash),
             evm_simulator_code_hash: U256::from_big_endian(&vm.settings.evm_interpreter_code_hash),
@@ -51,7 +51,7 @@ pub fn vm2_to_zk_evm(vm: &VirtualMachine, world: MockWorld) -> ZkEvmState {
     }
 }
 
-pub fn add_heap_to_zk_evm(zk_evm: &mut ZkEvmState, vm_after_execution: &VirtualMachine) {
+pub fn add_heap_to_zk_evm<T>(zk_evm: &mut ZkEvmState, vm_after_execution: &VirtualMachine<T>) {
     if let Some((heapid, heap)) = vm_after_execution.state.heaps.read.read_that_happened() {
         if let Some((start_index, mut value)) = heap.read.read_that_happened() {
             value.reverse();
@@ -201,8 +201,7 @@ impl Storage for MockWorldWrapper {
             query.read_value = if query.aux_byte == TRANSIENT_STORAGE_AUX_BYTE {
                 U256::zero()
             } else {
-                self.0
-                    .read_storage(query.address, query.key)
+                <MockWorld as World<()>>::read_storage(&mut self.0, query.address, query.key)
                     .unwrap_or_default()
             };
             (query, PubdataCost(0))
