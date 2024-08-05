@@ -1,4 +1,4 @@
-use u256::{H160, U256};
+use primitive_types::{H160, U256};
 
 pub trait StateInterface {
     fn read_register(&self, register: u8) -> (U256, bool);
