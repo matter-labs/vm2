@@ -1427,8 +1427,8 @@ checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
 
 [[package]]
 name = "zk_evm"
-version = "1.5.0"
-source = "git+https://github.com/matter-labs/era-zk_evm.git?rev=60dbfee86fcad6c0b75f80601595e5d4f7a30a36#60dbfee86fcad6c0b75f80601595e5d4f7a30a36"
+version = "0.150.0"
+source = "git+https://github.com/matter-labs/era-zk_evm.git?rev=b7caa02acc2119b2994730d92c8cb6b861f56484#b7caa02acc2119b2994730d92c8cb6b861f56484"
 dependencies = [
  "anyhow",
  "lazy_static",
