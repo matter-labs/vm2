@@ -1,3 +1,7 @@
-Cargo.lock
+# Rust artifacts
 target/
 .cargo
+
+# IDEs
+.idea
+.vscode
