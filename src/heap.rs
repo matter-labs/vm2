@@ -1,5 +1,8 @@
-use crate::instruction_handlers::HeapInterface;
-use std::ops::{Index, Range};
+use crate::{hash_for_debugging, instruction_handlers::HeapInterface};
+use std::{
+    fmt, mem,
+    ops::{Index, Range},
+};
 use u256::U256;
 use zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND;
 
@@ -17,8 +20,41 @@ impl HeapId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone)]
 pub struct Heap(Vec<u8>);
+
+impl fmt::Debug for Heap {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        const MAX_DEBUGGED_LEN: usize = 256;
+
+        if self.0.len() <= MAX_DEBUGGED_LEN {
+            formatter.debug_tuple("Heap").field(&self.0).finish()
+        } else {
+            formatter
+                .debug_struct("Heap")
+                .field("len", &self.0.len())
+                .field("start", &&self.0[..MAX_DEBUGGED_LEN])
+                .field("hash", &hash_for_debugging(&self.0))
+                .finish_non_exhaustive()
+        }
+    }
+}
+
+// Two heaps are considered equal even if one of them has greater size allocated (provided that all additional bytes
+// are zeroed). This is to account for the case when a bootloader heap is rolled back; heap is never shrunk.
+impl PartialEq for Heap {
+    fn eq(&self, other: &Self) -> bool {
+        let mut shorter_bytes = &self.0;
+        let mut longer_bytes = &other.0;
+        if shorter_bytes.len() > longer_bytes.len() {
+            mem::swap(&mut shorter_bytes, &mut longer_bytes);
+        }
+        shorter_bytes[..] == longer_bytes[..shorter_bytes.len()]
+            && longer_bytes[shorter_bytes.len()..]
+                .iter()
+                .all(|&byte| byte == 0)
+    }
+}
 
 impl Heap {
     fn write_u256(&mut self, start_address: u32, value: U256) {
@@ -135,6 +171,8 @@ impl Index<HeapId> for Heaps {
     }
 }
 
+// Since we never remove `Heap` entries (even after rollbacks – although we do deallocate heaps in this case),
+// we allow additional empty heaps at the end of `Heaps`.
 impl PartialEq for Heaps {
     fn eq(&self, other: &Self) -> bool {
         for i in 0..self.heaps.len().max(other.heaps.len()) {

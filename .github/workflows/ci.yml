@@ -38,8 +38,10 @@ jobs:
       # Two runs are needed. One for normal VM, another for the mocked version
       - name: Run clippy
         run: |
-          cargo clippy -- -D warnings
-          cargo clippy --workspace -- -D warnings
+          # Check the main library with non-test features (needs to be tested in isolation since the fuzzing crate enables test features)
+          cargo clippy -p vm2 --all-targets -- -D warnings
+          # The benches in `vm2` don't compile with fuzzing enabled 
+          cargo clippy --workspace --all-features --lib --bins --tests -- -D warnings
 
       - name: Check formatting
         run: |
@@ -47,4 +49,4 @@ jobs:
 
       - name: Run Tests
         run: |
-          cargo test
+          cargo test -p vm2 --all-targets

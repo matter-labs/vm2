@@ -26,10 +26,10 @@ impl<'a> Arbitrary<'a> for Program {
                 decode(raw_first_instruction, false),
                 Instruction::from_invalid(),
             ])),
-            other_instruction: MockRead::new(Rc::new(Some([
-                Instruction::from_invalid(),
-                Instruction::from_invalid(),
-            ]))),
+            other_instruction: MockRead::new(Rc::new(
+                u.arbitrary::<bool>()?
+                    .then_some([Instruction::from_invalid(), Instruction::from_invalid()]),
+            )),
             code_page: [u.arbitrary()?; 1].into(),
         })
     }

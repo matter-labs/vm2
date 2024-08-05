@@ -212,16 +212,14 @@ pub(crate) struct FrameRemnant {
 }
 
 /// Only contains the fields that can change (other than via tracer).
+#[derive(Debug)]
 pub(crate) struct CallframeSnapshot {
     stack: StackSnapshot,
-
     context_u128: u128,
     sp: u16,
     gas: u32,
     near_calls: Vec<NearCallFrame>,
-
     heap_size: u32,
     aux_heap_size: u32,
-
     heaps_i_was_keeping_alive: usize,
 }

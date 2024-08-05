@@ -21,6 +21,7 @@ pub mod testworld;
 mod vm;
 mod world_diff;
 
+use std::hash::{DefaultHasher, Hash, Hasher};
 use u256::{H160, U256};
 
 pub use decommit::address_into_u256;
@@ -60,4 +61,13 @@ pub trait World {
 
     /// Returns if the storage slot is free both in terms of gas and pubdata.
     fn is_free_storage_slot(&self, contract: &H160, key: &U256) -> bool;
+}
+
+/// Deterministic (across program runs and machines) hash that can be used for `Debug` implementations
+/// to concisely represent large amounts of data.
+#[cfg_attr(feature = "single_instruction_test", allow(dead_code))] // Currently used entirely in types overridden by `single_instruction_test` feature
+pub(crate) fn hash_for_debugging(value: &impl Hash) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
 }

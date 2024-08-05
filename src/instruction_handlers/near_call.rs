@@ -1,3 +1,4 @@
+use super::ret::INVALID_INSTRUCTION;
 use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Source},
     instruction::InstructionResult,
@@ -35,7 +36,7 @@ fn near_call(
         .current_frame
         .program
         .instruction(destination.low_u32() as u16)
-        .unwrap())
+        .unwrap_or(&INVALID_INSTRUCTION))
 }
 
 impl Instruction {

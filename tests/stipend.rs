@@ -1,3 +1,5 @@
+#![cfg(not(feature = "single_instruction_test"))]
+
 use u256::U256;
 use vm2::{
     address_into_u256,

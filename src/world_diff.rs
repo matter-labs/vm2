@@ -33,6 +33,7 @@ pub struct WorldDiff {
     storage_initial_values: BTreeMap<(H160, U256), Option<U256>>,
 }
 
+#[derive(Debug)]
 pub struct ExternalSnapshot {
     internal_snapshot: Snapshot,
     pub(crate) decommitted_hashes: <RollbackableMap<U256, ()> as Rollback>::Snapshot,
@@ -369,11 +370,14 @@ mod tests {
             first_changes in arbitrary_storage_changes(),
             second_changes in arbitrary_storage_changes(),
         ) {
-            let mut world_diff = WorldDiff::default();
-            world_diff.storage_initial_values = initial_values
+            let storage_initial_values = initial_values
                 .iter()
                 .map(|(key, value)| (*key, Some(*value)))
                 .collect();
+            let mut world_diff = WorldDiff {
+                storage_initial_values,
+                ..WorldDiff::default()
+            };
 
             let checkpoint1 = world_diff.snapshot();
             for (key, value) in &first_changes {
@@ -390,7 +394,7 @@ mod tests {
                         StorageChange {
                             before: initial_values.get(key).copied(),
                             after: *value,
-                            is_initial: initial_values.get(key).is_none(),
+                            is_initial: !initial_values.contains_key(key),
                         }
                     ))
                     .collect()
@@ -411,7 +415,7 @@ mod tests {
                         StorageChange {
                             before: first_changes.get(key).or(initial_values.get(key)).copied(),
                             after: *value,
-                            is_initial: initial_values.get(key).is_none(),
+                            is_initial: !initial_values.contains_key(key),
                         }
                     ))
                     .collect()

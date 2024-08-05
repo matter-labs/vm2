@@ -1,16 +1,39 @@
-use crate::Instruction;
-use std::sync::Arc;
+use crate::{hash_for_debugging, Instruction};
+use std::{fmt, sync::Arc};
 use u256::U256;
 
 // An internal representation that doesn't need two Arcs would be better
 // but it would also require a lot of unsafe, so I made this wrapper to
 // enable changing the internals later.
 
-/// Cloning this is cheap. It is a handle to memory similar to [std::sync::Arc].
-#[derive(Clone, Debug)]
+/// Cloning this is cheap. It is a handle to memory similar to [`Arc`].
+#[derive(Clone)]
 pub struct Program {
     code_page: Arc<[U256]>,
     instructions: Arc<[Instruction]>,
+}
+
+impl fmt::Debug for Program {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        const DEBUGGED_ITEMS: usize = 16;
+
+        let mut s = formatter.debug_struct("Program");
+        if self.code_page.len() <= DEBUGGED_ITEMS {
+            s.field("code_page", &self.code_page);
+        } else {
+            s.field("code_page.len", &self.code_page.len())
+                .field("code_page.start", &&self.code_page[..DEBUGGED_ITEMS])
+                .field("code_page.hash", &hash_for_debugging(&self.code_page));
+        }
+
+        if self.instructions.len() <= DEBUGGED_ITEMS {
+            s.field("instructions", &self.instructions);
+        } else {
+            s.field("instructions.len", &self.instructions.len())
+                .field("instructions.start", &&self.instructions[..DEBUGGED_ITEMS]);
+        }
+        s.finish_non_exhaustive()
+    }
 }
 
 impl Program {
