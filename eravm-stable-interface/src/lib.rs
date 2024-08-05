@@ -20,8 +20,8 @@ pub trait StateInterface {
     fn context_u128_register(&self) -> u128;
     fn set_context_u128_register(&mut self, value: u128);
 
-    /// Returns the new value and the amount of pubdata paid for it.
     fn get_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)>;
+    /// Returns the new value and the amount of pubdata paid for it.
     fn get_storage(&self, address: H160, slot: U256) -> Option<(U256, u32)>;
     fn get_storage_initial_value(&self, address: H160, slot: U256) -> U256;
     fn write_storage(&mut self, address: H160, slot: U256, value: U256);
