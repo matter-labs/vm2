@@ -4,7 +4,7 @@ use crate::{
         AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Destination,
         Immediate1, Register1, RelativeStack, Source,
     },
-    instruction::{Instruction, ExecutionStatus},
+    instruction::{ExecutionStatus, Instruction},
     VirtualMachine, World,
 };
 use eravm_stable_interface::opcodes;
