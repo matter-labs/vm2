@@ -8,6 +8,7 @@ use crate::{
     instruction::InstructionResult,
     Instruction, VirtualMachine, World,
 };
+use eravm_stable_interface::opcodes::{PointerAdd, PointerPack, PointerShrink, PointerSub};
 use u256::U256;
 
 fn ptr<T, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
@@ -46,31 +47,36 @@ pub trait PtrOp {
     fn perform(in1: U256, in2: U256) -> Option<U256>;
 }
 
-pub struct PtrAddSub<const IS_ADD: bool>;
-pub type PtrAdd = PtrAddSub<true>;
-pub type PtrSub = PtrAddSub<false>;
-
-impl<const IS_ADD: bool> PtrOp for PtrAddSub<IS_ADD> {
-    fn perform(mut in1: U256, in2: U256) -> Option<U256> {
-        if in2 > u32::MAX.into() {
-            return None;
-        }
-        let pointer: &mut FatPointer = (&mut in1).into();
-
-        let new_offset = if IS_ADD {
-            pointer.offset.checked_add(in2.low_u32())
-        } else {
-            pointer.offset.checked_sub(in2.low_u32())
-        }?;
-
-        pointer.offset = new_offset;
-
-        Some(in1)
+impl PtrOp for PointerAdd {
+    fn perform(in1: U256, in2: U256) -> Option<U256> {
+        ptr_add_sub::<true>(in1, in2)
     }
 }
 
-pub struct PtrPack;
-impl PtrOp for PtrPack {
+impl PtrOp for PointerSub {
+    fn perform(in1: U256, in2: U256) -> Option<U256> {
+        ptr_add_sub::<false>(in1, in2)
+    }
+}
+
+fn ptr_add_sub<const IS_ADD: bool>(mut in1: U256, in2: U256) -> Option<U256> {
+    if in2 > u32::MAX.into() {
+        return None;
+    }
+    let pointer: &mut FatPointer = (&mut in1).into();
+
+    let new_offset = if IS_ADD {
+        pointer.offset.checked_add(in2.low_u32())
+    } else {
+        pointer.offset.checked_sub(in2.low_u32())
+    }?;
+
+    pointer.offset = new_offset;
+
+    Some(in1)
+}
+
+impl PtrOp for PointerPack {
     fn perform(in1: U256, in2: U256) -> Option<U256> {
         if in2.low_u128() != 0 {
             None
@@ -80,8 +86,7 @@ impl PtrOp for PtrPack {
     }
 }
 
-pub struct PtrShrink;
-impl PtrOp for PtrShrink {
+impl PtrOp for PointerShrink {
     fn perform(mut in1: U256, in2: U256) -> Option<U256> {
         let pointer: &mut FatPointer = (&mut in1).into();
         pointer.length = pointer.length.checked_sub(in2.low_u32())?;

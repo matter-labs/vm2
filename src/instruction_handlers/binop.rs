@@ -9,6 +9,9 @@ use crate::{
     predication::Flags,
     VirtualMachine, World,
 };
+use eravm_stable_interface::opcodes::{
+    Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
+};
 use u256::U256;
 
 fn binop<T, Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SET_FLAGS: bool>(
@@ -35,7 +38,6 @@ pub trait Binop {
     fn perform(a: &U256, b: &U256) -> (U256, Self::Out2, Flags);
 }
 
-pub struct Add;
 impl Binop for Add {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -49,7 +51,6 @@ impl Binop for Add {
     type Out2 = ();
 }
 
-pub struct Sub;
 impl Binop for Sub {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -63,7 +64,6 @@ impl Binop for Sub {
     type Out2 = ();
 }
 
-pub struct And;
 impl Binop for And {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -73,7 +73,6 @@ impl Binop for And {
     type Out2 = ();
 }
 
-pub struct Or;
 impl Binop for Or {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -83,7 +82,6 @@ impl Binop for Or {
     type Out2 = ();
 }
 
-pub struct Xor;
 impl Binop for Xor {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -93,7 +91,6 @@ impl Binop for Xor {
     type Out2 = ();
 }
 
-pub struct ShiftLeft;
 impl Binop for ShiftLeft {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -103,7 +100,6 @@ impl Binop for ShiftLeft {
     type Out2 = ();
 }
 
-pub struct ShiftRight;
 impl Binop for ShiftRight {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -113,7 +109,6 @@ impl Binop for ShiftRight {
     type Out2 = ();
 }
 
-pub struct RotateLeft;
 impl Binop for RotateLeft {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -124,7 +119,6 @@ impl Binop for RotateLeft {
     type Out2 = ();
 }
 
-pub struct RotateRight;
 impl Binop for RotateRight {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -156,7 +150,6 @@ impl SecondOutput for U256 {
     }
 }
 
-pub struct Mul;
 impl Binop for Mul {
     fn perform(a: &U256, b: &U256) -> (U256, Self::Out2, Flags) {
         let res = a.full_mul(*b);
@@ -183,7 +176,6 @@ impl Binop for Mul {
     type Out2 = U256;
 }
 
-pub struct Div;
 impl Binop for Div {
     fn perform(a: &U256, b: &U256) -> (U256, Self::Out2, Flags) {
         if *b != U256::zero() {

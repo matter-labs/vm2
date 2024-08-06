@@ -6,8 +6,8 @@ use crate::{
     },
     instruction::{ExecutionEnd, InstructionResult},
     instruction_handlers::{
-        Add, And, AuxHeap, CallingMode, Div, Heap, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub,
-        RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
+        Add, And, AuxHeap, CallingMode, Div, Heap, Mul, Or, PointerAdd, PointerPack, PointerShrink,
+        PointerSub, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
     },
     jump_to_beginning,
     mode_requirements::ModeRequirements,
@@ -195,10 +195,10 @@ pub(crate) fn decode<T>(raw: u64, is_bootloader: bool) -> Instruction<T> {
             }
         },
         zkevm_opcode_defs::Opcode::Ptr(x) => match x {
-            zkevm_opcode_defs::PtrOpcode::Add => ptr!(PtrAdd),
-            zkevm_opcode_defs::PtrOpcode::Sub => ptr!(PtrSub),
-            zkevm_opcode_defs::PtrOpcode::Pack => ptr!(PtrPack),
-            zkevm_opcode_defs::PtrOpcode::Shrink => ptr!(PtrShrink),
+            zkevm_opcode_defs::PtrOpcode::Add => ptr!(PointerAdd),
+            zkevm_opcode_defs::PtrOpcode::Sub => ptr!(PointerSub),
+            zkevm_opcode_defs::PtrOpcode::Pack => ptr!(PointerPack),
+            zkevm_opcode_defs::PtrOpcode::Shrink => ptr!(PointerShrink),
         },
         zkevm_opcode_defs::Opcode::NearCall(_) => Instruction::from_near_call(
             Register1(Register::new(parsed.src0_reg_idx)),

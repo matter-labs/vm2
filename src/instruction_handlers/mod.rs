@@ -1,7 +1,9 @@
-pub use binop::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor};
+pub use eravm_stable_interface::opcodes::{
+    Add, And, Div, Mul, Or, PointerAdd, PointerPack, PointerShrink, PointerSub, RotateLeft,
+    RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
+};
 pub use far_call::CallingMode;
 pub use heap_access::{AuxHeap, Heap, HeapInterface};
-pub use pointer::{PtrAdd, PtrPack, PtrShrink, PtrSub};
 pub(crate) use ret::{free_panic, invalid_instruction, RETURN_COST};
 
 mod binop;

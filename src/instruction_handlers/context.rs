@@ -6,7 +6,7 @@ use crate::{
     state::State,
     Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::opcodes;
+use eravm_stable_interface::opcodes::{self, Caller, CodeAddress, ErgsLeft, This, SP, U128};
 use u256::U256;
 use zkevm_opcode_defs::VmMetaParameters;
 
@@ -25,42 +25,36 @@ trait ContextOp {
     fn get<T>(state: &State<T>) -> U256;
 }
 
-struct This;
 impl ContextOp for This {
     fn get<T>(state: &State<T>) -> U256 {
         address_into_u256(state.current_frame.address)
     }
 }
 
-struct Caller;
 impl ContextOp for Caller {
     fn get<T>(state: &State<T>) -> U256 {
         address_into_u256(state.current_frame.caller)
     }
 }
 
-struct CodeAddress;
 impl ContextOp for CodeAddress {
     fn get<T>(state: &State<T>) -> U256 {
         address_into_u256(state.current_frame.code_address)
     }
 }
 
-struct ErgsLeft;
 impl ContextOp for ErgsLeft {
     fn get<T>(state: &State<T>) -> U256 {
         U256([state.current_frame.gas as u64, 0, 0, 0])
     }
 }
 
-struct U128;
 impl ContextOp for U128 {
     fn get<T>(state: &State<T>) -> U256 {
         state.get_context_u128().into()
     }
 }
 
-struct SP;
 impl ContextOp for SP {
     fn get<T>(state: &State<T>) -> U256 {
         state.current_frame.sp.into()
