@@ -2,7 +2,7 @@ use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Source},
     decommit::address_into_u256,
-    instruction::InstructionResult,
+    instruction::ExecutionStatus,
     state::State,
     Instruction, VirtualMachine, World,
 };
@@ -14,7 +14,7 @@ fn context<T, Op: ContextOp>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<Op, _>(vm, world, tracer, |vm, args, _| {
         let result = Op::get(&vm.state);
         Register1::set(args, &mut vm.state, result)
@@ -65,7 +65,7 @@ fn context_meta<T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::ContextMeta, _>(vm, world, tracer, |vm, args, _| {
         let result = VmMetaParameters {
             heap_size: vm.state.current_frame.heap_size,
@@ -90,7 +90,7 @@ fn set_context_u128<T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::SetContextU128, _>(vm, world, tracer, |vm, args, _| {
         let value = Register1::get(args, &mut vm.state).low_u128();
         vm.state.set_context_u128(value);
@@ -101,7 +101,7 @@ fn increment_tx_number<T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::IncrementTxNumber, _>(vm, world, tracer, |vm, _, _| {
         vm.start_new_tx();
     })
@@ -111,7 +111,7 @@ fn aux_mutating<T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::AuxMutating0, _>(vm, world, tracer, |_, _, _| {
         // This instruction just crashes or nops
     })

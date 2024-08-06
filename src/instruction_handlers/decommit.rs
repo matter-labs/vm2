@@ -2,7 +2,7 @@ use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     fat_pointer::FatPointer,
-    instruction::InstructionResult,
+    instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
 use eravm_stable_interface::opcodes;
@@ -13,7 +13,7 @@ fn decommit<T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::Decommit, _>(vm, world, tracer, |vm, args, world| {
         let code_hash = Register1::get(args, &mut vm.state);
         let extra_cost = Register2::get(args, &mut vm.state).low_u32();

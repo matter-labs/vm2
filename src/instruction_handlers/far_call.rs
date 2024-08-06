@@ -8,7 +8,7 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
     decommit::{is_kernel, u256_into_address},
     fat_pointer::FatPointer,
-    instruction::InstructionResult,
+    instruction::ExecutionStatus,
     predication::Flags,
     Instruction, VirtualMachine, World,
 };
@@ -40,7 +40,7 @@ fn far_call<T, const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bo
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::FarCall, _>(vm, world, tracer, |vm, args, world| {
         let (raw_abi, raw_abi_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
 

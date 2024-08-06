@@ -1,7 +1,7 @@
 use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Source},
-    instruction::InstructionResult,
+    instruction::ExecutionStatus,
     predication::Flags,
     Instruction, VirtualMachine, World,
 };
@@ -11,7 +11,7 @@ fn near_call<T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::NearCall, _>(vm, world, tracer, |vm, args, _| {
         let gas_to_pass = Register1::get(args, &mut vm.state).0[0] as u32;
         let destination = Immediate1::get(args, &mut vm.state);

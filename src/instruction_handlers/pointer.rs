@@ -5,7 +5,7 @@ use crate::{
         Destination, Immediate1, Register1, Register2, RelativeStack, Source,
     },
     fat_pointer::FatPointer,
-    instruction::InstructionResult,
+    instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
 use eravm_stable_interface::opcodes::{PointerAdd, PointerPack, PointerShrink, PointerSub};
@@ -15,7 +15,7 @@ fn ptr<T, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<Op, _>(vm, world, tracer, |vm, args, _| {
         let ((a, a_is_pointer), (b, b_is_pointer)) = if SWAP {
             (

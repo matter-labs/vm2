@@ -1,4 +1,5 @@
 use crate::addressing_modes::Arguments;
+use crate::instruction::ExecutionStatus;
 use crate::instruction_handlers::RETURN_COST;
 use crate::state::StateSnapshot;
 use crate::world_diff::ExternalSnapshot;
@@ -83,7 +84,7 @@ impl<T> VirtualMachine<T> {
                         self.state.current_frame.is_static,
                     )
                 {
-                    if let Some(end) = free_panic(self, world, tracer) {
+                    if let ExecutionStatus::Stopped(end) = free_panic(self, world, tracer) {
                         return end;
                     };
                     continue;
@@ -93,7 +94,8 @@ impl<T> VirtualMachine<T> {
                 self.print_instruction(self.state.current_frame.pc);
 
                 if args.predicate().satisfied(&self.state.flags) {
-                    if let Some(end) = ((*self.state.current_frame.pc).handler)(self, world, tracer)
+                    if let ExecutionStatus::Stopped(end) =
+                        ((*self.state.current_frame.pc).handler)(self, world, tracer)
                     {
                         return end;
                     };
@@ -128,7 +130,7 @@ impl<T> VirtualMachine<T> {
                         self.state.current_frame.is_static,
                     )
                 {
-                    if let Some(e) = free_panic(self, world, tracer) {
+                    if let ExecutionStatus::Stopped(e) = free_panic(self, world, tracer) {
                         break e;
                     };
                     continue;
@@ -138,7 +140,8 @@ impl<T> VirtualMachine<T> {
                 self.print_instruction(self.state.current_frame.pc);
 
                 if args.predicate().satisfied(&self.state.flags) {
-                    if let Some(end) = ((*self.state.current_frame.pc).handler)(self, world, tracer)
+                    if let ExecutionStatus::Stopped(end) =
+                        ((*self.state.current_frame.pc).handler)(self, world, tracer)
                     {
                         break end;
                     };

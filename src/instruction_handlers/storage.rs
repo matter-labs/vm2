@@ -3,7 +3,7 @@ use crate::{
     addressing_modes::{
         Arguments, Destination, Register1, Register2, Source, SLOAD_COST, SSTORE_COST,
     },
-    instruction::InstructionResult,
+    instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
 use eravm_stable_interface::opcodes;
@@ -12,7 +12,7 @@ fn sstore<T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::StorageWrite, _>(vm, world, tracer, |vm, args, world| {
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
@@ -30,7 +30,7 @@ fn sstore_transient<T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::TransientStorageWrite, _>(
         vm,
         world,
@@ -49,7 +49,7 @@ fn sload<T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::StorageRead, _>(vm, world, tracer, |vm, args, world| {
         let key = Register1::get(args, &mut vm.state);
         let (value, refund) =
@@ -67,7 +67,7 @@ fn sload_transient<T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::TransientStorageRead, _>(vm, world, tracer, |vm, args, _| {
         let key = Register1::get(args, &mut vm.state);
         let value = vm

@@ -1,7 +1,7 @@
 use super::{heap::Heaps, stack::StackPool};
 use crate::{
     addressing_modes::Arguments, callframe::Callframe, fat_pointer::FatPointer,
-    instruction::InstructionResult, instruction_handlers::free_panic, HeapId, Instruction,
+    instruction::ExecutionStatus, instruction_handlers::free_panic, HeapId, Instruction,
     ModeRequirements, Predicate, Settings, State, VirtualMachine, World,
 };
 use arbitrary::Arbitrary;
@@ -13,7 +13,7 @@ impl<T> VirtualMachine<T> {
         &mut self,
         world: &mut dyn World<T>,
         tracer: &mut T,
-    ) -> InstructionResult {
+    ) -> ExecutionStatus {
         unsafe {
             let args = &(*self.state.current_frame.pc).arguments;
 
@@ -30,7 +30,7 @@ impl<T> VirtualMachine<T> {
                 ((*self.state.current_frame.pc).handler)(self, world, tracer)
             } else {
                 self.state.current_frame.pc = self.state.current_frame.pc.add(1);
-                None
+                ExecutionStatus::Running
             }
         }
     }

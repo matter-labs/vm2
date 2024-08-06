@@ -2,7 +2,7 @@ use super::{common::instruction_boilerplate, HeapInterface};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     heap::Heaps,
-    instruction::InstructionResult,
+    instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
 use eravm_stable_interface::{opcodes, HeapId};
@@ -27,7 +27,7 @@ fn precompile_call<T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::PrecompileCall, _>(vm, world, tracer, |vm, args, _| {
         // The user gets to decide how much gas to burn
         // This is safe because system contracts are trusted

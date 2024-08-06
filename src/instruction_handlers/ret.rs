@@ -2,7 +2,7 @@ use super::{common::instruction_boilerplate_ext, far_call::get_far_call_calldata
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     callframe::FrameRemnant,
-    instruction::{ExecutionEnd, InstructionResult},
+    instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
     predication::Flags,
     Instruction, Predicate, VirtualMachine, World,
@@ -37,7 +37,7 @@ fn ret<T, const RETURN_TYPE: u8, const TO_LABEL: bool>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate_ext::<opcodes::Ret, _>(vm, world, tracer, |vm, args, _| {
         let mut return_type = ReturnType::from_u8(RETURN_TYPE);
         let near_call_leftover_gas = vm.state.current_frame.gas;
@@ -99,12 +99,12 @@ fn ret<T, const RETURN_TYPE: u8, const TO_LABEL: bool>(
                         )
                         .to_vec();
                     if return_type == ReturnType::Revert {
-                        Some(ExecutionEnd::Reverted(output))
+                        ExecutionStatus::Stopped(ExecutionEnd::Reverted(output))
                     } else {
-                        Some(ExecutionEnd::ProgramFinished(output))
+                        ExecutionStatus::Stopped(ExecutionEnd::ProgramFinished(output))
                     }
                 } else {
-                    Some(ExecutionEnd::Panicked)
+                    ExecutionStatus::Stopped(ExecutionEnd::Panicked)
                 };
             };
 
@@ -130,7 +130,7 @@ fn ret<T, const RETURN_TYPE: u8, const TO_LABEL: bool>(
         vm.state.flags = Flags::new(return_type == ReturnType::Panic, false, false);
         vm.state.current_frame.gas += leftover_gas;
 
-        None
+        ExecutionStatus::Running
     })
 }
 
@@ -174,7 +174,7 @@ pub(crate) fn free_panic<T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     ret::<T, { ReturnType::Panic as u8 }, false>(vm, world, tracer)
 }
 

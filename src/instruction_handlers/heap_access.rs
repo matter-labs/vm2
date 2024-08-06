@@ -5,7 +5,7 @@ use crate::{
         RegisterOrImmediate, Source,
     },
     fat_pointer::FatPointer,
-    instruction::InstructionResult,
+    instruction::ExecutionStatus,
     state::State,
     ExecutionEnd, HeapId, Instruction, VirtualMachine, World,
 };
@@ -51,7 +51,7 @@ fn load<T, H: HeapFromState, In: Source, const INCREMENT: bool>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::HeapRead, _>(vm, world, tracer, |vm, args, _| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
@@ -87,7 +87,7 @@ fn store<T, H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_E
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate_ext::<opcodes::HeapWrite, _>(vm, world, tracer, |vm, args, _| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
@@ -99,7 +99,7 @@ fn store<T, H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_E
         let new_bound = address.wrapping_add(32);
         if grow_heap::<_, H>(&mut vm.state, new_bound).is_err() {
             vm.state.current_frame.pc = &*vm.panic;
-            return None;
+            return ExecutionStatus::Running;
         }
 
         // The heap is always grown even when the index nonsensical.
@@ -107,7 +107,7 @@ fn store<T, H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_E
         if pointer > LAST_ADDRESS.into() {
             let _ = vm.state.use_gas(u32::MAX);
             vm.state.current_frame.pc = &*vm.panic;
-            return None;
+            return ExecutionStatus::Running;
         }
 
         let heap = H::get_heap(&vm.state);
@@ -118,9 +118,9 @@ fn store<T, H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_E
         }
 
         if HOOKING_ENABLED && address == vm.settings.hook_address {
-            Some(ExecutionEnd::SuspendedOnHook(value.as_u32()))
+            ExecutionStatus::Stopped(ExecutionEnd::SuspendedOnHook(value.as_u32()))
         } else {
-            None
+            ExecutionStatus::Running
         }
     })
 }
@@ -142,7 +142,7 @@ fn load_pointer<T, const INCREMENT: bool>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::PointerRead, _>(vm, world, tracer, |vm, args, _| {
         let (input, input_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
         if !input_is_pointer {

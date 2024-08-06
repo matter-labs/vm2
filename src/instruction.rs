@@ -20,8 +20,11 @@ impl<T> fmt::Debug for Instruction<T> {
 }
 
 pub(crate) type Handler<T> =
-    fn(&mut VirtualMachine<T>, &mut dyn World<T>, &mut T) -> InstructionResult;
-pub(crate) type InstructionResult = Option<ExecutionEnd>;
+    fn(&mut VirtualMachine<T>, &mut dyn World<T>, &mut T) -> ExecutionStatus;
+pub enum ExecutionStatus {
+    Running,
+    Stopped(ExecutionEnd),
+}
 
 #[derive(Debug, PartialEq)]
 pub enum ExecutionEnd {
@@ -43,8 +46,8 @@ fn jump_to_beginning_handler<T>(
     vm: &mut VirtualMachine<T>,
     _: &mut dyn World<T>,
     _: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     let first_instruction = vm.state.current_frame.program.instruction(0).unwrap();
     vm.state.current_frame.pc = first_instruction;
-    None
+    ExecutionStatus::Running
 }

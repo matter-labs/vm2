@@ -1,7 +1,7 @@
 use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
-    instruction::InstructionResult,
+    instruction::ExecutionStatus,
     world_diff::{Event, L2ToL1Log},
     Instruction, VirtualMachine, World,
 };
@@ -13,7 +13,7 @@ fn event<T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::Event, _>(vm, world, tracer, |vm, args, _| {
         if vm.state.current_frame.address == H160::from_low_u64_be(ADDRESS_EVENT_WRITER as u64) {
             let key = Register1::get(args, &mut vm.state);
@@ -35,7 +35,7 @@ fn l2_to_l1<T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::L2ToL1Message, _>(vm, world, tracer, |vm, args, _| {
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);

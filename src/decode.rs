@@ -4,7 +4,7 @@ use crate::{
         Immediate1, Immediate2, Register, Register1, Register2, RegisterAndImmediate,
         RelativeStack, Source, SourceWriter,
     },
-    instruction::{ExecutionEnd, InstructionResult},
+    instruction::{ExecutionEnd, ExecutionStatus},
     instruction_handlers::{
         Add, And, AuxHeap, CallingMode, Div, Heap, Mul, Or, PointerAdd, PointerPack, PointerShrink,
         PointerSub, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
@@ -47,7 +47,7 @@ fn unimplemented_handler<T>(
     vm: &mut VirtualMachine<T>,
     _: &mut dyn World<T>,
     _: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     let variant: Opcode = unsafe {
         std::mem::transmute(
             Immediate1::get(&(*vm.state.current_frame.pc).arguments, &mut vm.state).low_u32()
@@ -55,7 +55,7 @@ fn unimplemented_handler<T>(
         )
     };
     eprintln!("Unimplemented instruction: {:?}!", variant);
-    Some(ExecutionEnd::Panicked)
+    ExecutionStatus::Stopped(ExecutionEnd::Panicked)
 }
 
 pub(crate) fn decode<T>(raw: u64, is_bootloader: bool) -> Instruction<T> {

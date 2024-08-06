@@ -5,7 +5,7 @@ use crate::{
         CodePage, Destination, DestinationWriter, Immediate1, Register1, Register2, RelativeStack,
         Source,
     },
-    instruction::{Instruction, InstructionResult},
+    instruction::{ExecutionStatus, Instruction},
     predication::Flags,
     VirtualMachine, World,
 };
@@ -18,7 +18,7 @@ fn binop<T, Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SE
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<Op, _>(vm, world, tracer, |vm, args, _| {
         let a = In1::get(args, &mut vm.state);
         let b = Register2::get(args, &mut vm.state);

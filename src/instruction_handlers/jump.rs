@@ -4,7 +4,7 @@ use crate::{
         AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Destination,
         Immediate1, Register1, RelativeStack, Source,
     },
-    instruction::{Instruction, InstructionResult},
+    instruction::{Instruction, ExecutionStatus},
     VirtualMachine, World,
 };
 use eravm_stable_interface::opcodes;
@@ -13,7 +13,7 @@ fn jump<T, In: Source>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
-) -> InstructionResult {
+) -> ExecutionStatus {
     instruction_boilerplate::<opcodes::Jump, _>(vm, world, tracer, |vm, args, _| {
         let target = In::get(args, &mut vm.state).low_u32() as u16;
 
