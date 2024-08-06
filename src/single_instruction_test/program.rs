@@ -19,7 +19,7 @@ pub struct Program<T> {
 impl<T> Clone for Program<T> {
     fn clone(&self) -> Self {
         Self {
-            raw_first_instruction: self.raw_first_instruction.clone(),
+            raw_first_instruction: self.raw_first_instruction,
             first_instruction: self.first_instruction.clone(),
             other_instruction: self.other_instruction.clone(),
             code_page: self.code_page.clone(),
