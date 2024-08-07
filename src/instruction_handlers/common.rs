@@ -1,20 +1,20 @@
 use crate::{addressing_modes::Arguments, instruction::ExecutionStatus, VirtualMachine, World};
-use eravm_stable_interface::Tracer;
+use eravm_stable_interface::{OpcodeSelect, TracerDispatch};
 
 #[inline(always)]
 pub(crate) fn instruction_boilerplate<Opcode, T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
-    mut tracer: &mut T,
+    tracer: &mut T,
     business_logic: impl FnOnce(&mut VirtualMachine<T>, &Arguments, &mut dyn World<T>),
 ) -> ExecutionStatus {
-    Tracer::<Opcode>::before_instruction(&mut tracer, vm);
+    tracer.opcode::<Opcode>().before_instruction(vm);
     unsafe {
         let instruction = vm.state.current_frame.pc;
         vm.state.current_frame.pc = instruction.add(1);
         business_logic(vm, &(*instruction).arguments, world);
     };
-    Tracer::<Opcode>::after_instruction(&mut tracer, vm);
+    tracer.opcode::<Opcode>().after_instruction(vm);
 
     ExecutionStatus::Running
 }
@@ -23,22 +23,21 @@ pub(crate) fn instruction_boilerplate<Opcode, T>(
 pub(crate) fn instruction_boilerplate_ext<Opcode, T>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
-    mut tracer: &mut T,
+    tracer: &mut T,
     business_logic: impl FnOnce(
         &mut VirtualMachine<T>,
         &Arguments,
         &mut dyn World<T>,
     ) -> ExecutionStatus,
 ) -> ExecutionStatus {
-    Tracer::<Opcode>::before_instruction(&mut tracer, vm);
-
+    tracer.opcode::<Opcode>().before_instruction(vm);
     let result = unsafe {
         let instruction = vm.state.current_frame.pc;
         vm.state.current_frame.pc = instruction.add(1);
 
         business_logic(vm, &(*instruction).arguments, world)
     };
-    Tracer::<Opcode>::after_instruction(&mut tracer, vm);
+    tracer.opcode::<Opcode>().after_instruction(vm);
 
     result
 }
