@@ -1,5 +1,6 @@
 use crate::{decode::decode, Instruction};
 use arbitrary::Arbitrary;
+use eravm_stable_interface::Tracer;
 use std::{rc::Rc, sync::Arc};
 use u256::U256;
 
@@ -27,7 +28,7 @@ impl<T> Clone for Program<T> {
     }
 }
 
-impl<'a, T> Arbitrary<'a> for Program<T> {
+impl<'a, T: Tracer> Arbitrary<'a> for Program<T> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         let raw_first_instruction = u.arbitrary()?;
 
@@ -62,7 +63,9 @@ impl<T> Program<T> {
     pub fn code_page(&self) -> &Arc<[U256]> {
         &self.code_page
     }
+}
 
+impl<T: Tracer> Program<T> {
     pub fn for_decommit() -> Self {
         Self {
             raw_first_instruction: 0,

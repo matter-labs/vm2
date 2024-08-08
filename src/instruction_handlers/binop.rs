@@ -9,12 +9,20 @@ use crate::{
     predication::Flags,
     VirtualMachine, World,
 };
-use eravm_stable_interface::opcodes::{
-    Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
+use eravm_stable_interface::{
+    opcodes::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor},
+    NotifyTracer, Tracer,
 };
 use u256::U256;
 
-fn binop<T, Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SET_FLAGS: bool>(
+fn binop<
+    T: Tracer,
+    Op: Binop,
+    In1: Source,
+    Out: Destination,
+    const SWAP: bool,
+    const SET_FLAGS: bool,
+>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -33,7 +41,7 @@ fn binop<T, Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SE
     })
 }
 
-pub trait Binop {
+pub trait Binop: NotifyTracer {
     type Out2: SecondOutput;
     fn perform(a: &U256, b: &U256) -> (U256, Self::Out2, Flags);
 }
@@ -194,7 +202,7 @@ impl Binop for Div {
 
 use super::monomorphization::*;
 
-impl<T> Instruction<T> {
+impl<T: Tracer> Instruction<T> {
     #[inline(always)]
     pub fn from_binop<Op: Binop>(
         src1: AnySource,

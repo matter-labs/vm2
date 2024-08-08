@@ -6,11 +6,14 @@ use crate::{
     state::State,
     Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::opcodes::{self, Caller, CodeAddress, ErgsLeft, This, SP, U128};
+use eravm_stable_interface::{
+    opcodes::{self, Caller, CodeAddress, ErgsLeft, This, SP, U128},
+    NotifyTracer, Tracer,
+};
 use u256::U256;
 use zkevm_opcode_defs::VmMetaParameters;
 
-fn context<T, Op: ContextOp>(
+fn context<T: Tracer, Op: ContextOp>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -21,7 +24,7 @@ fn context<T, Op: ContextOp>(
     })
 }
 
-trait ContextOp {
+trait ContextOp: NotifyTracer {
     fn get<T>(state: &State<T>) -> U256;
 }
 
@@ -61,7 +64,7 @@ impl ContextOp for SP {
     }
 }
 
-fn context_meta<T>(
+fn context_meta<T: Tracer>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -86,7 +89,7 @@ fn context_meta<T>(
     })
 }
 
-fn set_context_u128<T>(
+fn set_context_u128<T: Tracer>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -97,7 +100,7 @@ fn set_context_u128<T>(
     })
 }
 
-fn increment_tx_number<T>(
+fn increment_tx_number<T: Tracer>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -107,7 +110,7 @@ fn increment_tx_number<T>(
     })
 }
 
-fn aux_mutating<T>(
+fn aux_mutating<T: Tracer>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -117,7 +120,7 @@ fn aux_mutating<T>(
     })
 }
 
-impl<T> Instruction<T> {
+impl<T: Tracer> Instruction<T> {
     fn from_context<Op: ContextOp>(out: Register1, arguments: Arguments) -> Self {
         Self {
             handler: context::<T, Op>,

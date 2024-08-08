@@ -5,11 +5,11 @@ use crate::{
     world_diff::{Event, L2ToL1Log},
     Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::opcodes;
+use eravm_stable_interface::{opcodes, Tracer};
 use u256::H160;
 use zkevm_opcode_defs::ADDRESS_EVENT_WRITER;
 
-fn event<T>(
+fn event<T: Tracer>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -31,7 +31,7 @@ fn event<T>(
     })
 }
 
-fn l2_to_l1<T>(
+fn l2_to_l1<T: Tracer>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -51,7 +51,7 @@ fn l2_to_l1<T>(
     })
 }
 
-impl<T> Instruction<T> {
+impl<T: Tracer> Instruction<T> {
     pub fn from_event(
         key: Register1,
         value: Register2,

@@ -9,7 +9,7 @@ use crate::{
     state::State,
     ExecutionEnd, HeapId, Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::opcodes;
+use eravm_stable_interface::{opcodes, Tracer};
 use std::ops::Range;
 use u256::U256;
 
@@ -47,7 +47,7 @@ impl HeapFromState for AuxHeap {
 /// The last address to which 32 can be added without overflow.
 const LAST_ADDRESS: u32 = u32::MAX - 32;
 
-fn load<T, H: HeapFromState, In: Source, const INCREMENT: bool>(
+fn load<T: Tracer, H: HeapFromState, In: Source, const INCREMENT: bool>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -83,7 +83,13 @@ fn load<T, H: HeapFromState, In: Source, const INCREMENT: bool>(
     })
 }
 
-fn store<T, H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENABLED: bool>(
+fn store<
+    T: Tracer,
+    H: HeapFromState,
+    In: Source,
+    const INCREMENT: bool,
+    const HOOKING_ENABLED: bool,
+>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -127,7 +133,10 @@ fn store<T, H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_E
 
 /// Pays for more heap space. Doesn't acually grow the heap.
 /// That distinction is necessary because the bootloader gets u32::MAX heap for free.
-pub fn grow_heap<T, H: HeapFromState>(state: &mut State<T>, new_bound: u32) -> Result<(), ()> {
+pub fn grow_heap<T: Tracer, H: HeapFromState>(
+    state: &mut State<T>,
+    new_bound: u32,
+) -> Result<(), ()> {
     let already_paid = H::get_heap_size(state);
     if *already_paid < new_bound {
         let to_pay = new_bound - *already_paid;
@@ -138,7 +147,7 @@ pub fn grow_heap<T, H: HeapFromState>(state: &mut State<T>, new_bound: u32) -> R
     Ok(())
 }
 
-fn load_pointer<T, const INCREMENT: bool>(
+fn load_pointer<T: Tracer, const INCREMENT: bool>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -174,7 +183,7 @@ fn load_pointer<T, const INCREMENT: bool>(
 
 use super::monomorphization::*;
 
-impl<T> Instruction<T> {
+impl<T: Tracer> Instruction<T> {
     #[inline(always)]
     pub fn from_load<H: HeapFromState>(
         src: RegisterOrImmediate,

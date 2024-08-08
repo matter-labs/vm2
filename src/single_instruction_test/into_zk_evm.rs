@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use super::{stack::Stack, state_to_zk_evm::vm2_state_to_zk_evm_state, MockWorld};
 use crate::{zkevm_opcode_defs::decoding::EncodingModeProduction, VirtualMachine, World};
+use eravm_stable_interface::Tracer;
 use u256::U256;
 use zk_evm::{
     abstractions::{DecommittmentProcessor, Memory, MemoryType, PrecompilesProcessor, Storage},
     aux_structures::PubdataCost,
     block_properties::BlockProperties,
     reference_impls::event_sink::InMemoryEventSink,
-    tracing::Tracer,
+    tracing,
     vm_state::VmState,
     witness_trace::VmWitnessTracer,
 };
@@ -26,7 +27,7 @@ type ZkEvmState = VmState<
     EncodingModeProduction,
 >;
 
-pub fn vm2_to_zk_evm<T>(vm: &VirtualMachine<T>, world: MockWorld) -> ZkEvmState {
+pub fn vm2_to_zk_evm<T: Tracer>(vm: &VirtualMachine<T>, world: MockWorld) -> ZkEvmState {
     let mut event_sink = InMemoryEventSink::new();
     event_sink.start_frame(zk_evm::aux_structures::Timestamp(0));
 
@@ -241,7 +242,7 @@ impl DecommittmentProcessor for MockDecommitter {
 #[derive(Debug)]
 pub struct NoTracer;
 
-impl Tracer for NoTracer {
+impl tracing::Tracer for NoTracer {
     type SupportedMemory = MockMemory;
 
     fn before_decoding(

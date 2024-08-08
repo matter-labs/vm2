@@ -6,6 +6,7 @@ use crate::{
     callframe::Callframe, decommit::is_kernel, predication::Flags, HeapId, Program, WorldDiff,
 };
 use arbitrary::Arbitrary;
+use eravm_stable_interface::Tracer;
 use u256::H160;
 use zkevm_opcode_defs::EVM_SIMULATOR_STIPEND;
 
@@ -15,7 +16,7 @@ impl<'a> Arbitrary<'a> for Flags {
     }
 }
 
-impl<'a, T> Arbitrary<'a> for Callframe<T> {
+impl<'a, T: Tracer> Arbitrary<'a> for Callframe<T> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         let address: H160 = u.arbitrary()?;
 
@@ -64,7 +65,7 @@ impl<'a, T> Arbitrary<'a> for Callframe<T> {
     }
 }
 
-impl<T> Callframe<T> {
+impl<T: Tracer> Callframe<T> {
     pub fn raw_first_instruction(&self) -> u64 {
         self.program.raw_first_instruction
     }

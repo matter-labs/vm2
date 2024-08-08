@@ -5,11 +5,11 @@ use crate::{
     instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::opcodes;
+use eravm_stable_interface::{opcodes, Tracer};
 use u256::U256;
 use zkevm_opcode_defs::{BlobSha256Format, ContractCodeSha256Format, VersionedHashLen32};
 
-fn decommit<T>(
+fn decommit<T: Tracer>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -51,7 +51,7 @@ fn decommit<T>(
     })
 }
 
-impl<T> Instruction<T> {
+impl<T: Tracer> Instruction<T> {
     pub fn from_decommit(
         abi: Register1,
         burn: Register2,

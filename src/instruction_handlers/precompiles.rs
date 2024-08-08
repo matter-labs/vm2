@@ -5,7 +5,7 @@ use crate::{
     instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::{opcodes, HeapId};
+use eravm_stable_interface::{opcodes, HeapId, Tracer};
 use zk_evm_abstractions::{
     aux::Timestamp,
     precompiles::{
@@ -23,7 +23,7 @@ use zkevm_opcode_defs::{
     PrecompileAuxData, PrecompileCallABI,
 };
 
-fn precompile_call<T>(
+fn precompile_call<T: Tracer>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -121,7 +121,7 @@ impl Memory for Heaps {
     }
 }
 
-impl<T> Instruction<T> {
+impl<T: Tracer> Instruction<T> {
     pub fn from_precompile_call(
         abi: Register1,
         burn: Register2,

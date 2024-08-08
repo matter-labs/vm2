@@ -7,9 +7,9 @@ use crate::{
     instruction::{ExecutionStatus, Instruction},
     VirtualMachine, World,
 };
-use eravm_stable_interface::opcodes;
+use eravm_stable_interface::{opcodes, Tracer};
 
-fn jump<T, In: Source>(
+fn jump<T: Tracer, In: Source>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -26,7 +26,7 @@ fn jump<T, In: Source>(
 
 use super::monomorphization::*;
 
-impl<T> Instruction<T> {
+impl<T: Tracer> Instruction<T> {
     pub fn from_jump(source: AnySource, destination: Register1, arguments: Arguments) -> Self {
         Self {
             handler: monomorphize!(jump [T] match_source source),

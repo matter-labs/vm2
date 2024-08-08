@@ -5,10 +5,11 @@ use crate::{
     ModeRequirements, Predicate, Settings, State, VirtualMachine, World,
 };
 use arbitrary::Arbitrary;
+use eravm_stable_interface::Tracer;
 use std::fmt::Debug;
 use u256::U256;
 
-impl<T> VirtualMachine<T> {
+impl<T: Tracer> VirtualMachine<T> {
     pub fn run_single_instruction(
         &mut self,
         world: &mut dyn World<T>,
@@ -59,7 +60,7 @@ impl<T> VirtualMachine<T> {
     }
 }
 
-impl<'a, T> Arbitrary<'a> for VirtualMachine<T> {
+impl<'a, T: Tracer> Arbitrary<'a> for VirtualMachine<T> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         let current_frame: Callframe<T> = u.arbitrary()?;
 

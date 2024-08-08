@@ -5,9 +5,9 @@ use crate::{
     predication::Flags,
     Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::opcodes;
+use eravm_stable_interface::{opcodes, Tracer};
 
-fn near_call<T>(
+fn near_call<T: Tracer>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -36,7 +36,7 @@ fn near_call<T>(
     })
 }
 
-impl<T> Instruction<T> {
+impl<T: Tracer> Instruction<T> {
     pub fn from_near_call(
         gas: Register1,
         destination: Immediate1,

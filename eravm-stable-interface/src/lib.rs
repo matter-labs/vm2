@@ -19,7 +19,7 @@
 //!
 //! ## How do I add a new feature to the interface?
 //!
-//! Do not change the existing traits. In fact, you should delete all existing code in the new
+//! Do not change the existing traits. In fact, you should delete existing code in the new
 //! version that you publish and import it from the previous version instead.
 //!
 //! This is how you would add a new method to StateInterface and a new opcode.

@@ -7,7 +7,7 @@ use crate::{
     predication::Flags,
     Instruction, Predicate, VirtualMachine, World,
 };
-use eravm_stable_interface::opcodes;
+use eravm_stable_interface::{opcodes, Tracer};
 use u256::U256;
 
 #[repr(u8)]
@@ -33,7 +33,7 @@ impl ReturnType {
     }
 }
 
-fn ret<T, const RETURN_TYPE: u8, const TO_LABEL: bool>(
+fn ret<T: Tracer, const RETURN_TYPE: u8, const TO_LABEL: bool>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -137,7 +137,10 @@ fn ret<T, const RETURN_TYPE: u8, const TO_LABEL: bool>(
 /// Formally, a far call pushes a new frame and returns from it immediately if it panics.
 /// This function instead panics without popping a frame to save on allocation.
 /// TODO: when tracers are implemented, this function should count as a separate instruction!
-pub(crate) fn panic_from_failed_far_call<T>(vm: &mut VirtualMachine<T>, exception_handler: u16) {
+pub(crate) fn panic_from_failed_far_call<T: Tracer>(
+    vm: &mut VirtualMachine<T>,
+    exception_handler: u16,
+) {
     // Gas is already subtracted in the far call code.
     // No need to roll back, as no changes are made in this "frame".
 
@@ -170,7 +173,7 @@ pub(crate) const RETURN_COST: u32 = 5;
 /// - the far call stack overflows
 ///
 /// For all other panics, point the instruction pointer at [PANIC] instead.
-pub(crate) fn free_panic<T>(
+pub(crate) fn free_panic<T: Tracer>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -180,7 +183,7 @@ pub(crate) fn free_panic<T>(
 
 use super::monomorphization::*;
 
-impl<T> Instruction<T> {
+impl<T: Tracer> Instruction<T> {
     pub fn from_ret(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         const RETURN_TYPE: u8 = ReturnType::Normal as u8;

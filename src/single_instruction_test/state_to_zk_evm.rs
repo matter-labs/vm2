@@ -1,4 +1,5 @@
 use crate::callframe::{Callframe, NearCallFrame};
+use eravm_stable_interface::Tracer;
 use std::iter;
 use u256::U256;
 use zk_evm::{
@@ -7,7 +8,7 @@ use zk_evm::{
 };
 use zkevm_opcode_defs::decoding::EncodingModeProduction;
 
-pub(crate) fn vm2_state_to_zk_evm_state<T>(
+pub(crate) fn vm2_state_to_zk_evm_state<T: Tracer>(
     state: &crate::State<T>,
     panic: &crate::Instruction<T>,
 ) -> VmLocalState<8, EncodingModeProduction> {

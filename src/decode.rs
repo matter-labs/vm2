@@ -13,6 +13,7 @@ use crate::{
     mode_requirements::ModeRequirements,
     Instruction, Predicate, VirtualMachine, World,
 };
+use eravm_stable_interface::Tracer;
 use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
     ImmMemHandlerFlags, Opcode,
@@ -22,7 +23,7 @@ use zkevm_opcode_defs::{
     SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
 };
 
-pub fn decode_program<T>(raw: &[u64], is_bootloader: bool) -> Vec<Instruction<T>> {
+pub fn decode_program<T: Tracer>(raw: &[u64], is_bootloader: bool) -> Vec<Instruction<T>> {
     raw.iter()
         .take(1 << 16)
         .map(|i| decode(*i, is_bootloader))
@@ -58,7 +59,7 @@ fn unimplemented_handler<T>(
     ExecutionStatus::Stopped(ExecutionEnd::Panicked)
 }
 
-pub(crate) fn decode<T>(raw: u64, is_bootloader: bool) -> Instruction<T> {
+pub(crate) fn decode<T: Tracer>(raw: u64, is_bootloader: bool) -> Instruction<T> {
     let (parsed, _) = EncodingModeProduction::parse_preliminary_variant_and_absolute_number(raw);
 
     let predicate = match parsed.condition {

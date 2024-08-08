@@ -243,6 +243,7 @@ version = "0.1.0"
 dependencies = [
  "afl",
  "arbitrary",
+ "eravm-stable-interface",
  "pretty_assertions",
  "vm2",
 ]

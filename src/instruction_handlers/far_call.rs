@@ -12,7 +12,7 @@ use crate::{
     predication::Flags,
     Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::opcodes;
+use eravm_stable_interface::{opcodes, Tracer};
 use u256::U256;
 use zkevm_opcode_defs::{
     system_params::{EVM_SIMULATOR_STIPEND, MSG_VALUE_SIMULATOR_ADDITIVE_COST},
@@ -36,7 +36,7 @@ pub enum CallingMode {
 ///
 /// Even though all errors happen before the new stack frame, they cause a panic in the new frame,
 /// not in the caller!
-fn far_call<T, const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>(
+fn far_call<T: Tracer, const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -177,7 +177,7 @@ pub(crate) fn get_far_call_arguments(abi: U256) -> FarCallABI {
 ///
 /// This function needs to be called even if we already know we will panic because
 /// overflowing start + length makes the heap resize even when already panicking.
-pub(crate) fn get_far_call_calldata<T>(
+pub(crate) fn get_far_call_calldata<T: Tracer>(
     raw_abi: U256,
     is_pointer: bool,
     vm: &mut VirtualMachine<T>,
@@ -259,7 +259,7 @@ impl FatPointer {
 
 use super::monomorphization::*;
 
-impl<T> Instruction<T> {
+impl<T: Tracer> Instruction<T> {
     pub fn from_far_call<const MODE: u8>(
         src1: Register1,
         src2: Register2,

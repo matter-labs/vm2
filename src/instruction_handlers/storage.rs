@@ -6,9 +6,9 @@ use crate::{
     instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::opcodes;
+use eravm_stable_interface::{opcodes, Tracer};
 
-fn sstore<T>(
+fn sstore<T: Tracer>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -26,7 +26,7 @@ fn sstore<T>(
     })
 }
 
-fn sstore_transient<T>(
+fn sstore_transient<T: Tracer>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -45,7 +45,7 @@ fn sstore_transient<T>(
     )
 }
 
-fn sload<T>(
+fn sload<T: Tracer>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -63,7 +63,7 @@ fn sload<T>(
     })
 }
 
-fn sload_transient<T>(
+fn sload_transient<T: Tracer>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -78,7 +78,7 @@ fn sload_transient<T>(
     })
 }
 
-impl<T> Instruction<T> {
+impl<T: Tracer> Instruction<T> {
     #[inline(always)]
     pub fn from_sstore(src1: Register1, src2: Register2, arguments: Arguments) -> Self {
         Self {

@@ -13,7 +13,7 @@ use crate::{
     ExecutionEnd, Program, World,
 };
 use crate::{Instruction, ModeRequirements, Predicate};
-use eravm_stable_interface::HeapId;
+use eravm_stable_interface::{HeapId, Tracer};
 use u256::H160;
 
 #[derive(Debug)]
@@ -40,7 +40,7 @@ pub struct VirtualMachine<T> {
     pub(crate) panic: Box<Instruction<T>>,
 }
 
-impl<T> VirtualMachine<T> {
+impl<T: Tracer> VirtualMachine<T> {
     pub fn new(
         address: H160,
         program: Program<T>,

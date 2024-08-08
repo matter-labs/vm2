@@ -8,10 +8,13 @@ use crate::{
     instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::opcodes::{PointerAdd, PointerPack, PointerShrink, PointerSub};
+use eravm_stable_interface::{
+    opcodes::{PointerAdd, PointerPack, PointerShrink, PointerSub},
+    NotifyTracer, Tracer,
+};
 use u256::U256;
 
-fn ptr<T, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
+fn ptr<T: Tracer, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
@@ -43,7 +46,7 @@ fn ptr<T, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     })
 }
 
-pub trait PtrOp {
+pub trait PtrOp: NotifyTracer {
     fn perform(in1: U256, in2: U256) -> Option<U256>;
 }
 
@@ -96,7 +99,7 @@ impl PtrOp for PointerShrink {
 
 use super::monomorphization::*;
 
-impl<T> Instruction<T> {
+impl<T: Tracer> Instruction<T> {
     #[inline(always)]
     pub fn from_ptr<Op: PtrOp>(
         src1: AnySource,
