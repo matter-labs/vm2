@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{btree_map::Keys, BTreeMap};
 
 /// A trait for things that can be rolled back to snapshots
 pub(crate) trait Rollback {
@@ -8,7 +8,7 @@ pub(crate) trait Rollback {
     fn delete_history(&mut self);
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct RollbackableMap<K: Ord, V> {
     map: BTreeMap<K, V>,
     old_entries: Vec<(K, Option<V>)>,
@@ -33,6 +33,10 @@ impl<K: Ord + Clone, V: Clone> RollbackableMap<K, V> {
                 .or_insert((old_value.clone(), self.map.get(key).unwrap().clone()));
         }
         changes
+    }
+
+    pub fn keys(&self) -> Keys<K, V> {
+        self.map.keys()
     }
 }
 

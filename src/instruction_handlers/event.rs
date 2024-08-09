@@ -6,7 +6,7 @@ use crate::{
     Instruction, VirtualMachine, World,
 };
 use u256::H160;
-use zkevm_opcode_defs::ADDRESS_EVENT_WRITER;
+use zkevm_opcode_defs::{Opcode, ADDRESS_EVENT_WRITER};
 
 fn event(
     vm: &mut VirtualMachine,
@@ -52,12 +52,14 @@ fn l2_to_l1(
 
 impl Instruction {
     pub fn from_event(
+        opcode: Opcode,
         key: Register1,
         value: Register2,
         is_first: bool,
         arguments: Arguments,
     ) -> Self {
         Self {
+            opcode,
             handler: event,
             arguments: arguments
                 .write_source(&key)
@@ -67,12 +69,14 @@ impl Instruction {
     }
 
     pub fn from_l2_to_l1_message(
+        opcode: Opcode,
         key: Register1,
         value: Register2,
         is_service: bool,
         arguments: Arguments,
     ) -> Self {
         Self {
+            opcode,
             handler: l2_to_l1,
             arguments: arguments
                 .write_source(&key)

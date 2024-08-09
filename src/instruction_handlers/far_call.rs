@@ -9,12 +9,13 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::InstructionResult,
     predication::Flags,
+    vm::STORAGE_READ_STORAGE_APPLICATION_CYCLES,
     Instruction, VirtualMachine, World,
 };
 use u256::U256;
 use zkevm_opcode_defs::{
     system_params::{EVM_SIMULATOR_STIPEND, MSG_VALUE_SIMULATOR_ADDITIVE_COST},
-    ADDRESS_MSG_VALUE,
+    Opcode, ADDRESS_MSG_VALUE, DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
 
 #[repr(u8)]
@@ -59,6 +60,23 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>
     };
 
     let failing_part = (|| {
+        let address = zkevm_opcode_defs::ethereum_types::Address::from_low_u64_be(
+            DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64,
+        );
+        if !vm
+            .world_diff
+            .written_storage_slots
+            .contains(&(address, destination_address))
+            && !vm
+                .world_diff
+                .read_storage_slots
+                .contains(&(address, destination_address))
+            && !world.is_free_storage_slot(&address, &destination_address)
+        {
+            println!("> new vm read: {address} {destination_address:x}");
+            vm.statistics.storage_application_cycles += STORAGE_READ_STORAGE_APPLICATION_CYCLES;
+        }
+
         let decommit_result = vm.world_diff.decommit(
             world,
             destination_address,
@@ -89,6 +107,7 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>
             world,
             unpaid_decommit,
             &mut vm.state.current_frame.gas,
+            &mut vm.statistics,
         )?;
 
         Some((calldata, program, is_evm))
@@ -259,6 +278,7 @@ use super::monomorphization::*;
 
 impl Instruction {
     pub fn from_far_call<const MODE: u8>(
+        opcode: Opcode,
         src1: Register1,
         src2: Register2,
         error_handler: Immediate1,
@@ -267,6 +287,7 @@ impl Instruction {
         arguments: Arguments,
     ) -> Self {
         Self {
+            opcode,
             handler: monomorphize!(far_call [MODE] match_boolean is_static match_boolean is_shard),
             arguments: arguments
                 .write_source(&src1)

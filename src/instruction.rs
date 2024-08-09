@@ -1,5 +1,7 @@
 use std::fmt::{self, Debug, Formatter};
 
+use zkevm_opcode_defs::{NopOpcode, Opcode};
+
 use crate::{
     addressing_modes::Arguments, mode_requirements::ModeRequirements, vm::VirtualMachine,
     Predicate, World,
@@ -8,6 +10,7 @@ use crate::{
 pub struct Instruction {
     pub(crate) handler: Handler,
     pub(crate) arguments: Arguments,
+    pub(crate) opcode: Opcode,
 }
 
 impl Debug for Instruction {
@@ -37,6 +40,7 @@ pub fn jump_to_beginning() -> Instruction {
     Instruction {
         handler: jump_to_beginning_handler,
         arguments: Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
+        opcode: Opcode::Nop(NopOpcode),
     }
 }
 fn jump_to_beginning_handler(

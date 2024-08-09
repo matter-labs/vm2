@@ -19,7 +19,7 @@ use zkevm_opcode_defs::{
         ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS, KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
         SECP256R1_VERIFY_PRECOMPILE_ADDRESS, SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
     },
-    PrecompileAuxData, PrecompileCallABI,
+    Opcode, PrecompileAuxData, PrecompileCallABI,
 };
 
 fn precompile_call(
@@ -64,16 +64,20 @@ fn precompile_call(
         let heaps = &mut vm.state.heaps;
         match address_low {
             KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
-                keccak256_rounds_function::<_, false>(0, query, heaps);
+                vm.statistics.keccak256_cycles +=
+                    keccak256_rounds_function::<_, false>(0, query, heaps).0 as u32;
             }
             SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
-                sha256_rounds_function::<_, false>(0, query, heaps);
+                vm.statistics.sha256_cycles +=
+                    sha256_rounds_function::<_, false>(0, query, heaps).0 as u32;
             }
             ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS => {
-                ecrecover_function::<_, false>(0, query, heaps);
+                vm.statistics.ecrecover_cycles +=
+                    ecrecover_function::<_, false>(0, query, heaps).0 as u32;
             }
             SECP256R1_VERIFY_PRECOMPILE_ADDRESS => {
-                secp256r1_verify_function::<_, false>(0, query, heaps);
+                vm.statistics.secp256k1_verify_cycles +=
+                    secp256r1_verify_function::<_, false>(0, query, heaps).0 as u32;
             }
             _ => {
                 // A precompile call may be used just to burn gas
@@ -123,12 +127,14 @@ impl Memory for Heaps {
 
 impl Instruction {
     pub fn from_precompile_call(
+        opcode: Opcode,
         abi: Register1,
         burn: Register2,
         out: Register1,
         arguments: Arguments,
     ) -> Self {
         Self {
+            opcode,
             arguments: arguments
                 .write_source(&abi)
                 .write_source(&burn)

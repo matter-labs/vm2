@@ -8,6 +8,7 @@ use crate::{
     Instruction, Predicate, VirtualMachine, World,
 };
 use u256::U256;
+use zkevm_opcode_defs::{InvalidOpcode, Opcode, RetOpcode};
 
 #[repr(u8)]
 #[derive(PartialEq)]
@@ -169,6 +170,7 @@ pub(crate) fn panic_from_failed_far_call(
 
 /// Panics, burning all available gas.
 pub const INVALID_INSTRUCTION: Instruction = Instruction {
+    opcode: Opcode::Invalid(InvalidOpcode),
     handler: ret::<{ ReturnType::Panic as u8 }, false>,
     arguments: Arguments::new(
         Predicate::Always,
@@ -179,6 +181,7 @@ pub const INVALID_INSTRUCTION: Instruction = Instruction {
 
 pub(crate) const RETURN_COST: u32 = 5;
 pub static PANIC: Instruction = Instruction {
+    opcode: Opcode::Ret(RetOpcode::Panic),
     handler: ret::<{ ReturnType::Panic as u8 }, false>,
     arguments: Arguments::new(Predicate::Always, RETURN_COST, ModeRequirements::none()),
 };
@@ -199,26 +202,39 @@ pub(crate) fn free_panic(vm: &mut VirtualMachine, world: &mut dyn World) -> Inst
 use super::monomorphization::*;
 
 impl Instruction {
-    pub fn from_ret(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
+    pub fn from_ret(
+        opcode: Opcode,
+        src1: Register1,
+        label: Option<Immediate1>,
+        arguments: Arguments,
+    ) -> Self {
         let to_label = label.is_some();
         const RETURN_TYPE: u8 = ReturnType::Normal as u8;
         Self {
+            opcode,
             handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
-    pub fn from_revert(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
+    pub fn from_revert(
+        opcode: Opcode,
+        src1: Register1,
+        label: Option<Immediate1>,
+        arguments: Arguments,
+    ) -> Self {
         let to_label = label.is_some();
         const RETURN_TYPE: u8 = ReturnType::Revert as u8;
         Self {
+            opcode,
             handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
-    pub fn from_panic(label: Option<Immediate1>, arguments: Arguments) -> Self {
+    pub fn from_panic(opcode: Opcode, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         const RETURN_TYPE: u8 = ReturnType::Panic as u8;
         Self {
+            opcode,
             handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
             arguments: arguments.write_source(&label),
         }

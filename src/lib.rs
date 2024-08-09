@@ -31,7 +31,7 @@ pub use mode_requirements::ModeRequirements;
 pub use predication::Predicate;
 pub use program::Program;
 pub use state::State;
-pub use vm::{Settings, VirtualMachine, VmSnapshot as Snapshot};
+pub use vm::{CircuitCycleStatistic, Settings, VirtualMachine, VmSnapshot as Snapshot};
 pub use world_diff::{Event, L2ToL1Log, WorldDiff};
 
 #[cfg(feature = "single_instruction_test")]

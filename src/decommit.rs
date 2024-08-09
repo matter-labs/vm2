@@ -1,4 +1,7 @@
-use crate::{program::Program, world_diff::WorldDiff, World};
+use crate::{
+    program::Program, vm::STORAGE_READ_STORAGE_APPLICATION_CYCLES, world_diff::WorldDiff,
+    CircuitCycleStatistic, World,
+};
 use u256::{H160, U256};
 use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
@@ -90,14 +93,25 @@ impl WorldDiff {
         world: &mut dyn World,
         decommit: UnpaidDecommit,
         gas: &mut u32,
+        statistics: &mut CircuitCycleStatistic,
     ) -> Option<Program> {
         if decommit.cost > *gas {
             // Unlike all other gas costs, this one is not paid if low on gas.
             return None;
         }
         *gas -= decommit.cost;
-        self.decommitted_hashes.insert(decommit.code_key, ());
-        Some(world.decommit(decommit.code_key))
+        let key = decommit.code_key;
+        let old = self.decommitted_hashes.insert(key, ()).is_some();
+        let decommit = world.decommit(decommit.code_key);
+
+        // Each cycle of `CodeDecommitter` processes 2 words.
+        // If the number of words in bytecode is odd, then number of cycles must be rounded up.
+        if !old {
+            let decommitter_cycles_used = (decommit.code_page().len() + 1) / 2;
+            statistics.code_decommitter_cycles += decommitter_cycles_used as u32;
+        }
+
+        Some(decommit)
     }
 }
 

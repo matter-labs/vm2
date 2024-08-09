@@ -1,3 +1,5 @@
+use zkevm_opcode_defs::Opcode;
+
 use super::ret::INVALID_INSTRUCTION;
 use crate::{
     addressing_modes::{
@@ -31,8 +33,14 @@ fn jump<In: Source>(
 use super::monomorphization::*;
 
 impl Instruction {
-    pub fn from_jump(source: AnySource, destination: Register1, arguments: Arguments) -> Self {
+    pub fn from_jump(
+        opcode: Opcode,
+        source: AnySource,
+        destination: Register1,
+        arguments: Arguments,
+    ) -> Self {
         Self {
+            opcode,
             handler: monomorphize!(jump match_source source),
             arguments: arguments
                 .write_source(&source)

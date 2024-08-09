@@ -1,3 +1,5 @@
+use zkevm_opcode_defs::Opcode;
+
 use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{destination_stack_address, AdvanceStackPointer, Arguments, Source},
@@ -23,11 +25,13 @@ fn nop(
 
 impl Instruction {
     pub fn from_nop(
+        opcode: Opcode,
         pop: AdvanceStackPointer,
         push: AdvanceStackPointer,
         arguments: Arguments,
     ) -> Self {
         Self {
+            opcode,
             handler: nop,
             arguments: arguments.write_source(&pop).write_destination(&push),
         }

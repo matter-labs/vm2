@@ -1,3 +1,5 @@
+use zkevm_opcode_defs::Opcode;
+
 use super::ret::INVALID_INSTRUCTION;
 use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Source},
@@ -41,12 +43,14 @@ fn near_call(
 
 impl Instruction {
     pub fn from_near_call(
+        opcode: Opcode,
         gas: Register1,
         destination: Immediate1,
         error_handler: Immediate2,
         arguments: Arguments,
     ) -> Self {
         Self {
+            opcode,
             handler: near_call,
             arguments: arguments
                 .write_source(&gas)

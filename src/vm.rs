@@ -11,6 +11,57 @@ use crate::{
     ExecutionEnd, Instruction, Program, World,
 };
 use u256::H160;
+use zkevm_opcode_defs::{LogOpcode, Opcode, UMAOpcode};
+
+// "Rich addressing" opcodes are opcodes that can write their return value/read the input onto the stack
+// and so take 1-2 RAM permutations more than an average opcode.
+// In the worst case, a rich addressing may take 3 ram permutations
+// (1 for reading the opcode, 1 for writing input value, 1 for writing output value).
+pub(crate) const RICH_ADDRESSING_OPCODE_RAM_CYCLES: u32 = 3;
+
+pub(crate) const AVERAGE_OPCODE_RAM_CYCLES: u32 = 1;
+
+pub(crate) const STORAGE_READ_RAM_CYCLES: u32 = 1;
+pub(crate) const STORAGE_READ_LOG_DEMUXER_CYCLES: u32 = 1;
+pub(crate) const STORAGE_READ_STORAGE_SORTER_CYCLES: u32 = 1;
+pub(crate) const STORAGE_READ_STORAGE_APPLICATION_CYCLES: u32 = 1;
+
+pub(crate) const TRANSIENT_STORAGE_READ_RAM_CYCLES: u32 = 1;
+pub(crate) const TRANSIENT_STORAGE_READ_LOG_DEMUXER_CYCLES: u32 = 1;
+pub(crate) const TRANSIENT_STORAGE_READ_TRANSIENT_STORAGE_CHECKER_CYCLES: u32 = 1;
+
+pub(crate) const EVENT_RAM_CYCLES: u32 = 1;
+pub(crate) const EVENT_LOG_DEMUXER_CYCLES: u32 = 2;
+pub(crate) const EVENT_EVENTS_SORTER_CYCLES: u32 = 2;
+
+pub(crate) const STORAGE_WRITE_RAM_CYCLES: u32 = 1;
+pub(crate) const STORAGE_WRITE_LOG_DEMUXER_CYCLES: u32 = 2;
+pub(crate) const STORAGE_WRITE_STORAGE_SORTER_CYCLES: u32 = 2;
+pub(crate) const STORAGE_WRITE_STORAGE_APPLICATION_CYCLES: u32 = 2;
+
+pub(crate) const TRANSIENT_STORAGE_WRITE_RAM_CYCLES: u32 = 1;
+pub(crate) const TRANSIENT_STORAGE_WRITE_LOG_DEMUXER_CYCLES: u32 = 2;
+pub(crate) const TRANSIENT_STORAGE_WRITE_TRANSIENT_STORAGE_CHECKER_CYCLES: u32 = 2;
+
+pub(crate) const FAR_CALL_RAM_CYCLES: u32 = 1;
+pub(crate) const FAR_CALL_STORAGE_SORTER_CYCLES: u32 = 1;
+pub(crate) const FAR_CALL_CODE_DECOMMITTER_SORTER_CYCLES: u32 = 1;
+pub(crate) const FAR_CALL_LOG_DEMUXER_CYCLES: u32 = 1;
+
+// 5 RAM permutations, because: 1 to read opcode + 2 reads + 2 writes.
+// 2 reads and 2 writes are needed because unaligned access is implemented with
+// aligned queries.
+pub(crate) const UMA_WRITE_RAM_CYCLES: u32 = 5;
+
+// 3 RAM permutations, because: 1 to read opcode + 2 reads.
+// 2 reads are needed because unaligned access is implemented with aligned queries.
+pub(crate) const UMA_READ_RAM_CYCLES: u32 = 3;
+
+pub(crate) const PRECOMPILE_RAM_CYCLES: u32 = 1;
+pub(crate) const PRECOMPILE_LOG_DEMUXER_CYCLES: u32 = 1;
+
+pub(crate) const LOG_DECOMMIT_RAM_CYCLES: u32 = 1;
+pub(crate) const LOG_DECOMMIT_DECOMMITTER_SORTER_CYCLES: u32 = 1;
 
 #[derive(Debug)]
 pub struct Settings {
@@ -28,9 +79,27 @@ pub struct VirtualMachine {
     /// The state couldn't be passed to the world if it was inlined.
     pub state: State,
 
+    pub statistics: CircuitCycleStatistic,
     pub(crate) settings: Settings,
 
     pub(crate) stack_pool: StackPool,
+}
+
+#[derive(Debug, Default)]
+pub struct CircuitCycleStatistic {
+    pub main_vm_cycles: u32,
+    pub ram_permutation_cycles: u32,
+    pub storage_application_cycles: u32,
+    pub storage_sorter_cycles: u32,
+    pub code_decommitter_cycles: u32,
+    pub code_decommitter_sorter_cycles: u32,
+    pub log_demuxer_cycles: u32,
+    pub events_sorter_cycles: u32,
+    pub keccak256_cycles: u32,
+    pub ecrecover_cycles: u32,
+    pub sha256_cycles: u32,
+    pub secp256k1_verify_cycles: u32,
+    pub transient_storage_checker_cycles: u32,
 }
 
 impl VirtualMachine {
@@ -59,6 +128,7 @@ impl VirtualMachine {
             ),
             settings,
             stack_pool,
+            statistics: CircuitCycleStatistic::default(),
         }
     }
 
@@ -77,6 +147,7 @@ impl VirtualMachine {
         unsafe {
             loop {
                 let args = &(*instruction).arguments;
+                self.track_statistics(instruction);
 
                 if self.state.use_gas(args.get_static_gas_cost()).is_err()
                     || !args.mode_requirements().met(
@@ -130,6 +201,7 @@ impl VirtualMachine {
         let end = unsafe {
             loop {
                 let args = &(*instruction).arguments;
+                self.track_statistics(instruction);
 
                 if self.state.use_gas(args.get_static_gas_cost()).is_err()
                     || !args.mode_requirements().met(
@@ -319,6 +391,86 @@ impl VirtualMachine {
     pub(crate) fn start_new_tx(&mut self) {
         self.state.transaction_number = self.state.transaction_number.wrapping_add(1);
         self.world_diff.clear_transient_storage()
+    }
+
+    fn track_statistics(&mut self, instruction: *const Instruction) {
+        self.statistics.main_vm_cycles += 1;
+
+        let opcode = unsafe { (*instruction).opcode };
+        match opcode {
+            Opcode::Nop(_)
+            | Opcode::Add(_)
+            | Opcode::Sub(_)
+            | Opcode::Mul(_)
+            | Opcode::Div(_)
+            | Opcode::Jump(_)
+            | Opcode::Binop(_)
+            | Opcode::Shift(_)
+            | Opcode::Ptr(_) => {
+                self.statistics.ram_permutation_cycles += RICH_ADDRESSING_OPCODE_RAM_CYCLES;
+            }
+            Opcode::Context(_) | Opcode::Ret(_) | Opcode::NearCall(_) => {
+                self.statistics.ram_permutation_cycles += AVERAGE_OPCODE_RAM_CYCLES;
+            }
+            Opcode::Log(LogOpcode::StorageRead) => {
+                self.statistics.ram_permutation_cycles += STORAGE_READ_RAM_CYCLES;
+                self.statistics.log_demuxer_cycles += STORAGE_READ_LOG_DEMUXER_CYCLES;
+                self.statistics.storage_sorter_cycles += STORAGE_READ_STORAGE_SORTER_CYCLES;
+            }
+            Opcode::Log(LogOpcode::TransientStorageRead) => {
+                self.statistics.ram_permutation_cycles += TRANSIENT_STORAGE_READ_RAM_CYCLES;
+                self.statistics.log_demuxer_cycles += TRANSIENT_STORAGE_READ_LOG_DEMUXER_CYCLES;
+                self.statistics.transient_storage_checker_cycles +=
+                    TRANSIENT_STORAGE_READ_TRANSIENT_STORAGE_CHECKER_CYCLES;
+            }
+            Opcode::Log(LogOpcode::StorageWrite) => {
+                self.statistics.ram_permutation_cycles += STORAGE_WRITE_RAM_CYCLES;
+                self.statistics.log_demuxer_cycles += STORAGE_WRITE_LOG_DEMUXER_CYCLES;
+                self.statistics.storage_sorter_cycles += STORAGE_WRITE_STORAGE_SORTER_CYCLES;
+            }
+            Opcode::Log(LogOpcode::TransientStorageWrite) => {
+                self.statistics.ram_permutation_cycles += TRANSIENT_STORAGE_WRITE_RAM_CYCLES;
+                self.statistics.log_demuxer_cycles += TRANSIENT_STORAGE_WRITE_LOG_DEMUXER_CYCLES;
+                self.statistics.transient_storage_checker_cycles +=
+                    TRANSIENT_STORAGE_WRITE_TRANSIENT_STORAGE_CHECKER_CYCLES;
+            }
+            Opcode::Log(LogOpcode::ToL1Message) | Opcode::Log(LogOpcode::Event) => {
+                self.statistics.ram_permutation_cycles += EVENT_RAM_CYCLES;
+                self.statistics.log_demuxer_cycles += EVENT_LOG_DEMUXER_CYCLES;
+                self.statistics.events_sorter_cycles += EVENT_EVENTS_SORTER_CYCLES;
+            }
+            Opcode::Log(LogOpcode::PrecompileCall) => {
+                self.statistics.ram_permutation_cycles += PRECOMPILE_RAM_CYCLES;
+                self.statistics.log_demuxer_cycles += PRECOMPILE_LOG_DEMUXER_CYCLES;
+            }
+            Opcode::Log(LogOpcode::Decommit) => {
+                // Note, that for decommit the log demuxer circuit is not used.
+                self.statistics.ram_permutation_cycles += LOG_DECOMMIT_RAM_CYCLES;
+                self.statistics.code_decommitter_sorter_cycles +=
+                    LOG_DECOMMIT_DECOMMITTER_SORTER_CYCLES;
+            }
+            Opcode::FarCall(_) => {
+                self.statistics.ram_permutation_cycles += FAR_CALL_RAM_CYCLES;
+                self.statistics.code_decommitter_sorter_cycles +=
+                    FAR_CALL_CODE_DECOMMITTER_SORTER_CYCLES;
+                self.statistics.storage_sorter_cycles += FAR_CALL_STORAGE_SORTER_CYCLES;
+                self.statistics.log_demuxer_cycles += FAR_CALL_LOG_DEMUXER_CYCLES;
+            }
+            Opcode::UMA(
+                UMAOpcode::AuxHeapWrite | UMAOpcode::HeapWrite | UMAOpcode::StaticMemoryWrite,
+            ) => {
+                self.statistics.ram_permutation_cycles += UMA_WRITE_RAM_CYCLES;
+            }
+            Opcode::UMA(
+                UMAOpcode::AuxHeapRead
+                | UMAOpcode::HeapRead
+                | UMAOpcode::FatPointerRead
+                | UMAOpcode::StaticMemoryRead,
+            ) => {
+                self.statistics.ram_permutation_cycles += UMA_READ_RAM_CYCLES;
+            }
+            Opcode::Invalid(_) => unreachable!(), // invalid opcodes are never executed
+        };
     }
 }
 

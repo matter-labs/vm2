@@ -11,6 +11,7 @@ use crate::{
 };
 use std::ops::Range;
 use u256::U256;
+use zkevm_opcode_defs::Opcode;
 
 pub trait HeapInterface {
     fn read_u256(&self, start_address: u32) -> U256;
@@ -181,6 +182,7 @@ use super::monomorphization::*;
 impl Instruction {
     #[inline(always)]
     pub fn from_load<H: HeapFromState>(
+        opcode: Opcode,
         src: RegisterOrImmediate,
         out: Register1,
         incremented_out: Option<Register2>,
@@ -194,6 +196,7 @@ impl Instruction {
         }
 
         Self {
+            opcode,
             handler: monomorphize!(load [H] match_reg_imm src match_boolean increment),
             arguments,
         }
@@ -201,6 +204,7 @@ impl Instruction {
 
     #[inline(always)]
     pub fn from_store<H: HeapFromState>(
+        opcode: Opcode,
         src1: RegisterOrImmediate,
         src2: Register2,
         incremented_out: Option<Register1>,
@@ -209,6 +213,7 @@ impl Instruction {
     ) -> Self {
         let increment = incremented_out.is_some();
         Self {
+            opcode,
             handler: monomorphize!(store [H] match_reg_imm src1 match_boolean increment match_boolean should_hook),
             arguments: arguments
                 .write_source(&src1)
@@ -219,6 +224,7 @@ impl Instruction {
 
     #[inline(always)]
     pub fn from_load_pointer(
+        opcode: Opcode,
         src: Register1,
         out: Register1,
         incremented_out: Option<Register2>,
@@ -226,6 +232,7 @@ impl Instruction {
     ) -> Self {
         let increment = incremented_out.is_some();
         Self {
+            opcode,
             handler: monomorphize!(load_pointer match_boolean increment),
             arguments: arguments
                 .write_source(&src)

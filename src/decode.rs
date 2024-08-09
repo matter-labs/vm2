@@ -39,6 +39,7 @@ fn unimplemented_instruction(variant: Opcode) -> Instruction {
     let variant_as_number: u16 = unsafe { std::mem::transmute(variant) };
     Immediate1(variant_as_number).write_source(&mut arguments);
     Instruction {
+        opcode: Opcode::Invalid(zkevm_opcode_defs::InvalidOpcode),
         handler: unimplemented_handler,
         arguments,
     }
@@ -115,10 +116,12 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
 
     let src2 = Register2(Register::new(parsed.src1_reg_idx));
     let out2 = Register2(Register::new(parsed.dst1_reg_idx));
+    let opcode = parsed.variant.opcode;
 
     macro_rules! binop {
         ($op: ident, $snd: tt) => {
             Instruction::from_binop::<$op>(
+                opcode,
                 src1,
                 src2,
                 out,
@@ -133,6 +136,7 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
     macro_rules! ptr {
         ($op: ident) => {
             Instruction::from_ptr::<$op>(
+                opcode,
                 src1,
                 src2,
                 out,
@@ -142,7 +146,7 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
         };
     }
 
-    match parsed.variant.opcode {
+    match opcode {
         zkevm_opcode_defs::Opcode::Add(_) => binop!(Add, ()),
         zkevm_opcode_defs::Opcode::Sub(_) => binop!(Sub, ()),
         zkevm_opcode_defs::Opcode::Mul(_) => binop!(Mul, out2),
@@ -159,38 +163,38 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
             zkevm_opcode_defs::ShiftOpcode::Ror => binop!(RotateRight, ()),
         },
         zkevm_opcode_defs::Opcode::Jump(_) => {
-            Instruction::from_jump(src1, out.try_into().unwrap(), arguments)
+            Instruction::from_jump(opcode, src1, out.try_into().unwrap(), arguments)
         }
         zkevm_opcode_defs::Opcode::Context(x) => match x {
             zkevm_opcode_defs::ContextOpcode::This => {
-                Instruction::from_this(out.try_into().unwrap(), arguments)
+                Instruction::from_this(opcode, out.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::Caller => {
-                Instruction::from_caller(out.try_into().unwrap(), arguments)
+                Instruction::from_caller(opcode, out.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::CodeAddress => {
-                Instruction::from_code_address(out.try_into().unwrap(), arguments)
+                Instruction::from_code_address(opcode, out.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::ErgsLeft => {
-                Instruction::from_ergs_left(out.try_into().unwrap(), arguments)
+                Instruction::from_ergs_left(opcode, out.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::GetContextU128 => {
-                Instruction::from_context_u128(out.try_into().unwrap(), arguments)
+                Instruction::from_context_u128(opcode, out.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::SetContextU128 => {
-                Instruction::from_set_context_u128(src1.try_into().unwrap(), arguments)
+                Instruction::from_set_context_u128(opcode, src1.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::Sp => {
-                Instruction::from_context_sp(out.try_into().unwrap(), arguments)
+                Instruction::from_context_sp(opcode, out.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::Meta => {
-                Instruction::from_context_meta(out.try_into().unwrap(), arguments)
+                Instruction::from_context_meta(opcode, out.try_into().unwrap(), arguments)
             }
             zkevm_opcode_defs::ContextOpcode::IncrementTxNumber => {
-                Instruction::from_increment_tx_number(arguments)
+                Instruction::from_increment_tx_number(opcode, arguments)
             }
             zkevm_opcode_defs::ContextOpcode::AuxMutating0 => {
-                Instruction::from_aux_mutating(arguments)
+                Instruction::from_aux_mutating(opcode, arguments)
             }
         },
         zkevm_opcode_defs::Opcode::Ptr(x) => match x {
@@ -200,6 +204,7 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
             zkevm_opcode_defs::PtrOpcode::Shrink => ptr!(PtrShrink),
         },
         zkevm_opcode_defs::Opcode::NearCall(_) => Instruction::from_near_call(
+            opcode,
             Register1(Register::new(parsed.src0_reg_idx)),
             Immediate1(parsed.imm_0),
             Immediate2(parsed.imm_1),
@@ -218,6 +223,7 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
                 }
             };
             constructor(
+                opcode,
                 src1.try_into().unwrap(),
                 src2,
                 Immediate1(parsed.imm_0),
@@ -235,22 +241,26 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
             };
             match kind {
                 zkevm_opcode_defs::RetOpcode::Ok => {
-                    Instruction::from_ret(src1.try_into().unwrap(), label, arguments)
+                    Instruction::from_ret(opcode, src1.try_into().unwrap(), label, arguments)
                 }
                 zkevm_opcode_defs::RetOpcode::Revert => {
-                    Instruction::from_revert(src1.try_into().unwrap(), label, arguments)
+                    Instruction::from_revert(opcode, src1.try_into().unwrap(), label, arguments)
                 }
-                zkevm_opcode_defs::RetOpcode::Panic => Instruction::from_panic(label, arguments),
+                zkevm_opcode_defs::RetOpcode::Panic => {
+                    Instruction::from_panic(opcode, label, arguments)
+                }
             }
         }
         zkevm_opcode_defs::Opcode::Log(x) => match x {
             zkevm_opcode_defs::LogOpcode::StorageRead => Instruction::from_sload(
+                opcode,
                 src1.try_into().unwrap(),
                 out.try_into().unwrap(),
                 arguments,
             ),
             zkevm_opcode_defs::LogOpcode::TransientStorageRead => {
                 Instruction::from_sload_transient(
+                    opcode,
                     src1.try_into().unwrap(),
                     out.try_into().unwrap(),
                     arguments,
@@ -258,32 +268,41 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
             }
 
             zkevm_opcode_defs::LogOpcode::StorageWrite => {
-                Instruction::from_sstore(src1.try_into().unwrap(), src2, arguments)
+                Instruction::from_sstore(opcode, src1.try_into().unwrap(), src2, arguments)
             }
 
             zkevm_opcode_defs::LogOpcode::TransientStorageWrite => {
-                Instruction::from_sstore_transient(src1.try_into().unwrap(), src2, arguments)
+                Instruction::from_sstore_transient(
+                    opcode,
+                    src1.try_into().unwrap(),
+                    src2,
+                    arguments,
+                )
             }
 
             zkevm_opcode_defs::LogOpcode::ToL1Message => Instruction::from_l2_to_l1_message(
+                opcode,
                 src1.try_into().unwrap(),
                 src2,
                 parsed.variant.flags[FIRST_MESSAGE_FLAG_IDX],
                 arguments,
             ),
             zkevm_opcode_defs::LogOpcode::Event => Instruction::from_event(
+                opcode,
                 src1.try_into().unwrap(),
                 src2,
                 parsed.variant.flags[FIRST_MESSAGE_FLAG_IDX],
                 arguments,
             ),
             zkevm_opcode_defs::LogOpcode::PrecompileCall => Instruction::from_precompile_call(
+                opcode,
                 src1.try_into().unwrap(),
                 src2,
                 out.try_into().unwrap(),
                 arguments,
             ),
             zkevm_opcode_defs::LogOpcode::Decommit => Instruction::from_decommit(
+                opcode,
                 src1.try_into().unwrap(),
                 src2,
                 out.try_into().unwrap(),
@@ -294,12 +313,14 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
             let increment = parsed.variant.flags[UMA_INCREMENT_FLAG_IDX];
             match x {
                 zkevm_opcode_defs::UMAOpcode::HeapRead => Instruction::from_load::<Heap>(
+                    opcode,
                     src1.try_into().unwrap(),
                     out.try_into().unwrap(),
                     increment.then_some(out2),
                     arguments,
                 ),
                 zkevm_opcode_defs::UMAOpcode::HeapWrite => Instruction::from_store::<Heap>(
+                    opcode,
                     src1.try_into().unwrap(),
                     src2,
                     increment.then_some(out.try_into().unwrap()),
@@ -307,12 +328,14 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
                     is_bootloader,
                 ),
                 zkevm_opcode_defs::UMAOpcode::AuxHeapRead => Instruction::from_load::<AuxHeap>(
+                    opcode,
                     src1.try_into().unwrap(),
                     out.try_into().unwrap(),
                     increment.then_some(out2),
                     arguments,
                 ),
                 zkevm_opcode_defs::UMAOpcode::AuxHeapWrite => Instruction::from_store::<AuxHeap>(
+                    opcode,
                     src1.try_into().unwrap(),
                     src2,
                     increment.then_some(out.try_into().unwrap()),
@@ -320,6 +343,7 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
                     false,
                 ),
                 zkevm_opcode_defs::UMAOpcode::FatPointerRead => Instruction::from_load_pointer(
+                    opcode,
                     src1.try_into().unwrap(),
                     out.try_into().unwrap(),
                     increment.then_some(out2),
@@ -340,6 +364,7 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
                 register: Register::new(0),
             });
             Instruction::from_nop(
+                opcode,
                 if let AnySource::AdvanceStackPointer(pop) = src1 {
                     pop
                 } else {

@@ -9,6 +9,7 @@ use crate::{
     Instruction, VirtualMachine, World,
 };
 use u256::U256;
+use zkevm_opcode_defs::Opcode;
 
 fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     vm: &mut VirtualMachine,
@@ -94,6 +95,7 @@ use super::monomorphization::*;
 impl Instruction {
     #[inline(always)]
     pub fn from_ptr<Op: PtrOp>(
+        opcode: Opcode,
         src1: AnySource,
         src2: Register2,
         out: AnyDestination,
@@ -101,6 +103,7 @@ impl Instruction {
         swap: bool,
     ) -> Self {
         Self {
+            opcode,
             handler: monomorphize!(ptr [Op] match_source src1 match_destination out match_boolean swap),
             arguments: arguments
                 .write_source(&src1)

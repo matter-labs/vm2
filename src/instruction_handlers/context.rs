@@ -7,7 +7,7 @@ use crate::{
     Instruction, VirtualMachine, World,
 };
 use u256::U256;
-use zkevm_opcode_defs::VmMetaParameters;
+use zkevm_opcode_defs::{Opcode, VmMetaParameters};
 
 fn context<Op: ContextOp>(
     vm: &mut VirtualMachine,
@@ -123,51 +123,56 @@ fn aux_mutating(
 }
 
 impl Instruction {
-    fn from_context<Op: ContextOp>(out: Register1, arguments: Arguments) -> Self {
+    fn from_context<Op: ContextOp>(opcode: Opcode, out: Register1, arguments: Arguments) -> Self {
         Self {
+            opcode,
             handler: context::<Op>,
             arguments: arguments.write_destination(&out),
         }
     }
 
-    pub fn from_this(out: Register1, arguments: Arguments) -> Self {
-        Self::from_context::<This>(out, arguments)
+    pub fn from_this(opcode: Opcode, out: Register1, arguments: Arguments) -> Self {
+        Self::from_context::<This>(opcode, out, arguments)
     }
-    pub fn from_caller(out: Register1, arguments: Arguments) -> Self {
-        Self::from_context::<Caller>(out, arguments)
+    pub fn from_caller(opcode: Opcode, out: Register1, arguments: Arguments) -> Self {
+        Self::from_context::<Caller>(opcode, out, arguments)
     }
-    pub fn from_code_address(out: Register1, arguments: Arguments) -> Self {
-        Self::from_context::<CodeAddress>(out, arguments)
+    pub fn from_code_address(opcode: Opcode, out: Register1, arguments: Arguments) -> Self {
+        Self::from_context::<CodeAddress>(opcode, out, arguments)
     }
-    pub fn from_ergs_left(out: Register1, arguments: Arguments) -> Self {
-        Self::from_context::<ErgsLeft>(out, arguments)
+    pub fn from_ergs_left(opcode: Opcode, out: Register1, arguments: Arguments) -> Self {
+        Self::from_context::<ErgsLeft>(opcode, out, arguments)
     }
-    pub fn from_context_u128(out: Register1, arguments: Arguments) -> Self {
-        Self::from_context::<U128>(out, arguments)
+    pub fn from_context_u128(opcode: Opcode, out: Register1, arguments: Arguments) -> Self {
+        Self::from_context::<U128>(opcode, out, arguments)
     }
-    pub fn from_context_sp(out: Register1, arguments: Arguments) -> Self {
-        Self::from_context::<SP>(out, arguments)
+    pub fn from_context_sp(opcode: Opcode, out: Register1, arguments: Arguments) -> Self {
+        Self::from_context::<SP>(opcode, out, arguments)
     }
-    pub fn from_context_meta(out: Register1, arguments: Arguments) -> Self {
+    pub fn from_context_meta(opcode: Opcode, out: Register1, arguments: Arguments) -> Self {
         Self {
+            opcode,
             handler: context_meta,
             arguments: arguments.write_destination(&out),
         }
     }
-    pub fn from_set_context_u128(src: Register1, arguments: Arguments) -> Self {
+    pub fn from_set_context_u128(opcode: Opcode, src: Register1, arguments: Arguments) -> Self {
         Self {
+            opcode,
             handler: set_context_u128,
             arguments: arguments.write_source(&src),
         }
     }
-    pub fn from_increment_tx_number(arguments: Arguments) -> Self {
+    pub fn from_increment_tx_number(opcode: Opcode, arguments: Arguments) -> Self {
         Self {
+            opcode,
             handler: increment_tx_number,
             arguments,
         }
     }
-    pub fn from_aux_mutating(arguments: Arguments) -> Self {
+    pub fn from_aux_mutating(opcode: Opcode, arguments: Arguments) -> Self {
         Self {
+            opcode,
             handler: aux_mutating,
             arguments,
         }

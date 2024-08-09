@@ -1,10 +1,11 @@
 use u256::U256;
-use zkevm_opcode_defs::{BlobSha256Format, ContractCodeSha256Format, VersionedHashLen32};
+use zkevm_opcode_defs::{BlobSha256Format, ContractCodeSha256Format, Opcode, VersionedHashLen32};
 
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     fat_pointer::FatPointer,
     instruction::InstructionResult,
+    vm::STORAGE_READ_STORAGE_APPLICATION_CYCLES,
     Instruction, VirtualMachine, World,
 };
 
@@ -36,6 +37,8 @@ fn decommit(
         let (program, is_fresh) = vm.world_diff.decommit_opcode(world, code_hash);
         if !is_fresh {
             vm.state.current_frame.gas += extra_cost;
+        } else {
+            vm.statistics.storage_application_cycles += STORAGE_READ_STORAGE_APPLICATION_CYCLES;
         }
 
         let heap = vm.state.heaps.allocate_with_content(program.as_ref());
@@ -54,12 +57,14 @@ fn decommit(
 
 impl Instruction {
     pub fn from_decommit(
+        opcode: Opcode,
         abi: Register1,
         burn: Register2,
         out: Register1,
         arguments: Arguments,
     ) -> Self {
         Self {
+            opcode,
             arguments: arguments
                 .write_source(&abi)
                 .write_source(&burn)

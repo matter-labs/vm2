@@ -10,6 +10,7 @@ use crate::{
     VirtualMachine, World,
 };
 use u256::U256;
+use zkevm_opcode_defs::Opcode;
 
 fn binop<Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SET_FLAGS: bool>(
     vm: &mut VirtualMachine,
@@ -205,6 +206,7 @@ use super::monomorphization::*;
 impl Instruction {
     #[inline(always)]
     pub fn from_binop<Op: Binop>(
+        opcode: Opcode,
         src1: AnySource,
         src2: Register2,
         out: AnyDestination,
@@ -214,6 +216,7 @@ impl Instruction {
         set_flags: bool,
     ) -> Self {
         Self {
+            opcode,
             handler: monomorphize!(binop [Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
             arguments: arguments
                 .write_source(&src1)
