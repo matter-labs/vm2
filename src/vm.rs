@@ -85,7 +85,7 @@ pub struct VirtualMachine {
     pub(crate) stack_pool: StackPool,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct CircuitCycleStatistic {
     pub main_vm_cycles: u32,
     pub ram_permutation_cycles: u32,
@@ -253,6 +253,7 @@ impl VirtualMachine {
         VmSnapshot {
             world_snapshot: self.world_diff.external_snapshot(),
             state_snapshot: self.state.snapshot(),
+            statistics: self.statistics.clone(),
         }
     }
 
@@ -267,6 +268,7 @@ impl VirtualMachine {
         );
         self.world_diff.external_rollback(snapshot.world_snapshot);
         self.state.rollback(snapshot.state_snapshot);
+        self.statistics = snapshot.statistics;
     }
 
     /// This must only be called when it is known that the VM cannot be rolled back,
@@ -276,6 +278,7 @@ impl VirtualMachine {
     pub fn delete_history(&mut self) {
         self.world_diff.delete_history();
         self.state.delete_history();
+        self.statistics = CircuitCycleStatistic::default();
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -397,6 +400,7 @@ impl VirtualMachine {
         self.statistics.main_vm_cycles += 1;
 
         let opcode = unsafe { (*instruction).opcode };
+        dbg!(opcode);
         match opcode {
             Opcode::Nop(_)
             | Opcode::Add(_)
@@ -477,4 +481,5 @@ impl VirtualMachine {
 pub struct VmSnapshot {
     world_snapshot: ExternalSnapshot,
     state_snapshot: StateSnapshot,
+    statistics: CircuitCycleStatistic,
 }

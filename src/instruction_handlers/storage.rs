@@ -6,6 +6,7 @@ use crate::{
         Arguments, Destination, Register1, Register2, Source, SLOAD_COST, SSTORE_COST,
     },
     instruction::InstructionResult,
+    vm::{STORAGE_READ_STORAGE_APPLICATION_CYCLES, STORAGE_WRITE_STORAGE_APPLICATION_CYCLES},
     Instruction, VirtualMachine, World,
 };
 
@@ -19,6 +20,13 @@ fn sstore(
         let value = Register2::get(args, &mut vm.state);
         let contract = vm.state.current_frame.address;
 
+        if !vm
+            .world_diff
+            .written_storage_slots_ct
+            .contains(&(contract, key))
+        {
+            vm.statistics.storage_application_cycles += STORAGE_WRITE_STORAGE_APPLICATION_CYCLES;
+        }
         let refund = vm.world_diff.write_storage(world, contract, key, value);
 
         assert!(refund <= SSTORE_COST);
@@ -49,6 +57,17 @@ fn sload(
         let key = Register1::get(args, &mut vm.state);
         let address = vm.state.current_frame.address;
 
+        if !vm
+            .world_diff
+            .read_storage_slots_ct
+            .contains(&(address, key))
+            && !vm
+                .world_diff
+                .written_storage_slots_ct
+                .contains(&(address, key))
+        {
+            vm.statistics.storage_application_cycles += STORAGE_READ_STORAGE_APPLICATION_CYCLES;
+        }
         let (value, refund) = vm.world_diff.read_storage(world, address, key);
         assert!(refund <= SLOAD_COST);
         vm.state.current_frame.gas += refund;

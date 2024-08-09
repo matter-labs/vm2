@@ -29,6 +29,9 @@ pub struct WorldDiff {
     read_storage_slots: RollbackableSet<(H160, U256)>,
     written_storage_slots: RollbackableSet<(H160, U256)>,
 
+    pub read_storage_slots_ct: RollbackableSet<(H160, U256)>,
+    pub written_storage_slots_ct: RollbackableSet<(H160, U256)>,
+
     // This is never rolled back. It is just a cache to avoid asking these from DB every time.
     storage_initial_values: BTreeMap<(H160, U256), Option<U256>>,
 }
@@ -38,6 +41,8 @@ pub struct ExternalSnapshot {
     pub(crate) decommitted_hashes: <RollbackableMap<U256, ()> as Rollback>::Snapshot,
     read_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
     written_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
+    read_storage_slots_ct: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
+    written_storage_slots_ct: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
     storage_refunds: <RollbackableLog<u32> as Rollback>::Snapshot,
     pubdata_costs: <RollbackableLog<i32> as Rollback>::Snapshot,
 }
@@ -101,6 +106,7 @@ impl WorldDiff {
             .copied()
             .unwrap_or_else(|| world.read_storage(contract, key).unwrap_or_default());
 
+        self.read_storage_slots_ct.add((contract, key));
         let refund = if world.is_free_storage_slot(&contract, &key)
             || self.read_storage_slots.contains(&(contract, key))
         {
@@ -128,6 +134,7 @@ impl WorldDiff {
             .entry((contract, key))
             .or_insert_with(|| world.read_storage(contract, key));
 
+        self.written_storage_slots_ct.add((contract, key));
         if world.is_free_storage_slot(&contract, &key) {
             self.storage_refunds.push(WARM_WRITE_REFUND);
             self.pubdata_costs.push(0);
@@ -298,6 +305,8 @@ impl WorldDiff {
             decommitted_hashes: self.decommitted_hashes.snapshot(),
             read_storage_slots: self.read_storage_slots.snapshot(),
             written_storage_slots: self.written_storage_slots.snapshot(),
+            read_storage_slots_ct: self.read_storage_slots_ct.snapshot(),
+            written_storage_slots_ct: self.written_storage_slots_ct.snapshot(),
             storage_refunds: self.storage_refunds.snapshot(),
             pubdata_costs: self.pubdata_costs.snapshot(),
         }
@@ -313,6 +322,10 @@ impl WorldDiff {
             .rollback(snapshot.read_storage_slots);
         self.written_storage_slots
             .rollback(snapshot.written_storage_slots);
+        self.read_storage_slots_ct
+            .rollback(snapshot.read_storage_slots_ct);
+        self.written_storage_slots_ct
+            .rollback(snapshot.written_storage_slots_ct);
     }
 
     pub(crate) fn delete_history(&mut self) {
