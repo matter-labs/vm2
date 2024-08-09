@@ -1,4 +1,4 @@
-use std::collections::{btree_map::Keys, BTreeMap};
+use std::collections::BTreeMap;
 
 /// A trait for things that can be rolled back to snapshots
 pub(crate) trait Rollback {
@@ -33,10 +33,6 @@ impl<K: Ord + Clone, V: Clone> RollbackableMap<K, V> {
                 .or_insert((old_value.clone(), self.map.get(key).unwrap().clone()));
         }
         changes
-    }
-
-    pub fn keys(&self) -> Keys<K, V> {
-        self.map.keys()
     }
 }
 

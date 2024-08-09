@@ -1,7 +1,4 @@
-use crate::{
-    program::Program, vm::STORAGE_READ_STORAGE_APPLICATION_CYCLES, world_diff::WorldDiff,
-    CircuitCycleStatistic, World,
-};
+use crate::{program::Program, world_diff::WorldDiff, CircuitCycleStatistic, World};
 use u256::{H160, U256};
 use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,

@@ -39,7 +39,7 @@ fn unimplemented_instruction(variant: Opcode) -> Instruction {
     let variant_as_number: u16 = unsafe { std::mem::transmute(variant) };
     Immediate1(variant_as_number).write_source(&mut arguments);
     Instruction {
-        opcode: Opcode::Invalid(zkevm_opcode_defs::InvalidOpcode),
+        opcode: Opcode::Nop(zkevm_opcode_defs::NopOpcode),
         handler: unimplemented_handler,
         arguments,
     }

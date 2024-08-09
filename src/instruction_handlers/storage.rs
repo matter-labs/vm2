@@ -6,7 +6,6 @@ use crate::{
         Arguments, Destination, Register1, Register2, Source, SLOAD_COST, SSTORE_COST,
     },
     instruction::InstructionResult,
-    vm::{STORAGE_READ_STORAGE_APPLICATION_CYCLES, STORAGE_WRITE_STORAGE_APPLICATION_CYCLES},
     Instruction, VirtualMachine, World,
 };
 
@@ -19,20 +18,8 @@ fn sstore(
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
         let contract = vm.state.current_frame.address;
-        if !vm
-            .world_diff
-            .written_storage_slots
-            .contains(&(contract, key))
-        {
-            let keys: Vec<_> = vm.world_diff.written_storage_slots.keys().collect();
-            println!("new vm write: {} {:X}", contract, key);
-            println!("keys {keys:?}");
-            vm.statistics.storage_application_cycles += STORAGE_WRITE_STORAGE_APPLICATION_CYCLES;
-        }
 
         let refund = vm.world_diff.write_storage(world, contract, key, value);
-        let keys: Vec<_> = vm.world_diff.written_storage_slots.keys().collect();
-        println!("> keys {keys:?}");
 
         assert!(refund <= SSTORE_COST);
         vm.state.current_frame.gas += refund;
@@ -62,19 +49,7 @@ fn sload(
         let key = Register1::get(args, &mut vm.state);
         let address = vm.state.current_frame.address;
 
-        if !(vm
-            .world_diff
-            .written_storage_slots
-            .contains(&(address, key))
-            || vm.world_diff.read_storage_slots.contains(&(address, key)))
-        {
-            vm.statistics.storage_application_cycles += STORAGE_READ_STORAGE_APPLICATION_CYCLES;
-            println!("new vm read: {} {:X}", address, key);
-        }
         let (value, refund) = vm.world_diff.read_storage(world, address, key);
-        /*
-        println!("value refund {value} {refund}");
-        */
         assert!(refund <= SLOAD_COST);
         vm.state.current_frame.gas += refund;
 

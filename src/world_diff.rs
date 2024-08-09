@@ -26,8 +26,8 @@ pub struct WorldDiff {
 
     // The fields below are only rolled back when the whole VM is rolled back.
     pub(crate) decommitted_hashes: RollbackableSet<U256>,
-    pub read_storage_slots: RollbackableSet<(H160, U256)>,
-    pub written_storage_slots: RollbackableSet<(H160, U256)>,
+    read_storage_slots: RollbackableSet<(H160, U256)>,
+    written_storage_slots: RollbackableSet<(H160, U256)>,
 
     // This is never rolled back. It is just a cache to avoid asking these from DB every time.
     storage_initial_values: BTreeMap<(H160, U256), Option<U256>>,
@@ -106,10 +106,9 @@ impl WorldDiff {
         {
             WARM_READ_REFUND
         } else {
+            self.read_storage_slots.add((contract, key));
             0
         };
-        self.read_storage_slots.add((contract, key));
-
         self.pubdata_costs.push(0);
         (value, refund)
     }
@@ -129,7 +128,6 @@ impl WorldDiff {
             .entry((contract, key))
             .or_insert_with(|| world.read_storage(contract, key));
 
-        self.written_storage_slots.add((contract, key));
         if world.is_free_storage_slot(&contract, &key) {
             self.storage_refunds.push(WARM_WRITE_REFUND);
             self.pubdata_costs.push(0);

@@ -9,13 +9,12 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::InstructionResult,
     predication::Flags,
-    vm::STORAGE_READ_STORAGE_APPLICATION_CYCLES,
     Instruction, VirtualMachine, World,
 };
 use u256::U256;
 use zkevm_opcode_defs::{
     system_params::{EVM_SIMULATOR_STIPEND, MSG_VALUE_SIMULATOR_ADDITIVE_COST},
-    Opcode, ADDRESS_MSG_VALUE, DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
+    Opcode, ADDRESS_MSG_VALUE,
 };
 
 #[repr(u8)]
@@ -60,23 +59,6 @@ fn far_call<const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>
     };
 
     let failing_part = (|| {
-        let address = zkevm_opcode_defs::ethereum_types::Address::from_low_u64_be(
-            DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64,
-        );
-        if !vm
-            .world_diff
-            .written_storage_slots
-            .contains(&(address, destination_address))
-            && !vm
-                .world_diff
-                .read_storage_slots
-                .contains(&(address, destination_address))
-            && !world.is_free_storage_slot(&address, &destination_address)
-        {
-            println!("> new vm read: {address} {destination_address:x}");
-            vm.statistics.storage_application_cycles += STORAGE_READ_STORAGE_APPLICATION_CYCLES;
-        }
-
         let decommit_result = vm.world_diff.decommit(
             world,
             destination_address,
