@@ -136,15 +136,15 @@ pub struct DummyState;
 #[cfg(test)]
 impl StateInterface for DummyState {
     fn read_register(&self, _: u8) -> (primitive_types::U256, bool) {
-        todo!()
+        unimplemented!()
     }
 
     fn set_register(&mut self, _: u8, _: primitive_types::U256, _: bool) {
-        todo!()
+        unimplemented!()
     }
 
     fn number_of_callframes(&self) -> usize {
-        todo!()
+        unimplemented!()
     }
 
     fn callframe(&mut self, _: usize) -> impl crate::CallframeInterface + '_ {
@@ -152,35 +152,35 @@ impl StateInterface for DummyState {
     }
 
     fn read_heap_byte(&self, _: crate::HeapId, _: u32) -> u8 {
-        todo!()
+        unimplemented!()
     }
 
     fn write_heap_byte(&mut self, _: crate::HeapId, _: u32, _: u8) {
-        todo!()
+        unimplemented!()
     }
 
     fn flags(&self) -> crate::Flags {
-        todo!()
+        unimplemented!()
     }
 
     fn set_flags(&mut self, _: crate::Flags) {
-        todo!()
+        unimplemented!()
     }
 
     fn transaction_number(&self) -> u16 {
-        todo!()
+        unimplemented!()
     }
 
     fn set_transaction_number(&mut self, _: u16) {
-        todo!()
+        unimplemented!()
     }
 
     fn context_u128_register(&self) -> u128 {
-        todo!()
+        unimplemented!()
     }
 
     fn set_context_u128_register(&mut self, _: u128) {
-        todo!()
+        unimplemented!()
     }
 
     fn get_storage_state(
@@ -199,7 +199,7 @@ impl StateInterface for DummyState {
         _: primitive_types::H160,
         _: primitive_types::U256,
     ) -> Option<(primitive_types::U256, u32)> {
-        todo!()
+        unimplemented!()
     }
 
     fn get_storage_initial_value(
@@ -207,7 +207,7 @@ impl StateInterface for DummyState {
         _: primitive_types::H160,
         _: primitive_types::U256,
     ) -> primitive_types::U256 {
-        todo!()
+        unimplemented!()
     }
 
     fn write_storage(
@@ -216,7 +216,7 @@ impl StateInterface for DummyState {
         _: primitive_types::U256,
         _: primitive_types::U256,
     ) {
-        todo!()
+        unimplemented!()
     }
 
     fn get_transient_storage_state(
@@ -235,7 +235,7 @@ impl StateInterface for DummyState {
         _: primitive_types::H160,
         _: primitive_types::U256,
     ) -> primitive_types::U256 {
-        todo!()
+        unimplemented!()
     }
 
     fn write_transient_storage(
@@ -244,7 +244,7 @@ impl StateInterface for DummyState {
         _: primitive_types::U256,
         _: primitive_types::U256,
     ) {
-        todo!()
+        unimplemented!()
     }
 
     fn events(&self) -> impl Iterator<Item = crate::Event> {
@@ -256,129 +256,129 @@ impl StateInterface for DummyState {
     }
 
     fn pubdata(&self) -> i32 {
-        todo!()
+        unimplemented!()
     }
 
     fn set_pubdata(&mut self, _: i32) {
-        todo!()
+        unimplemented!()
     }
 
     fn run_arbitrary_code(_: &[u64]) {
-        todo!()
+        unimplemented!()
     }
 
     fn static_heap(&self) -> crate::HeapId {
-        todo!()
+        unimplemented!()
     }
 }
 
 #[cfg(test)]
 impl CallframeInterface for DummyState {
     fn address(&self) -> primitive_types::H160 {
-        todo!()
+        unimplemented!()
     }
 
     fn set_address(&mut self, _: primitive_types::H160) {
-        todo!()
+        unimplemented!()
     }
 
     fn code_address(&self) -> primitive_types::H160 {
-        todo!()
+        unimplemented!()
     }
 
     fn set_code_address(&mut self, _: primitive_types::H160) {
-        todo!()
+        unimplemented!()
     }
 
     fn caller(&self) -> primitive_types::H160 {
-        todo!()
+        unimplemented!()
     }
 
     fn set_caller(&mut self, _: primitive_types::H160) {
-        todo!()
+        unimplemented!()
     }
 
     fn program_counter(&self) -> Option<u16> {
-        todo!()
+        unimplemented!()
     }
 
     fn set_program_counter(&mut self, _: u16) {
-        todo!()
+        unimplemented!()
     }
 
     fn exception_handler(&self) -> u16 {
-        todo!()
+        unimplemented!()
     }
 
     fn is_static(&self) -> bool {
-        todo!()
+        unimplemented!()
     }
 
     fn gas(&self) -> u32 {
-        todo!()
+        unimplemented!()
     }
 
     fn set_gas(&mut self, _: u32) {
-        todo!()
+        unimplemented!()
     }
 
     fn stipend(&self) -> u32 {
-        todo!()
+        unimplemented!()
     }
 
     fn context_u128(&self) -> u128 {
-        todo!()
+        unimplemented!()
     }
 
     fn set_context_u128(&mut self, _: u128) {
-        todo!()
+        unimplemented!()
     }
 
     fn is_near_call(&self) -> bool {
-        todo!()
+        unimplemented!()
     }
 
     fn read_stack(&self, _: u16) -> (primitive_types::U256, bool) {
-        todo!()
+        unimplemented!()
     }
 
     fn write_stack(&mut self, _: u16, _: primitive_types::U256, _: bool) {
-        todo!()
+        unimplemented!()
     }
 
     fn stack_pointer(&self) -> u16 {
-        todo!()
+        unimplemented!()
     }
 
     fn set_stack_pointer(&mut self, _: u16) {
-        todo!()
+        unimplemented!()
     }
 
     fn heap(&self) -> crate::HeapId {
-        todo!()
+        unimplemented!()
     }
 
     fn heap_bound(&self) -> u32 {
-        todo!()
+        unimplemented!()
     }
 
     fn set_heap_bound(&mut self, _: u32) {
-        todo!()
+        unimplemented!()
     }
 
     fn aux_heap(&self) -> crate::HeapId {
-        todo!()
+        unimplemented!()
     }
 
     fn aux_heap_bound(&self) -> u32 {
-        todo!()
+        unimplemented!()
     }
 
     fn set_aux_heap_bound(&mut self, _: u32) {
-        todo!()
+        unimplemented!()
     }
 
     fn read_code_page(&self, _: u16) -> primitive_types::U256 {
-        todo!()
+        unimplemented!()
     }
 }
