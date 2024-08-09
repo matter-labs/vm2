@@ -1,6 +1,5 @@
-use crate::{instruction_handlers::HeapInterface};
-use std::{ops::{Index, Range}};
-use std::collections::HashMap;
+use crate::instruction_handlers::HeapInterface;
+use std::ops::{Index, Range};
 use u256::U256;
 use zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND;
 
@@ -34,8 +33,7 @@ impl Default for HeapPage {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Heap {
-    // FIXME: try other data structs?
-    pages: HashMap<usize, HeapPage>,
+    pages: Vec<Option<HeapPage>>,
 }
 
 impl Heap {
@@ -45,19 +43,28 @@ impl Heap {
             .map(|bytes| {
                 let mut boxed_slice: Box<[u8]> = vec![0_u8; HEAP_PAGE_SIZE].into();
                 boxed_slice[..bytes.len()].copy_from_slice(bytes);
-                HeapPage(boxed_slice)
+                Some(HeapPage(boxed_slice))
             })
-            .enumerate()
             .collect();
         Self { pages }
     }
 
     fn with_capacity(capacity: usize) -> Self {
         let end_page = capacity.saturating_sub(1) >> 12;
-        let pages = (0..=end_page)
-            .map(|idx| (idx, HeapPage::default()))
-            .collect();
-        Self { pages }
+        Self {
+            pages: vec![Some(HeapPage::default()); end_page + 1],
+        }
+    }
+
+    fn page(&self, idx: usize) -> Option<&HeapPage> {
+        self.pages.get(idx)?.as_ref()
+    }
+
+    fn get_or_insert_page(&mut self, idx: usize) -> &mut HeapPage {
+        if self.pages.len() <= idx {
+            self.pages.resize(idx + 1, None);
+        }
+        self.pages[idx].get_or_insert_with(HeapPage::default)
     }
 
     fn write_u256(&mut self, start_address: u32, value: U256) {
@@ -67,12 +74,12 @@ impl Heap {
         let offset = start_address as usize;
         let (page_idx, offset_in_page) = (offset >> 12, offset & (HEAP_PAGE_SIZE - 1));
         let len_in_page = 32.min(HEAP_PAGE_SIZE - offset_in_page);
-        let page = self.pages.entry(page_idx).or_default();
+        let page = self.get_or_insert_page(page_idx);
         page.0[offset_in_page..(offset_in_page + len_in_page)]
             .copy_from_slice(&bytes[..len_in_page]);
 
         if len_in_page < 32 {
-            let page = self.pages.entry(page_idx + 1).or_default();
+            let page = self.get_or_insert_page(page_idx + 1);
             page.0[..32 - len_in_page].copy_from_slice(&bytes[len_in_page..]);
         }
     }
@@ -88,13 +95,13 @@ impl HeapInterface for Heap {
         let (page_idx, offset_in_page) = (offset >> 12, offset & (HEAP_PAGE_SIZE - 1));
         let mut result = [0_u8; 32];
         let len_in_page = range.len().min(HEAP_PAGE_SIZE - offset_in_page);
-        if let Some(page) = self.pages.get(&page_idx) {
+        if let Some(page) = self.page(page_idx) {
             result[0..len_in_page]
                 .copy_from_slice(&page.0[offset_in_page..(offset_in_page + len_in_page)]);
         }
 
         if len_in_page < range.len() {
-            if let Some(page) = self.pages.get(&(page_idx + 1)) {
+            if let Some(page) = self.page(page_idx + 1) {
                 result[len_in_page..range.len()]
                     .copy_from_slice(&page.0[..range.len() - len_in_page]);
             }
@@ -110,7 +117,7 @@ impl HeapInterface for Heap {
         let mut result = Vec::with_capacity(length);
         while result.len() < length {
             let len_in_page = (length - result.len()).min(HEAP_PAGE_SIZE - offset_in_page);
-            if let Some(page) = self.pages.get(&page_idx) {
+            if let Some(page) = self.page(page_idx) {
                 result.extend_from_slice(&page.0[offset_in_page..(offset_in_page + len_in_page)]);
             } else {
                 result.resize(result.len() + len_in_page, 0);
@@ -138,7 +145,12 @@ impl Heaps {
         // The first heap can never be used because heap zero
         // means the current heap in precompile calls
         Self {
-            heaps: vec![Heap::default(), Heap::from_bytes(&calldata), Heap::default(), Heap::default()],
+            heaps: vec![
+                Heap::default(),
+                Heap::from_bytes(&calldata),
+                Heap::default(),
+                Heap::default(),
+            ],
             bootloader_heap_rollback_info: vec![],
             bootloader_aux_rollback_info: vec![],
         }
@@ -146,7 +158,8 @@ impl Heaps {
 
     pub(crate) fn allocate(&mut self) -> HeapId {
         let id = HeapId(self.heaps.len() as u32);
-        self.heaps.push(Heap::with_capacity(NEW_FRAME_MEMORY_STIPEND as usize));
+        self.heaps
+            .push(Heap::with_capacity(NEW_FRAME_MEMORY_STIPEND as usize));
         id
     }
 
@@ -258,7 +271,8 @@ mod tests {
         }
 
         heap.write_u256(1 << 20, repeat_byte(0xff));
-        assert_eq!(heap.pages.len(), 3);
+        assert_eq!(heap.pages.len(), 257);
+        assert_eq!(heap.pages.iter().flatten().count(), 3);
         assert_eq!(heap.read_u256(1 << 20), repeat_byte(0xff));
     }
 
@@ -324,7 +338,7 @@ mod tests {
     fn default_new_heap_does_not_allocate_many_pages() {
         let heap = Heap::with_capacity(NEW_FRAME_MEMORY_STIPEND as usize);
         assert_eq!(heap.pages.len(), 1);
-        assert_eq!(*heap.pages[&0].0, [0_u8; 4096]);
+        assert_eq!(*heap.pages[0].as_ref().unwrap().0, [0_u8; 4096]);
     }
 
     #[test]
@@ -344,7 +358,10 @@ mod tests {
         let heap = Heap::from_bytes(&bytes);
         assert_eq!(heap.pages.len(), 3);
 
-        assert_eq!(heap.read_range_big_endian(0..HEAP_PAGE_SIZE as u32 * 5 / 2), bytes);
+        assert_eq!(
+            heap.read_range_big_endian(0..HEAP_PAGE_SIZE as u32 * 5 / 2),
+            bytes
+        );
         for len in [
             1,
             10,
