@@ -51,7 +51,7 @@ impl VirtualMachine {
             state: State::new(
                 address,
                 caller,
-                calldata,
+                &calldata,
                 gas,
                 program,
                 world_before_this_frame,
