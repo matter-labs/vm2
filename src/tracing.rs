@@ -210,6 +210,10 @@ impl<T> CallframeInterface for CallframeWrapper<'_, T> {
         self.frame.is_static
     }
 
+    fn is_kernel(&self) -> bool {
+        self.frame.is_kernel
+    }
+
     fn stipend(&self) -> u32 {
         self.frame.stipend
     }
