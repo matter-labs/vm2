@@ -21,15 +21,30 @@ impl HeapId {
 /// Heap page size in bytes.
 const HEAP_PAGE_SIZE: usize = 1 << 12;
 
-/// Heap page.
+/// Heap page. Bytes in the page have reversed indexes (e.g., the first byte has index `HEAP_PAGE_SIZE - 1`),
+/// so that `U256` values can be efficiently read using little-endian order.
 #[derive(Debug, Clone, PartialEq)]
 struct HeapPage(Box<[u8; HEAP_PAGE_SIZE]>);
 
 impl Default for HeapPage {
     fn default() -> Self {
         let boxed_slice: Box<[u8]> = vec![0_u8; HEAP_PAGE_SIZE].into();
-        Self(boxed_slice.try_into().unwrap()) // FIXME: bench `unwrap_unchecked()`?
+        Self(unsafe { boxed_slice.try_into().unwrap_unchecked() }) // FIXME: bench `unwrap_unchecked()`?
     }
+}
+
+impl HeapPage {
+    fn write_bytes(&mut self, source: &[u8]) {
+        for (dst_byte, &src_byte) in self.0.iter_mut().rev().zip(source) {
+            *dst_byte = src_byte;
+        }
+    }
+}
+
+/// Flips the given byte range from big-endian to little-endian storage or vice versa.
+fn flip(len: usize, range: Range<usize>) -> Range<usize> {
+    //assert!(range.start <= len && range.end <= len); // FIXME: test w/o assertion
+    (len - range.end)..(len - range.start)
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -43,13 +58,13 @@ impl Heap {
             .chunks(HEAP_PAGE_SIZE)
             .map(|bytes| {
                 Some(if let Some(mut recycled_page) = recycled_pages.pop() {
-                    recycled_page.0[..bytes.len()].copy_from_slice(bytes);
-                    recycled_page.0[bytes.len()..].fill(0);
+                    recycled_page.write_bytes(bytes);
+                    recycled_page.0[..HEAP_PAGE_SIZE - bytes.len()].fill(0);
                     recycled_page
                 } else {
-                    let mut boxed_slice: Box<[u8]> = vec![0_u8; HEAP_PAGE_SIZE].into();
-                    boxed_slice[..bytes.len()].copy_from_slice(bytes);
-                    HeapPage(boxed_slice.try_into().unwrap())
+                    let mut heap_page = HeapPage::default();
+                    heap_page.write_bytes(bytes);
+                    heap_page
                 })
             })
             .collect();
@@ -88,18 +103,24 @@ impl Heap {
 
     fn write_u256(&mut self, start_address: u32, value: U256, recycled_pages: &mut Vec<HeapPage>) {
         let mut bytes = [0; 32];
-        value.to_big_endian(&mut bytes);
+        value.to_little_endian(&mut bytes);
 
         let offset = start_address as usize;
         let (page_idx, offset_in_page) = (offset >> 12, offset & (HEAP_PAGE_SIZE - 1));
         let len_in_page = 32.min(HEAP_PAGE_SIZE - offset_in_page);
         let page = self.get_or_insert_page(page_idx, recycled_pages);
-        page.0[offset_in_page..(offset_in_page + len_in_page)]
-            .copy_from_slice(&bytes[..len_in_page]);
+        let page_range = flip(
+            HEAP_PAGE_SIZE,
+            offset_in_page..(offset_in_page + len_in_page),
+        );
+        let bytes_range = flip(32, 0..len_in_page);
+        page.0[page_range].copy_from_slice(&bytes[bytes_range]);
 
         if len_in_page < 32 {
             let page = self.get_or_insert_page(page_idx + 1, recycled_pages);
-            page.0[..32 - len_in_page].copy_from_slice(&bytes[len_in_page..]);
+            let page_range = flip(HEAP_PAGE_SIZE, 0..32 - len_in_page);
+            let bytes_range = flip(32, len_in_page..32);
+            page.0[page_range].copy_from_slice(&bytes[bytes_range]);
         }
     }
 }
@@ -115,17 +136,22 @@ impl HeapInterface for Heap {
         let mut result = [0_u8; 32];
         let len_in_page = range.len().min(HEAP_PAGE_SIZE - offset_in_page);
         if let Some(page) = self.page(page_idx) {
-            result[0..len_in_page]
-                .copy_from_slice(&page.0[offset_in_page..(offset_in_page + len_in_page)]);
+            let page_range = flip(
+                HEAP_PAGE_SIZE,
+                offset_in_page..(offset_in_page + len_in_page),
+            );
+            let result_range = flip(32, 0..len_in_page);
+            result[result_range].copy_from_slice(&page.0[page_range]);
         }
 
         if len_in_page < range.len() {
             if let Some(page) = self.page(page_idx + 1) {
-                result[len_in_page..range.len()]
-                    .copy_from_slice(&page.0[..range.len() - len_in_page]);
+                let page_range = flip(HEAP_PAGE_SIZE, 0..range.len() - len_in_page);
+                let result_range = flip(32, len_in_page..range.len());
+                result[result_range].copy_from_slice(&page.0[page_range]);
             }
         }
-        U256::from_big_endian(&result)
+        U256::from_little_endian(&result)
     }
 
     fn read_range_big_endian(&self, range: Range<u32>) -> Vec<u8> {
@@ -133,14 +159,22 @@ impl HeapInterface for Heap {
         let length = (range.end - range.start) as usize;
 
         let (mut page_idx, mut offset_in_page) = (offset >> 12, offset & (HEAP_PAGE_SIZE - 1));
-        let mut result = Vec::with_capacity(length);
-        while result.len() < length {
-            let len_in_page = (length - result.len()).min(HEAP_PAGE_SIZE - offset_in_page);
+        let mut result = vec![0_u8; length];
+        let mut result_pos = 0;
+        while result_pos < length {
+            let len_in_page = (length - result_pos).min(HEAP_PAGE_SIZE - offset_in_page);
             if let Some(page) = self.page(page_idx) {
-                result.extend_from_slice(&page.0[offset_in_page..(offset_in_page + len_in_page)]);
-            } else {
-                result.resize(result.len() + len_in_page, 0);
+                let page_range = flip(
+                    HEAP_PAGE_SIZE,
+                    offset_in_page..(offset_in_page + len_in_page),
+                );
+                let page_bytes = page.0[page_range].iter().rev();
+                let result_bytes = result[result_pos..(result_pos + len_in_page)].iter_mut();
+                for (dst, &page_byte) in result_bytes.zip(page_bytes) {
+                    *dst = page_byte;
+                }
             }
+            result_pos += len_in_page;
             page_idx += 1;
             offset_in_page = 0;
         }
