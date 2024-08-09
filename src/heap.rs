@@ -23,11 +23,12 @@ const HEAP_PAGE_SIZE: usize = 1 << 12;
 
 /// Heap page.
 #[derive(Debug, Clone, PartialEq)]
-struct HeapPage(Box<[u8]>);
+struct HeapPage(Box<[u8; HEAP_PAGE_SIZE]>);
 
 impl Default for HeapPage {
     fn default() -> Self {
-        Self(vec![0_u8; HEAP_PAGE_SIZE].into())
+        let boxed_slice: Box<[u8]> = vec![0_u8; HEAP_PAGE_SIZE].into();
+        Self(boxed_slice.try_into().unwrap()) // FIXME: bench `unwrap_unchecked()`?
     }
 }
 
@@ -48,7 +49,7 @@ impl Heap {
                 } else {
                     let mut boxed_slice: Box<[u8]> = vec![0_u8; HEAP_PAGE_SIZE].into();
                     boxed_slice[..bytes.len()].copy_from_slice(bytes);
-                    HeapPage(boxed_slice)
+                    HeapPage(boxed_slice.try_into().unwrap())
                 })
             })
             .collect();
