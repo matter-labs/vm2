@@ -6,6 +6,6 @@ fn main() {
     const BYTES_GIVEN: usize = 10000;
     let data = [0xFF; BYTES_GIVEN];
     let mut u = arbitrary::Unstructured::new(&data);
-    let _: VmAndWorld = u.arbitrary().unwrap();
+    let _: VmAndWorld<()> = u.arbitrary().unwrap();
     println!("{:?}", BYTES_GIVEN - u.len());
 }

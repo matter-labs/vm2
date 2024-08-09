@@ -1,4 +1,4 @@
-use crate::heap::HeapId;
+use eravm_stable_interface::HeapId;
 use u256::U256;
 
 #[derive(Debug)]

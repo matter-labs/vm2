@@ -13,6 +13,9 @@ pretty_assertions = "1.4.0"
 path = ".."
 features = ["single_instruction_test"]
 
+[dependencies.eravm-stable-interface]
+path = "../eravm-stable-interface"
+
 [[bin]]
 name = "show_testcase"
 path = "src/show_testcase.rs"

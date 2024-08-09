@@ -1,4 +1,6 @@
-use crate::heap::HeapId;
+use crate::addressing_modes::Arguments;
+use crate::instruction::ExecutionStatus;
+use crate::instruction_handlers::RETURN_COST;
 use crate::state::StateSnapshot;
 use crate::world_diff::ExternalSnapshot;
 use crate::{
@@ -8,8 +10,10 @@ use crate::{
     stack::StackPool,
     state::State,
     world_diff::{Snapshot, WorldDiff},
-    ExecutionEnd, Instruction, Program, World,
+    ExecutionEnd, Program, World,
 };
+use crate::{Instruction, ModeRequirements, Predicate};
+use eravm_stable_interface::{HeapId, Tracer};
 use u256::H160;
 
 #[derive(Debug)]
@@ -21,22 +25,25 @@ pub struct Settings {
     pub hook_address: u32,
 }
 
-pub struct VirtualMachine {
+pub struct VirtualMachine<T> {
     pub world_diff: WorldDiff,
 
     /// Storing the state in a separate struct is not just cosmetic.
     /// The state couldn't be passed to the world if it was inlined.
-    pub state: State,
+    pub state: State<T>,
 
     pub(crate) settings: Settings,
 
     pub(crate) stack_pool: StackPool,
+
+    // Instructions that are jumped to when things go wrong.
+    pub(crate) panic: Box<Instruction<T>>,
 }
 
-impl VirtualMachine {
+impl<T: Tracer> VirtualMachine<T> {
     pub fn new(
         address: H160,
-        program: Program,
+        program: Program<T>,
         caller: H160,
         calldata: Vec<u8>,
         gas: u32,
@@ -59,24 +66,17 @@ impl VirtualMachine {
             ),
             settings,
             stack_pool,
+            panic: Box::new(Instruction::from_panic(
+                None,
+                Arguments::new(Predicate::Always, RETURN_COST, ModeRequirements::none()),
+            )),
         }
     }
 
-    pub fn run(&mut self, world: &mut dyn World) -> ExecutionEnd {
-        self.resume_from(0, world)
-    }
-
-    pub fn resume_from(&mut self, instruction_number: u16, world: &mut dyn World) -> ExecutionEnd {
-        let mut instruction: *const Instruction = self
-            .state
-            .current_frame
-            .program
-            .instruction(instruction_number)
-            .unwrap();
-
+    pub fn run(&mut self, world: &mut dyn World<T>, tracer: &mut T) -> ExecutionEnd {
         unsafe {
             loop {
-                let args = &(*instruction).arguments;
+                let args = &(*self.state.current_frame.pc).arguments;
 
                 if self.state.use_gas(args.get_static_gas_cost()).is_err()
                     || !args.mode_requirements().met(
@@ -84,23 +84,23 @@ impl VirtualMachine {
                         self.state.current_frame.is_static,
                     )
                 {
-                    instruction = match free_panic(self, world) {
-                        Ok(i) => i,
-                        Err(e) => return e,
+                    if let ExecutionStatus::Stopped(end) = free_panic(self, world, tracer) {
+                        return end;
                     };
                     continue;
                 }
 
                 #[cfg(feature = "trace")]
-                self.print_instruction(instruction);
+                self.print_instruction(self.state.current_frame.pc);
 
                 if args.predicate().satisfied(&self.state.flags) {
-                    instruction = match ((*instruction).handler)(self, instruction, world) {
-                        Ok(n) => n,
-                        Err(e) => return e,
+                    if let ExecutionStatus::Stopped(end) =
+                        ((*self.state.current_frame.pc).handler)(self, world, tracer)
+                    {
+                        return end;
                     };
                 } else {
-                    instruction = instruction.add(1);
+                    self.state.current_frame.pc = self.state.current_frame.pc.add(1);
                 }
             }
         }
@@ -114,22 +114,15 @@ impl VirtualMachine {
     /// depending on remaining gas.
     pub fn resume_with_additional_gas_limit(
         &mut self,
-        instruction_number: u16,
-        world: &mut dyn World,
+        world: &mut dyn World<T>,
+        tracer: &mut T,
         gas_limit: u32,
     ) -> Option<(u32, ExecutionEnd)> {
         let minimum_gas = self.state.total_unspent_gas().saturating_sub(gas_limit);
 
-        let mut instruction: *const Instruction = self
-            .state
-            .current_frame
-            .program
-            .instruction(instruction_number)
-            .unwrap();
-
         let end = unsafe {
             loop {
-                let args = &(*instruction).arguments;
+                let args = &(*self.state.current_frame.pc).arguments;
 
                 if self.state.use_gas(args.get_static_gas_cost()).is_err()
                     || !args.mode_requirements().met(
@@ -137,23 +130,23 @@ impl VirtualMachine {
                         self.state.current_frame.is_static,
                     )
                 {
-                    instruction = match free_panic(self, world) {
-                        Ok(i) => i,
-                        Err(end) => break end,
+                    if let ExecutionStatus::Stopped(e) = free_panic(self, world, tracer) {
+                        break e;
                     };
                     continue;
                 }
 
                 #[cfg(feature = "trace")]
-                self.print_instruction(instruction);
+                self.print_instruction(self.state.current_frame.pc);
 
                 if args.predicate().satisfied(&self.state.flags) {
-                    instruction = match ((*instruction).handler)(self, instruction, world) {
-                        Ok(n) => n,
-                        Err(end) => break end,
+                    if let ExecutionStatus::Stopped(end) =
+                        ((*self.state.current_frame.pc).handler)(self, world, tracer)
+                    {
+                        break end;
                     };
                 } else {
-                    instruction = instruction.add(1);
+                    self.state.current_frame.pc = self.state.current_frame.pc.add(1);
                 }
 
                 if self.state.total_unspent_gas() < minimum_gas {
@@ -209,9 +202,8 @@ impl VirtualMachine {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_frame<const CALLING_MODE: u8>(
         &mut self,
-        instruction_pointer: *const Instruction,
         code_address: H160,
-        program: Program,
+        program: Program<T>,
         gas: u32,
         stipend: u32,
         exception_handler: u16,
@@ -252,53 +244,48 @@ impl VirtualMachine {
         );
         self.state.context_u128 = 0;
 
-        let old_pc = self.state.current_frame.pc_to_u16(instruction_pointer);
         std::mem::swap(&mut new_frame, &mut self.state.current_frame);
-        self.state.previous_frames.push((old_pc, new_frame));
+        self.state.previous_frames.push(new_frame);
     }
 
     pub(crate) fn pop_frame(&mut self, heap_to_keep: Option<HeapId>) -> Option<FrameRemnant> {
-        self.state
-            .previous_frames
-            .pop()
-            .map(|(program_counter, mut frame)| {
-                for &heap in [
-                    self.state.current_frame.heap,
-                    self.state.current_frame.aux_heap,
-                ]
-                .iter()
-                .chain(&self.state.current_frame.heaps_i_am_keeping_alive)
-                {
-                    if Some(heap) != heap_to_keep {
-                        self.state.heaps.deallocate(heap);
-                    }
+        self.state.previous_frames.pop().map(|mut frame| {
+            for &heap in [
+                self.state.current_frame.heap,
+                self.state.current_frame.aux_heap,
+            ]
+            .iter()
+            .chain(&self.state.current_frame.heaps_i_am_keeping_alive)
+            {
+                if Some(heap) != heap_to_keep {
+                    self.state.heaps.deallocate(heap);
                 }
+            }
 
-                std::mem::swap(&mut self.state.current_frame, &mut frame);
-                let Callframe {
-                    exception_handler,
-                    world_before_this_frame,
-                    stack,
-                    ..
-                } = frame;
+            std::mem::swap(&mut self.state.current_frame, &mut frame);
+            let Callframe {
+                exception_handler,
+                world_before_this_frame,
+                stack,
+                ..
+            } = frame;
 
-                self.stack_pool.recycle(stack);
+            self.stack_pool.recycle(stack);
 
-                self.state
-                    .current_frame
-                    .heaps_i_am_keeping_alive
-                    .extend(heap_to_keep);
+            self.state
+                .current_frame
+                .heaps_i_am_keeping_alive
+                .extend(heap_to_keep);
 
-                FrameRemnant {
-                    program_counter,
-                    exception_handler,
-                    snapshot: world_before_this_frame,
-                }
-            })
+            FrameRemnant {
+                exception_handler,
+                snapshot: world_before_this_frame,
+            }
+        })
     }
 
     #[cfg(feature = "trace")]
-    fn print_instruction(&self, instruction: *const Instruction) {
+    fn print_instruction(&self, instruction: *const crate::instruction::Instruction<T>) {
         print!("{:?}: ", unsafe {
             instruction.offset_from(self.state.current_frame.program.instruction(0).unwrap())
         });

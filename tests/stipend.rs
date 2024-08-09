@@ -119,7 +119,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
         },
     );
 
-    let result = vm.run(&mut world);
+    let result = vm.run(&mut world, &mut ());
     (result, vm.state.current_frame.gas)
 }
 

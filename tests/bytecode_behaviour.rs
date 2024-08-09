@@ -1,5 +1,6 @@
 #![cfg(not(feature = "single_instruction_test"))]
 
+use eravm_stable_interface::Tracer;
 use u256::U256;
 use vm2::{
     decode::decode_program, initial_decommit, testworld::TestWorld, ExecutionEnd, Program,
@@ -7,7 +8,7 @@ use vm2::{
 };
 use zkevm_opcode_defs::ethereum_types::Address;
 
-fn program_from_file(filename: &str) -> Program {
+fn program_from_file<T: Tracer>(filename: &str) -> Program<T> {
     let blob = std::fs::read(filename).unwrap();
     Program::new(
         decode_program(
@@ -45,6 +46,9 @@ fn call_to_invalid_address() {
             hook_address: 0,
         },
     );
-    assert!(matches!(vm.run(&mut world), ExecutionEnd::Panicked));
+    assert!(matches!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::Panicked
+    ));
     assert_eq!(vm.state.current_frame.gas, 0);
 }

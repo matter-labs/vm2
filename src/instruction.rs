@@ -5,12 +5,12 @@ use crate::{
     Predicate, World,
 };
 
-pub struct Instruction {
-    pub(crate) handler: Handler,
+pub struct Instruction<T> {
+    pub(crate) handler: Handler<T>,
     pub(crate) arguments: Arguments,
 }
 
-impl fmt::Debug for Instruction {
+impl<T> fmt::Debug for Instruction<T> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("Instruction")
@@ -19,9 +19,12 @@ impl fmt::Debug for Instruction {
     }
 }
 
-pub(crate) type Handler =
-    fn(&mut VirtualMachine, *const Instruction, &mut dyn World) -> InstructionResult;
-pub(crate) type InstructionResult = Result<*const Instruction, ExecutionEnd>;
+pub(crate) type Handler<T> =
+    fn(&mut VirtualMachine<T>, &mut dyn World<T>, &mut T) -> ExecutionStatus;
+pub enum ExecutionStatus {
+    Running,
+    Stopped(ExecutionEnd),
+}
 
 #[derive(Debug, PartialEq)]
 pub enum ExecutionEnd {
@@ -30,23 +33,21 @@ pub enum ExecutionEnd {
     Panicked,
 
     /// Returned when the bootloader writes to the heap location [crate::Settings::hook_address]
-    SuspendedOnHook {
-        hook: u32,
-        pc_to_resume_from: u16,
-    },
+    SuspendedOnHook(u32),
 }
 
-pub fn jump_to_beginning() -> Instruction {
+pub fn jump_to_beginning<T>() -> Instruction<T> {
     Instruction {
         handler: jump_to_beginning_handler,
         arguments: Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
     }
 }
-fn jump_to_beginning_handler(
-    vm: &mut VirtualMachine,
-    _: *const Instruction,
-    _: &mut dyn World,
-) -> InstructionResult {
+fn jump_to_beginning_handler<T>(
+    vm: &mut VirtualMachine<T>,
+    _: &mut dyn World<T>,
+    _: &mut T,
+) -> ExecutionStatus {
     let first_instruction = vm.state.current_frame.program.instruction(0).unwrap();
-    Ok(first_instruction)
+    vm.state.current_frame.pc = first_instruction;
+    ExecutionStatus::Running
 }

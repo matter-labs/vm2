@@ -5,18 +5,29 @@ use crate::{
         CodePage, Destination, DestinationWriter, Immediate1, Register1, Register2, RelativeStack,
         Source,
     },
-    instruction::{Instruction, InstructionResult},
+    instruction::{ExecutionStatus, Instruction},
     predication::Flags,
     VirtualMachine, World,
 };
+use eravm_stable_interface::{
+    opcodes::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor},
+    NotifyTracer, Tracer,
+};
 use u256::U256;
 
-fn binop<Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SET_FLAGS: bool>(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
+fn binop<
+    T: Tracer,
+    Op: Binop,
+    In1: Source,
+    Out: Destination,
+    const SWAP: bool,
+    const SET_FLAGS: bool,
+>(
+    vm: &mut VirtualMachine<T>,
+    world: &mut dyn World<T>,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    instruction_boilerplate::<Op, _>(vm, world, tracer, |vm, args, _| {
         let a = In1::get(args, &mut vm.state);
         let b = Register2::get(args, &mut vm.state);
         let (a, b) = if SWAP { (b, a) } else { (a, b) };
@@ -30,12 +41,11 @@ fn binop<Op: Binop, In1: Source, Out: Destination, const SWAP: bool, const SET_F
     })
 }
 
-pub trait Binop {
+pub trait Binop: NotifyTracer {
     type Out2: SecondOutput;
     fn perform(a: &U256, b: &U256) -> (U256, Self::Out2, Flags);
 }
 
-pub struct Add;
 impl Binop for Add {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -49,7 +59,6 @@ impl Binop for Add {
     type Out2 = ();
 }
 
-pub struct Sub;
 impl Binop for Sub {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -63,7 +72,6 @@ impl Binop for Sub {
     type Out2 = ();
 }
 
-pub struct And;
 impl Binop for And {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -73,7 +81,6 @@ impl Binop for And {
     type Out2 = ();
 }
 
-pub struct Or;
 impl Binop for Or {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -83,7 +90,6 @@ impl Binop for Or {
     type Out2 = ();
 }
 
-pub struct Xor;
 impl Binop for Xor {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -93,7 +99,6 @@ impl Binop for Xor {
     type Out2 = ();
 }
 
-pub struct ShiftLeft;
 impl Binop for ShiftLeft {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -103,7 +108,6 @@ impl Binop for ShiftLeft {
     type Out2 = ();
 }
 
-pub struct ShiftRight;
 impl Binop for ShiftRight {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -113,7 +117,6 @@ impl Binop for ShiftRight {
     type Out2 = ();
 }
 
-pub struct RotateLeft;
 impl Binop for RotateLeft {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -124,7 +127,6 @@ impl Binop for RotateLeft {
     type Out2 = ();
 }
 
-pub struct RotateRight;
 impl Binop for RotateRight {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
@@ -156,7 +158,6 @@ impl SecondOutput for U256 {
     }
 }
 
-pub struct Mul;
 impl Binop for Mul {
     fn perform(a: &U256, b: &U256) -> (U256, Self::Out2, Flags) {
         let res = a.full_mul(*b);
@@ -183,7 +184,6 @@ impl Binop for Mul {
     type Out2 = U256;
 }
 
-pub struct Div;
 impl Binop for Div {
     fn perform(a: &U256, b: &U256) -> (U256, Self::Out2, Flags) {
         if *b != U256::zero() {
@@ -202,7 +202,7 @@ impl Binop for Div {
 
 use super::monomorphization::*;
 
-impl Instruction {
+impl<T: Tracer> Instruction<T> {
     #[inline(always)]
     pub fn from_binop<Op: Binop>(
         src1: AnySource,
@@ -214,7 +214,7 @@ impl Instruction {
         set_flags: bool,
     ) -> Self {
         Self {
-            handler: monomorphize!(binop [Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
+            handler: monomorphize!(binop [T Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
             arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)

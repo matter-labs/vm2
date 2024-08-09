@@ -1,21 +1,20 @@
-use u256::U256;
-use zkevm_opcode_defs::{BlobSha256Format, ContractCodeSha256Format, VersionedHashLen32};
-
+use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     fat_pointer::FatPointer,
-    instruction::InstructionResult,
+    instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
+use eravm_stable_interface::{opcodes, Tracer};
+use u256::U256;
+use zkevm_opcode_defs::{BlobSha256Format, ContractCodeSha256Format, VersionedHashLen32};
 
-use super::common::instruction_boilerplate;
-
-fn decommit(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, world| {
+fn decommit<T: Tracer>(
+    vm: &mut VirtualMachine<T>,
+    world: &mut dyn World<T>,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    instruction_boilerplate::<opcodes::Decommit, _>(vm, world, tracer, |vm, args, world| {
         let code_hash = Register1::get(args, &mut vm.state);
         let extra_cost = Register2::get(args, &mut vm.state).low_u32();
 
@@ -52,7 +51,7 @@ fn decommit(
     })
 }
 
-impl Instruction {
+impl<T: Tracer> Instruction<T> {
     pub fn from_decommit(
         abi: Register1,
         burn: Register2,
