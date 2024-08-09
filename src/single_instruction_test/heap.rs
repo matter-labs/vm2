@@ -58,7 +58,7 @@ pub const FIRST_HEAP: HeapId = HeapId(2);
 pub(crate) const FIRST_AUX_HEAP: HeapId = HeapId(3);
 
 impl Heaps {
-    pub(crate) fn new(_: Vec<u8>) -> Self {
+    pub(crate) fn new(_: &[u8]) -> Self {
         unimplemented!("Should use arbitrary heap, not fresh heap in testing.")
     }
 

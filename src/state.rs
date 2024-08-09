@@ -34,7 +34,7 @@ impl State {
     pub(crate) fn new(
         address: H160,
         caller: H160,
-        calldata: Vec<u8>,
+        calldata: &[u8],
         gas: u32,
         program: Program,
         world_before_this_frame: Snapshot,
