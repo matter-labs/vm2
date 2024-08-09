@@ -65,9 +65,7 @@ pub trait CallframeInterface {
     fn exception_handler(&self) -> u16;
 
     fn is_static(&self) -> bool;
-    fn is_kernel(&self) -> bool {
-        todo!()
-    }
+    fn is_kernel(&self) -> bool;
 
     fn gas(&self) -> u32;
     fn set_gas(&mut self, new_gas: u32);
@@ -311,6 +309,10 @@ impl CallframeInterface for DummyState {
     }
 
     fn is_static(&self) -> bool {
+        unimplemented!()
+    }
+
+    fn is_kernel(&self) -> bool {
         unimplemented!()
     }
 
