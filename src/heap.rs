@@ -27,7 +27,7 @@ struct HeapPage(Box<[u8; HEAP_PAGE_SIZE]>);
 impl Default for HeapPage {
     fn default() -> Self {
         let boxed_slice: Box<[u8]> = vec![0_u8; HEAP_PAGE_SIZE].into();
-        Self(boxed_slice.try_into().unwrap()) // FIXME: bench `unwrap_unchecked()`?
+        Self(boxed_slice.try_into().unwrap())
     }
 }
 
@@ -37,18 +37,18 @@ pub struct Heap {
 }
 
 impl Heap {
-    fn from_bytes(bytes: &[u8], recycled_pages: &mut Vec<HeapPage>) -> Self {
+    fn from_bytes(bytes: &[u8], pagepool: &mut PagePool) -> Self {
         let pages = bytes
             .chunks(HEAP_PAGE_SIZE)
             .map(|bytes| {
-                Some(if let Some(mut recycled_page) = recycled_pages.pop() {
-                    recycled_page.0[..bytes.len()].copy_from_slice(bytes);
-                    recycled_page.0[bytes.len()..].fill(0);
-                    recycled_page
+                Some(if let Some(mut page) = pagepool.get_dirty_page() {
+                    page.0[..bytes.len()].copy_from_slice(bytes);
+                    page.0[bytes.len()..].fill(0);
+                    page
                 } else {
-                    let mut boxed_slice: Box<[u8]> = vec![0_u8; HEAP_PAGE_SIZE].into();
-                    boxed_slice[..bytes.len()].copy_from_slice(bytes);
-                    HeapPage(boxed_slice.try_into().unwrap())
+                    let mut page = HeapPage::default();
+                    page.0[..bytes.len()].copy_from_slice(bytes);
+                    page
                 })
             })
             .collect();
@@ -59,21 +59,17 @@ impl Heap {
         self.pages.get(idx)?.as_ref()
     }
 
-    fn get_or_insert_page(
-        &mut self,
-        idx: usize,
-        recycled_pages: &mut Vec<HeapPage>,
-    ) -> &mut HeapPage {
+    fn get_or_insert_page(&mut self, idx: usize, pagepool: &mut PagePool) -> &mut HeapPage {
         if self.pages.len() <= idx {
             self.pages.resize(idx + 1, None);
         }
-        self.pages[idx].get_or_insert_with(|| recycled_pages.pop().unwrap_or_default())
+        self.pages[idx].get_or_insert_with(|| pagepool.allocate_page())
     }
 
-    fn write_u256(&mut self, start_address: u32, value: U256, recycled_pages: &mut Vec<HeapPage>) {
+    fn write_u256(&mut self, start_address: u32, value: U256, pagepool: &mut PagePool) {
         let (page_idx, offset_in_page) = address_to_page_offset(start_address);
         let bytes_in_page = HEAP_PAGE_SIZE - offset_in_page;
-        let page = self.get_or_insert_page(page_idx, recycled_pages);
+        let page = self.get_or_insert_page(page_idx, pagepool);
 
         if bytes_in_page >= 32 {
             value.to_big_endian(&mut page.0[offset_in_page..offset_in_page + 32]);
@@ -86,7 +82,7 @@ impl Heap {
                 *dst = src;
             }
 
-            let page = self.get_or_insert_page(page_idx + 1, recycled_pages);
+            let page = self.get_or_insert_page(page_idx + 1, pagepool);
             for (dst, src) in page.0.iter_mut().zip(bytes_iter) {
                 *dst = src;
             }
@@ -172,7 +168,7 @@ impl HeapInterface for Heap {
 #[derive(Debug, Clone)]
 pub struct Heaps {
     heaps: Vec<Heap>,
-    recycled_pages: Vec<HeapPage>,
+    pagepool: PagePool,
     bootloader_heap_rollback_info: Vec<(u32, U256)>,
     bootloader_aux_rollback_info: Vec<(u32, U256)>,
 }
@@ -185,15 +181,15 @@ impl Heaps {
     pub(crate) fn new(calldata: &[u8]) -> Self {
         // The first heap can never be used because heap zero
         // means the current heap in precompile calls
-        let mut recycled_pages = vec![];
+        let mut pagepool = PagePool::default();
         Self {
             heaps: vec![
                 Heap::default(),
-                Heap::from_bytes(calldata, &mut recycled_pages),
+                Heap::from_bytes(calldata, &mut pagepool),
                 Heap::default(),
                 Heap::default(),
             ],
-            recycled_pages,
+            pagepool,
             bootloader_heap_rollback_info: vec![],
             bootloader_aux_rollback_info: vec![],
         }
@@ -210,13 +206,15 @@ impl Heaps {
     fn allocate_inner(&mut self, memory: &[u8]) -> HeapId {
         let id = HeapId(self.heaps.len() as u32);
         self.heaps
-            .push(Heap::from_bytes(memory, &mut self.recycled_pages));
+            .push(Heap::from_bytes(memory, &mut self.pagepool));
         id
     }
 
     pub(crate) fn deallocate(&mut self, heap: HeapId) {
         let heap = mem::take(&mut self.heaps[heap.0 as usize]);
-        self.recycled_pages.extend(heap.pages.into_iter().flatten());
+        for page in heap.pages.into_iter().flatten() {
+            self.pagepool.recycle_page(page);
+        }
     }
 
     pub fn write_u256(&mut self, heap: HeapId, start_address: u32, value: U256) {
@@ -227,7 +225,7 @@ impl Heaps {
             self.bootloader_aux_rollback_info
                 .push((start_address, self[heap].read_u256(start_address)));
         }
-        self.heaps[heap.0 as usize].write_u256(start_address, value, &mut self.recycled_pages);
+        self.heaps[heap.0 as usize].write_u256(start_address, value, &mut self.pagepool);
     }
 
     pub(crate) fn snapshot(&self) -> (usize, usize) {
@@ -239,14 +237,10 @@ impl Heaps {
 
     pub(crate) fn rollback(&mut self, (heap_snap, aux_snap): (usize, usize)) {
         for (address, value) in self.bootloader_heap_rollback_info.drain(heap_snap..).rev() {
-            self.heaps[FIRST_HEAP.0 as usize].write_u256(address, value, &mut self.recycled_pages);
+            self.heaps[FIRST_HEAP.0 as usize].write_u256(address, value, &mut self.pagepool);
         }
         for (address, value) in self.bootloader_aux_rollback_info.drain(aux_snap..).rev() {
-            self.heaps[FIRST_AUX_HEAP.0 as usize].write_u256(
-                address,
-                value,
-                &mut self.recycled_pages,
-            );
+            self.heaps[FIRST_AUX_HEAP.0 as usize].write_u256(address, value, &mut self.pagepool);
         }
     }
 
@@ -279,6 +273,58 @@ impl PartialEq for Heaps {
     }
 }
 
+#[derive(Default, Clone, Debug)]
+struct PagePool {
+    stack_top: Option<Box<DormantHeapPage>>,
+}
+
+impl PagePool {
+    fn allocate_page(&mut self) -> HeapPage {
+        self.get_dirty_page()
+            .map(|mut page| {
+                page.0.fill(0);
+                page
+            })
+            .unwrap_or_default()
+    }
+
+    fn get_dirty_page(&mut self) -> Option<HeapPage> {
+        self.stack_top.take().map(|mut page| {
+            self.stack_top = page.next.take();
+            page.to_heap_page()
+        })
+    }
+
+    fn recycle_page(&mut self, page: HeapPage) {
+        self.stack_top = Some(DormantHeapPage::from_heap_page(page, self.stack_top.take()));
+    }
+}
+
+#[derive(Debug, Clone)]
+struct DormantHeapPage {
+    next: Option<Box<DormantHeapPage>>,
+    _padding: [u8; HEAP_PAGE_SIZE - mem::size_of::<Option<Box<DormantHeapPage>>>()],
+}
+
+impl DormantHeapPage {
+    fn from_heap_page(mut page: HeapPage, next: Option<Box<DormantHeapPage>>) -> Box<Self> {
+        // Safety: `next` is not dropped, as it is passed into std::ptr::write.
+        // The array is set up as a valid `DormantHeapPage` before casting.
+        unsafe {
+            std::ptr::write(
+                (&mut *page.0) as *mut u8 as *mut Option<Box<DormantHeapPage>>,
+                next,
+            );
+            Box::from_raw(Box::into_raw(page.0) as *mut Self)
+        }
+    }
+
+    fn to_heap_page(self: Box<Self>) -> HeapPage {
+        // Safety: a byte array is allowed to contain anything.
+        HeapPage(unsafe { Box::from_raw(Box::into_raw(self) as *mut [u8; HEAP_PAGE_SIZE]) })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -287,7 +333,7 @@ mod tests {
         U256::from_little_endian(&[byte; 32])
     }
 
-    fn test_heap_write_resizes(recycled_pages: &mut Vec<HeapPage>) {
+    fn test_heap_write_resizes(recycled_pages: &mut PagePool) {
         let mut heap = Heap::default();
         heap.write_u256(5, 1.into(), recycled_pages);
         assert_eq!(heap.pages.len(), 1);
@@ -331,17 +377,23 @@ mod tests {
 
     #[test]
     fn heap_write_resizes() {
-        test_heap_write_resizes(&mut vec![]);
+        test_heap_write_resizes(&mut PagePool::default());
     }
 
     #[test]
     fn heap_write_resizes_with_recycled_pages() {
-        let mut recycled_pages = vec![HeapPage::default(); 10];
-        // Fill all pages with 0xff bytes to detect not clearing pages
-        for page in &mut recycled_pages {
+        test_heap_write_resizes(&mut populated_pagepool());
+    }
+
+    fn populated_pagepool() -> PagePool {
+        let mut pagepool = PagePool::default();
+        for _ in 0..10 {
+            let mut page = HeapPage::default();
+            // Fill pages with 0xff bytes to detect not clearing pages
             page.0.fill(0xff);
+            pagepool.recycle_page(page);
         }
-        test_heap_write_resizes(&mut recycled_pages);
+        pagepool
     }
 
     #[test]
@@ -366,7 +418,11 @@ mod tests {
 
         for (i, offset) in offsets.into_iter().enumerate() {
             let bytes: Vec<_> = (i..i + 32).map(|byte| byte as u8).collect();
-            heap.write_u256(offset, U256::from_big_endian(&bytes), &mut vec![]);
+            heap.write_u256(
+                offset,
+                U256::from_big_endian(&bytes),
+                &mut PagePool::default(),
+            );
             for length in 1..=32 {
                 let data = heap.read_range_big_endian(offset..offset + length);
                 assert_eq!(data, bytes[..length as usize]);
@@ -378,7 +434,7 @@ mod tests {
     fn heap_partial_u256_reads() {
         let mut heap = Heap::default();
         let bytes: Vec<_> = (1..=32).collect();
-        heap.write_u256(0, U256::from_big_endian(&bytes), &mut vec![]);
+        heap.write_u256(0, U256::from_big_endian(&bytes), &mut PagePool::default());
         for length in 1..=32 {
             let read = heap.read_u256_partially(0..length);
             // Mask is 0xff...ff00..00, where the number of `0xff` bytes is the number of read bytes
@@ -388,7 +444,11 @@ mod tests {
 
         // The same test at the page boundary.
         let offset = HEAP_PAGE_SIZE as u32 - 10;
-        heap.write_u256(offset, U256::from_big_endian(&bytes), &mut vec![]);
+        heap.write_u256(
+            offset,
+            U256::from_big_endian(&bytes),
+            &mut PagePool::default(),
+        );
         for length in 1..=32 {
             let read = heap.read_u256_partially(offset..offset + length);
             let mask = U256::MAX << (8 * (32 - length));
@@ -402,7 +462,7 @@ mod tests {
         assert_eq!(heap.read_u256(5), 0.into());
     }
 
-    fn test_creating_heap_from_bytes(recycled_pages: &mut Vec<HeapPage>) {
+    fn test_creating_heap_from_bytes(recycled_pages: &mut PagePool) {
         let bytes: Vec<_> = (0..=u8::MAX).collect();
         let heap = Heap::from_bytes(&bytes, recycled_pages);
         assert_eq!(heap.pages.len(), 1);
@@ -447,16 +507,11 @@ mod tests {
 
     #[test]
     fn creating_heap_from_bytes() {
-        test_creating_heap_from_bytes(&mut vec![]);
+        test_creating_heap_from_bytes(&mut PagePool::default());
     }
 
     #[test]
     fn creating_heap_from_bytes_with_recycling() {
-        let mut recycled_pages = vec![HeapPage::default(); 10];
-        // Fill all pages with 0xff bytes to detect not clearing pages
-        for page in &mut recycled_pages {
-            page.0.fill(0xff);
-        }
-        test_creating_heap_from_bytes(&mut recycled_pages);
+        test_creating_heap_from_bytes(&mut populated_pagepool());
     }
 }
