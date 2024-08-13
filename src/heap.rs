@@ -87,18 +87,25 @@ impl Heap {
     }
 
     fn write_u256(&mut self, start_address: u32, value: U256, recycled_pages: &mut Vec<HeapPage>) {
-        let mut bytes = [0; 32];
-        value.to_big_endian(&mut bytes);
-
         let (page_idx, offset_in_page) = address_to_page_offset(start_address);
-        let len_in_page = 32.min(HEAP_PAGE_SIZE - offset_in_page);
+        let bytes_in_page = HEAP_PAGE_SIZE - offset_in_page;
         let page = self.get_or_insert_page(page_idx, recycled_pages);
-        page.0[offset_in_page..(offset_in_page + len_in_page)]
-            .copy_from_slice(&bytes[..len_in_page]);
 
-        if len_in_page < 32 {
+        if bytes_in_page >= 32 {
+            value.to_big_endian(&mut page.0[offset_in_page..offset_in_page + 32]);
+        } else {
+            let mut bytes = [0; 32];
+            value.to_big_endian(&mut bytes);
+            let mut bytes_iter = bytes.into_iter();
+
+            for (dst, src) in page.0[offset_in_page..].iter_mut().zip(bytes_iter.by_ref()) {
+                *dst = src;
+            }
+
             let page = self.get_or_insert_page(page_idx + 1, recycled_pages);
-            page.0[..32 - len_in_page].copy_from_slice(&bytes[len_in_page..]);
+            for (dst, src) in page.0.iter_mut().zip(bytes_iter) {
+                *dst = src;
+            }
         }
     }
 }
