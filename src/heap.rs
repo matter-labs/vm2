@@ -1,8 +1,7 @@
 use crate::instruction_handlers::HeapInterface;
+use std::mem;
 use std::ops::{Index, Range};
-use std::{iter, mem};
 use u256::U256;
-use zkevm_opcode_defs::system_params::NEW_FRAME_MEMORY_STIPEND;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct HeapId(u32);
@@ -52,21 +51,6 @@ impl Heap {
                     HeapPage(boxed_slice.try_into().unwrap())
                 })
             })
-            .collect();
-        Self { pages }
-    }
-
-    fn with_capacity(capacity: usize, recycled_pages: &mut Vec<HeapPage>) -> Self {
-        let end_page = capacity.saturating_sub(1) >> 12;
-        let page_count = end_page + 1;
-        let new_len = recycled_pages.len().saturating_sub(page_count);
-        let recycled_pages = recycled_pages.drain(new_len..).map(|mut page| {
-            page.0.fill(0);
-            Some(page)
-        });
-        let pages = recycled_pages
-            .chain(iter::repeat_with(|| Some(HeapPage::default())))
-            .take(page_count)
             .collect();
         Self { pages }
     }
@@ -216,12 +200,7 @@ impl Heaps {
     }
 
     pub(crate) fn allocate(&mut self) -> HeapId {
-        let id = HeapId(self.heaps.len() as u32);
-        self.heaps.push(Heap::with_capacity(
-            NEW_FRAME_MEMORY_STIPEND as usize,
-            &mut self.recycled_pages,
-        ));
-        id
+        self.allocate_inner(&[])
     }
 
     pub(crate) fn allocate_with_content(&mut self, content: &[u8]) -> HeapId {
@@ -421,13 +400,6 @@ mod tests {
     fn heap_read_out_of_bounds() {
         let heap = Heap::default();
         assert_eq!(heap.read_u256(5), 0.into());
-    }
-
-    #[test]
-    fn default_new_heap_does_not_allocate_many_pages() {
-        let heap = Heap::with_capacity(NEW_FRAME_MEMORY_STIPEND as usize, &mut vec![]);
-        assert_eq!(heap.pages.len(), 1);
-        assert_eq!(*heap.pages[0].as_ref().unwrap().0, [0_u8; 4096]);
     }
 
     fn test_creating_heap_from_bytes(recycled_pages: &mut Vec<HeapPage>) {
