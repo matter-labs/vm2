@@ -90,8 +90,7 @@ impl Heap {
         let mut bytes = [0; 32];
         value.to_big_endian(&mut bytes);
 
-        let offset = start_address as usize;
-        let (page_idx, offset_in_page) = (offset >> 12, offset & (HEAP_PAGE_SIZE - 1));
+        let (page_idx, offset_in_page) = address_to_page_offset(start_address);
         let len_in_page = 32.min(HEAP_PAGE_SIZE - offset_in_page);
         let page = self.get_or_insert_page(page_idx, recycled_pages);
         page.0[offset_in_page..(offset_in_page + len_in_page)]
@@ -104,25 +103,50 @@ impl Heap {
     }
 }
 
+#[inline(always)]
+fn address_to_page_offset(address: u32) -> (usize, usize) {
+    let offset = address as usize;
+    (offset >> 12, offset & (HEAP_PAGE_SIZE - 1))
+}
+
 impl HeapInterface for Heap {
     fn read_u256(&self, start_address: u32) -> U256 {
-        self.read_u256_partially(start_address..start_address + 32)
+        let (page_idx, offset_in_page) = address_to_page_offset(start_address);
+        let bytes_in_page = HEAP_PAGE_SIZE - offset_in_page;
+
+        if bytes_in_page >= 32 {
+            if let Some(page) = self.page(page_idx) {
+                U256::from_big_endian(&page.0[offset_in_page..offset_in_page + 32])
+            } else {
+                U256::zero()
+            }
+        } else {
+            let mut result = [0_u8; 32];
+            if let Some(page) = self.page(page_idx) {
+                result[0..bytes_in_page]
+                    .copy_from_slice(&page.0[offset_in_page..(offset_in_page + bytes_in_page)]);
+            }
+            if let Some(page) = self.page(page_idx + 1) {
+                result[bytes_in_page..32].copy_from_slice(&page.0[..32 - bytes_in_page]);
+            }
+            U256::from_big_endian(&result)
+        }
     }
 
     fn read_u256_partially(&self, range: Range<u32>) -> U256 {
-        let offset = range.start as usize;
-        let (page_idx, offset_in_page) = (offset >> 12, offset & (HEAP_PAGE_SIZE - 1));
+        let (page_idx, offset_in_page) = address_to_page_offset(range.start);
+        let length = range.len();
+        let len_in_page = length.min(HEAP_PAGE_SIZE - offset_in_page);
+
         let mut result = [0_u8; 32];
-        let len_in_page = range.len().min(HEAP_PAGE_SIZE - offset_in_page);
         if let Some(page) = self.page(page_idx) {
             result[0..len_in_page]
                 .copy_from_slice(&page.0[offset_in_page..(offset_in_page + len_in_page)]);
         }
 
-        if len_in_page < range.len() {
+        if len_in_page < length {
             if let Some(page) = self.page(page_idx + 1) {
-                result[len_in_page..range.len()]
-                    .copy_from_slice(&page.0[..range.len() - len_in_page]);
+                result[len_in_page..length].copy_from_slice(&page.0[..length - len_in_page]);
             }
         }
         U256::from_big_endian(&result)
