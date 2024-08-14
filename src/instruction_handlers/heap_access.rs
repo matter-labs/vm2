@@ -1,4 +1,4 @@
-use super::common::{instruction_boilerplate, instruction_boilerplate_ext};
+use super::common::{instruction_boilerplate, instruction_boilerplate_ext, NotifyTracer};
 use crate::{
     addressing_modes::{
         Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
@@ -9,7 +9,7 @@ use crate::{
     state::State,
     ExecutionEnd, HeapId, Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::{opcodes, NotifyTracer, Tracer};
+use eravm_stable_interface::{opcodes, Tracer};
 use std::ops::Range;
 use u256::U256;
 

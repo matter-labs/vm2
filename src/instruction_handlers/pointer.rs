@@ -1,4 +1,4 @@
-use super::common::instruction_boilerplate;
+use super::common::{instruction_boilerplate, NotifyTracer};
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
@@ -10,7 +10,7 @@ use crate::{
 };
 use eravm_stable_interface::{
     opcodes::{PointerAdd, PointerPack, PointerShrink, PointerSub},
-    NotifyTracer, Tracer,
+    Tracer,
 };
 use u256::U256;
 

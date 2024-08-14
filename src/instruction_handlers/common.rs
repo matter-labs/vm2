@@ -1,5 +1,5 @@
 use crate::{addressing_modes::Arguments, instruction::ExecutionStatus, VirtualMachine, World};
-use eravm_stable_interface::{NotifyTracer, Tracer};
+use eravm_stable_interface::{forall_opcodes, StateInterface, Tracer};
 
 #[inline(always)]
 pub(crate) fn instruction_boilerplate<Opcode: NotifyTracer, T: Tracer>(
@@ -41,3 +41,27 @@ pub(crate) fn instruction_boilerplate_ext<Opcode: NotifyTracer, T: Tracer>(
 
     result
 }
+
+/// Call the before/after_{opcode} method of the tracer.
+/// Implemented for all ZSTs representing opcodes.
+pub trait NotifyTracer {
+    fn before<S: StateInterface, T: Tracer>(tracer: &mut T, state: &mut S);
+    fn after<S: StateInterface, T: Tracer>(tracer: &mut T, state: &mut S);
+}
+
+macro_rules! implement_notify_tracer {
+    ($opcode:ident, $before_method:ident, $after_method:ident) => {
+        impl NotifyTracer for $opcode {
+            fn before<S: StateInterface, T: Tracer>(tracer: &mut T, state: &mut S) {
+                tracer.$before_method(state)
+            }
+
+            fn after<S: StateInterface, T: Tracer>(tracer: &mut T, state: &mut S) {
+                tracer.$after_method(state)
+            }
+        }
+    };
+}
+
+use eravm_stable_interface::opcodes::*;
+forall_opcodes!(implement_notify_tracer);

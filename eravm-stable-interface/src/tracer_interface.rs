@@ -1,5 +1,6 @@
 use crate::StateInterface;
 
+#[macro_export]
 macro_rules! forall_opcodes {
     ($m: ident) => {
         $m!(Nop, before_nop, after_nop);
@@ -123,28 +124,6 @@ impl<A: Tracer, B: Tracer> Tracer for (A, B) {
     forall_opcodes!(dispatch_to_tracer_tuple);
 }
 
-/// Call the before/after_{opcode} method of the tracer.
-pub trait NotifyTracer {
-    fn before<S: StateInterface, T: Tracer>(tracer: &mut T, state: &mut S);
-    fn after<S: StateInterface, T: Tracer>(tracer: &mut T, state: &mut S);
-}
-
-macro_rules! implement_notify_tracer {
-    ($opcode:ident, $before_method:ident, $after_method:ident) => {
-        impl NotifyTracer for $opcode {
-            fn before<S: StateInterface, T: Tracer>(tracer: &mut T, state: &mut S) {
-                tracer.$before_method(state)
-            }
-
-            fn after<S: StateInterface, T: Tracer>(tracer: &mut T, state: &mut S) {
-                tracer.$after_method(state)
-            }
-        }
-    };
-}
-
-forall_opcodes!(implement_notify_tracer);
-
 pub mod opcodes {
     pub struct Nop;
     pub struct Add;
@@ -192,7 +171,6 @@ pub mod opcodes {
     pub struct StaticMemoryRead;
     pub struct StaticMemoryWrite;
 }
-use opcodes::*;
 
 #[cfg(test)]
 mod tests {

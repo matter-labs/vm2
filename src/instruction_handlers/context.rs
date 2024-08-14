@@ -1,4 +1,4 @@
-use super::common::instruction_boilerplate;
+use super::common::{instruction_boilerplate, NotifyTracer};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Source},
     decommit::address_into_u256,
@@ -8,7 +8,7 @@ use crate::{
 };
 use eravm_stable_interface::{
     opcodes::{self, Caller, CodeAddress, ErgsLeft, This, SP, U128},
-    NotifyTracer, Tracer,
+    Tracer,
 };
 use u256::U256;
 use zkevm_opcode_defs::VmMetaParameters;
