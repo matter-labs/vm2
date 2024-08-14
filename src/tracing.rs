@@ -32,9 +32,9 @@ impl<T> StateInterface for VirtualMachine<T> {
             + 1
     }
 
-    fn callframe(&mut self, n: usize) -> impl CallframeInterface + '_ {
+    fn callframe(&mut self, mut n: usize) -> impl CallframeInterface + '_ {
         for far_frame in std::iter::once(&mut self.state.current_frame)
-            .chain(self.state.previous_frames.iter_mut())
+            .chain(self.state.previous_frames.iter_mut().rev())
         {
             match n.cmp(&far_frame.near_calls.len()) {
                 Ordering::Less => {
@@ -49,7 +49,7 @@ impl<T> StateInterface for VirtualMachine<T> {
                         near_call: None,
                     }
                 }
-                _ => {}
+                Ordering::Greater => n -= far_frame.near_calls.len() + 1,
             }
         }
         panic!("Callframe index out of bounds")
@@ -334,7 +334,7 @@ impl<T> CallframeInterface for CallframeWrapper<'_, T> {
 
     fn exception_handler(&self) -> u16 {
         if let Some(i) = self.near_call {
-            self.frame.near_calls[i].exception_handler
+            self.frame.near_calls[self.frame.near_calls.len() - i - 1].exception_handler
         } else {
             self.frame.exception_handler
         }
@@ -365,6 +365,74 @@ impl<T> CallframeWrapper<'_, T> {
                 self.frame.near_calls.len() - 1
             };
             Some(&mut self.frame.near_calls[index])
+        }
+    }
+}
+
+#[cfg(all(test, not(feature = "single_instruction_test")))]
+mod test {
+    use super::*;
+    use crate::{initial_decommit, testworld::TestWorld, Instruction, Program, VirtualMachine};
+    use eravm_stable_interface::HeapId;
+    use u256::H160;
+    use zkevm_opcode_defs::ethereum_types::Address;
+
+    #[test]
+    fn callframe_picking() {
+        let program = Program::new(vec![Instruction::from_invalid()], vec![]);
+
+        let address = Address::from_low_u64_be(0x1234567890abcdef);
+        let mut world = TestWorld::new(&[(address, program)]);
+        let program = initial_decommit(&mut world, address);
+
+        let mut vm = VirtualMachine::<()>::new(
+            address,
+            program.clone(),
+            Address::zero(),
+            vec![],
+            1000,
+            crate::Settings {
+                default_aa_code_hash: [0; 32],
+                evm_interpreter_code_hash: [0; 32],
+                hook_address: 0,
+            },
+        );
+
+        let mut frame_count = 1;
+
+        let add_far_frame = |vm: &mut VirtualMachine<()>, counter: &mut u16| {
+            vm.push_frame::<0>(
+                H160::from_low_u64_be(1),
+                program.clone(),
+                0,
+                0,
+                *counter,
+                false,
+                HeapId::from_u32_unchecked(5),
+                vm.world_diff.snapshot(),
+            );
+            *counter += 1;
+        };
+
+        let add_near_frame = |vm: &mut VirtualMachine<()>, counter: &mut u16| {
+            vm.state
+                .current_frame
+                .push_near_call(0, *counter, vm.world_diff.snapshot());
+            *counter += 1;
+        };
+
+        add_far_frame(&mut vm, &mut frame_count);
+        add_near_frame(&mut vm, &mut frame_count);
+        add_far_frame(&mut vm, &mut frame_count);
+        add_far_frame(&mut vm, &mut frame_count);
+        add_near_frame(&mut vm, &mut frame_count);
+        add_near_frame(&mut vm, &mut frame_count);
+
+        for i in 0..frame_count {
+            assert_eq!(
+                vm.callframe(i as usize).exception_handler(),
+                frame_count - i - 1
+            );
         }
     }
 }
