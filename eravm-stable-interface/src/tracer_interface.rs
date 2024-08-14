@@ -46,6 +46,8 @@ macro_rules! forall_opcodes {
         );
         $m!(HeapRead, before_heap_read, after_heap_read);
         $m!(HeapWrite, before_heap_write, after_heap_write);
+        $m!(AuxHeapRead, before_aux_heap_read, after_aux_heap_read);
+        $m!(AuxHeapWrite, before_aux_heap_write, after_aux_heap_write);
         $m!(PointerRead, before_pointer_read, after_pointer_read);
         $m!(PointerAdd, before_pointer_add, after_pointer_add);
         $m!(PointerSub, before_pointer_sub, after_pointer_sub);
@@ -176,6 +178,8 @@ pub mod opcodes {
     pub struct PrecompileCall;
     pub struct HeapRead;
     pub struct HeapWrite;
+    pub struct AuxHeapRead;
+    pub struct AuxHeapWrite;
     pub struct PointerRead;
     pub struct PointerAdd;
     pub struct PointerSub;

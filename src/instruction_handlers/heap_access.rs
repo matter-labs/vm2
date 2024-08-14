@@ -9,7 +9,7 @@ use crate::{
     state::State,
     ExecutionEnd, HeapId, Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::{opcodes, Tracer};
+use eravm_stable_interface::{opcodes, NotifyTracer, Tracer};
 use std::ops::Range;
 use u256::U256;
 
@@ -22,6 +22,8 @@ pub trait HeapInterface {
 pub trait HeapFromState {
     fn get_heap<T>(state: &State<T>) -> HeapId;
     fn get_heap_size<T>(state: &mut State<T>) -> &mut u32;
+    type Read: NotifyTracer;
+    type Write: NotifyTracer;
 }
 
 pub struct Heap;
@@ -32,6 +34,8 @@ impl HeapFromState for Heap {
     fn get_heap_size<T>(state: &mut State<T>) -> &mut u32 {
         &mut state.current_frame.heap_size
     }
+    type Read = opcodes::HeapRead;
+    type Write = opcodes::HeapWrite;
 }
 
 pub struct AuxHeap;
@@ -42,6 +46,8 @@ impl HeapFromState for AuxHeap {
     fn get_heap_size<T>(state: &mut State<T>) -> &mut u32 {
         &mut state.current_frame.aux_heap_size
     }
+    type Read = opcodes::AuxHeapRead;
+    type Write = opcodes::AuxHeapWrite;
 }
 
 /// The last address to which 32 can be added without overflow.
@@ -52,7 +58,7 @@ fn load<T: Tracer, H: HeapFromState, In: Source, const INCREMENT: bool>(
     world: &mut dyn World<T>,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::HeapRead, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate::<H::Read, _>(vm, world, tracer, |vm, args, _| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
@@ -94,7 +100,7 @@ fn store<
     world: &mut dyn World<T>,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate_ext::<opcodes::HeapWrite, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate_ext::<H::Write, _>(vm, world, tracer, |vm, args, _| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
