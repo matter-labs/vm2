@@ -6,14 +6,14 @@ use crate::world_diff::ExternalSnapshot;
 use crate::{
     callframe::{Callframe, FrameRemnant},
     decommit::u256_into_address,
-    instruction_handlers::{free_panic, CallingMode},
+    instruction_handlers::{free_panic, CallingMode, NotifyTracer},
     stack::StackPool,
     state::State,
     world_diff::{Snapshot, WorldDiff},
     ExecutionEnd, Program, World,
 };
 use crate::{Instruction, ModeRequirements, Predicate};
-use eravm_stable_interface::{HeapId, Tracer};
+use eravm_stable_interface::{opcodes, HeapId, Tracer};
 use u256::H160;
 
 #[derive(Debug)]
@@ -100,7 +100,9 @@ impl<T: Tracer> VirtualMachine<T> {
                         return end;
                     };
                 } else {
+                    opcodes::Nop::before(tracer, self);
                     self.state.current_frame.pc = self.state.current_frame.pc.add(1);
+                    opcodes::Nop::after(tracer, self);
                 }
             }
         }

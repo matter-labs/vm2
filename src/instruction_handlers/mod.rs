@@ -1,3 +1,4 @@
+pub(crate) use common::NotifyTracer;
 pub use eravm_stable_interface::opcodes::{
     Add, And, Div, Mul, Or, PointerAdd, PointerPack, PointerShrink, PointerSub, RotateLeft,
     RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
