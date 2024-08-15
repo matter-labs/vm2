@@ -32,6 +32,13 @@ impl<T, W> StateInterface for VirtualMachine<T, W> {
             + 1
     }
 
+    fn current_frame(&mut self) -> impl CallframeInterface + '_ {
+        return CallframeWrapper {
+            frame: &mut self.state.current_frame,
+            near_call: None,
+        };
+    }
+
     fn callframe(&mut self, mut n: usize) -> impl CallframeInterface + '_ {
         for far_frame in std::iter::once(&mut self.state.current_frame)
             .chain(self.state.previous_frames.iter_mut().rev())
@@ -41,14 +48,12 @@ impl<T, W> StateInterface for VirtualMachine<T, W> {
                     return CallframeWrapper {
                         frame: far_frame,
                         near_call: Some(n),
-                        last_precompile_cycles: 0,
                     }
                 }
                 Ordering::Equal => {
                     return CallframeWrapper {
                         frame: far_frame,
                         near_call: None,
-                        last_precompile_cycles: 0,
                     }
                 }
                 Ordering::Greater => n -= far_frame.near_calls.len() + 1,
@@ -161,7 +166,6 @@ impl<T, W> StateInterface for VirtualMachine<T, W> {
 struct CallframeWrapper<'a, T, W> {
     frame: &'a mut Callframe<T, W>,
     near_call: Option<usize>,
-    last_precompile_cycles: usize,
 }
 
 impl<T, W> CallframeInterface for CallframeWrapper<'_, T, W> {
@@ -325,7 +329,7 @@ impl<T, W> CallframeInterface for CallframeWrapper<'_, T, W> {
     }
 
     fn last_precompile_cycles(&self) -> usize {
-        self.last_precompile_cycles
+        self.frame.last_precompile_cycles
     }
 }
 

@@ -6,6 +6,7 @@ pub trait StateInterface {
 
     fn number_of_callframes(&self) -> usize;
     /// zero is the current frame, one is the frame before that etc.
+    fn current_frame(&mut self) -> impl CallframeInterface + '_;
     fn callframe(&mut self, n: usize) -> impl CallframeInterface + '_;
 
     fn read_heap_byte(&self, heap: HeapId, index: u32) -> u8;
