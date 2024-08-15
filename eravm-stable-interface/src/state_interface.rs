@@ -343,4 +343,8 @@ impl CallframeInterface for DummyState {
     fn read_code_page(&self, _: u16) -> primitive_types::U256 {
         unimplemented!()
     }
+
+    fn last_precompile_cycles(&self) -> usize {
+        todo!()
+    }
 }
