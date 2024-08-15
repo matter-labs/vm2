@@ -7,7 +7,7 @@ use crate::{
     Instruction, VirtualMachine, World,
 };
 use eravm_stable_interface::{
-    opcodes::{self, Caller, CodeAddress, ErgsLeft, This, SP, U128},
+    opcodes::{self, Caller, CodeAddress, ContextU128, ErgsLeft, This, SP},
     Tracer,
 };
 use u256::U256;
@@ -52,7 +52,7 @@ impl ContextOp for ErgsLeft {
     }
 }
 
-impl ContextOp for U128 {
+impl ContextOp for ContextU128 {
     fn get<T>(state: &State<T>) -> U256 {
         state.get_context_u128().into()
     }
@@ -141,7 +141,7 @@ impl<T: Tracer> Instruction<T> {
         Self::from_context::<ErgsLeft>(out, arguments)
     }
     pub fn from_context_u128(out: Register1, arguments: Arguments) -> Self {
-        Self::from_context::<U128>(out, arguments)
+        Self::from_context::<ContextU128>(out, arguments)
     }
     pub fn from_context_sp(out: Register1, arguments: Arguments) -> Self {
         Self::from_context::<SP>(out, arguments)
