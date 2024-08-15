@@ -26,7 +26,7 @@ macro_rules! forall_opcodes {
         $m!(Caller, before_caller, after_caller);
         $m!(CodeAddress, before_code_address, after_code_address);
         $m!(ErgsLeft, before_ergs_left, after_ergs_left);
-        $m!(U128, before_u128, after_u128);
+        $m!(ContextU128, before_context_u128, after_context_u128);
         $m!(SP, before_sp, after_sp);
         $m!(ContextMeta, before_context_meta, after_context_meta);
         $m!(
@@ -148,9 +148,9 @@ pub mod opcodes {
     pub struct Caller;
     pub struct CodeAddress;
     pub struct ErgsLeft;
-    pub struct U128;
     pub struct SP;
     pub struct ContextMeta;
+    pub struct ContextU128;
     pub struct SetContextU128;
     pub struct IncrementTxNumber;
     pub struct AuxMutating0;
