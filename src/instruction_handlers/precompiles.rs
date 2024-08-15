@@ -66,16 +66,20 @@ fn precompile_call<T: Tracer, W>(
         let heaps = &mut vm.state.heaps;
         match address_low {
             KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
-                keccak256_rounds_function::<_, false>(0, query, heaps);
+                vm.state.current_frame.last_precompile_cycles =
+                    keccak256_rounds_function::<_, false>(0, query, heaps).0;
             }
             SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
-                sha256_rounds_function::<_, false>(0, query, heaps);
+                vm.state.current_frame.last_precompile_cycles =
+                    sha256_rounds_function::<_, false>(0, query, heaps).0;
             }
             ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS => {
-                ecrecover_function::<_, false>(0, query, heaps);
+                vm.state.current_frame.last_precompile_cycles =
+                    ecrecover_function::<_, false>(0, query, heaps).0;
             }
             SECP256R1_VERIFY_PRECOMPILE_ADDRESS => {
-                secp256r1_verify_function::<_, false>(0, query, heaps);
+                vm.state.current_frame.last_precompile_cycles =
+                    secp256r1_verify_function::<_, false>(0, query, heaps).0;
             }
             _ => {
                 // A precompile call may be used just to burn gas
