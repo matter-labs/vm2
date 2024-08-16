@@ -33,10 +33,10 @@ impl<T, W> StateInterface for VirtualMachine<T, W> {
     }
 
     fn current_frame(&mut self) -> impl CallframeInterface + '_ {
-        return CallframeWrapper {
+        CallframeWrapper {
             frame: &mut self.state.current_frame,
             near_call: None,
-        };
+        }
     }
 
     fn callframe(&mut self, mut n: usize) -> impl CallframeInterface + '_ {
