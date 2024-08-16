@@ -122,7 +122,7 @@ fn far_call<
         let new_frame_is_static = IS_STATIC || vm.state.current_frame.is_static;
         vm.push_frame::<M>(
             u256_into_address(destination_address),
-            program,
+            program.0,
             new_frame_gas,
             stipend,
             exception_handler,
@@ -130,6 +130,8 @@ fn far_call<
             calldata.memory_page,
             vm.world_diff.snapshot(),
         );
+
+        vm.state.current_frame.last_precompile_cycles = program.1;
 
         vm.state.flags = Flags::new(false, false, false);
 
