@@ -54,8 +54,44 @@ macro_rules! pub_struct {
 
 pub mod opcodes {
     forall_simple_opcodes!(pub_struct);
-    pub struct FarCall<const M: u8>;
-    pub struct Ret<const M: u8>;
+    pub struct FarCall<M: TypeLevelCallingMode>(M);
+    pub struct Ret<T: TypeLevelReturnType>(T);
+
+    pub struct Normal;
+    pub struct Delegate;
+    pub struct Mimic;
+    pub struct Revert;
+    pub struct Panic;
+
+    use super::{CallingMode, ReturnType};
+
+    pub trait TypeLevelCallingMode {
+        const VALUE: CallingMode;
+    }
+
+    impl TypeLevelCallingMode for Normal {
+        const VALUE: CallingMode = CallingMode::Normal;
+    }
+    impl TypeLevelCallingMode for Delegate {
+        const VALUE: CallingMode = CallingMode::Delegate;
+    }
+    impl TypeLevelCallingMode for Mimic {
+        const VALUE: CallingMode = CallingMode::Mimic;
+    }
+
+    pub trait TypeLevelReturnType {
+        const VALUE: ReturnType;
+    }
+
+    impl TypeLevelReturnType for Normal {
+        const VALUE: ReturnType = ReturnType::Normal;
+    }
+    impl TypeLevelReturnType for Revert {
+        const VALUE: ReturnType = ReturnType::Revert;
+    }
+    impl TypeLevelReturnType for Panic {
+        const VALUE: ReturnType = ReturnType::Panic;
+    }
 }
 
 #[derive(PartialEq, Eq)]
@@ -106,28 +142,15 @@ pub enum Opcode {
 }
 
 #[derive(PartialEq, Eq)]
-#[repr(u8)]
 pub enum CallingMode {
-    Normal = 0,
+    Normal,
     Delegate,
     Mimic,
 }
 
-impl CallingMode {
-    pub const fn from_u8(value: u8) -> Self {
-        match value {
-            0 => CallingMode::Normal,
-            1 => CallingMode::Delegate,
-            2 => CallingMode::Mimic,
-            _ => unreachable!(),
-        }
-    }
-}
-
-#[repr(u8)]
 #[derive(PartialEq, Eq)]
 pub enum ReturnType {
-    Normal = 0,
+    Normal,
     Revert,
     Panic,
 }
@@ -135,15 +158,6 @@ pub enum ReturnType {
 impl ReturnType {
     pub fn is_failure(&self) -> bool {
         *self != ReturnType::Normal
-    }
-
-    pub const fn from_u8(value: u8) -> Self {
-        match value {
-            0 => ReturnType::Normal,
-            1 => ReturnType::Revert,
-            2 => ReturnType::Panic,
-            _ => unreachable!(),
-        }
     }
 }
 
@@ -161,12 +175,12 @@ macro_rules! impl_opcode {
 
 forall_simple_opcodes!(impl_opcode);
 
-impl<const M: u8> OpcodeType for opcodes::FarCall<M> {
-    const VALUE: Opcode = Opcode::FarCall(CallingMode::from_u8(M));
+impl<M: opcodes::TypeLevelCallingMode> OpcodeType for opcodes::FarCall<M> {
+    const VALUE: Opcode = Opcode::FarCall(M::VALUE);
 }
 
-impl<const M: u8> OpcodeType for opcodes::Ret<M> {
-    const VALUE: Opcode = Opcode::Ret(ReturnType::from_u8(M));
+impl<T: opcodes::TypeLevelReturnType> OpcodeType for opcodes::Ret<T> {
+    const VALUE: Opcode = Opcode::Ret(T::VALUE);
 }
 
 /// Implement this for a type that holds the state of your tracer.
@@ -232,14 +246,10 @@ mod tests {
         tracer.before_instruction::<opcodes::Nop, _>(&mut DummyState);
         assert_eq!(tracer.0, 0);
 
-        tracer.before_instruction::<opcodes::FarCall<{ CallingMode::Normal as u8 }>, _>(
-            &mut DummyState,
-        );
+        tracer.before_instruction::<opcodes::FarCall<opcodes::Normal>, _>(&mut DummyState);
         assert_eq!(tracer.0, 1);
 
-        tracer.before_instruction::<opcodes::FarCall<{ CallingMode::Delegate as u8 }>, _>(
-            &mut DummyState,
-        );
+        tracer.before_instruction::<opcodes::FarCall<opcodes::Mimic>, _>(&mut DummyState);
         assert_eq!(tracer.0, 1);
     }
 
@@ -252,9 +262,7 @@ mod tests {
         assert_eq!(tracer.1 .0 .0, 0);
         assert_eq!(tracer.1 .1 .0, 0);
 
-        tracer.before_instruction::<opcodes::FarCall<{ CallingMode::Normal as u8 }>, _>(
-            &mut DummyState,
-        );
+        tracer.before_instruction::<opcodes::FarCall<opcodes::Normal>, _>(&mut DummyState);
         assert_eq!(tracer.0 .0, 1);
         assert_eq!(tracer.1 .0 .0, 1);
         assert_eq!(tracer.1 .1 .0, 1);

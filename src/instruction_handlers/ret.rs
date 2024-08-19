@@ -7,16 +7,19 @@ use crate::{
     predication::Flags,
     Instruction, Predicate, VirtualMachine, World,
 };
-use eravm_stable_interface::{opcodes, ReturnType, Tracer};
+use eravm_stable_interface::{
+    opcodes::{self, TypeLevelReturnType},
+    ReturnType, Tracer,
+};
 use u256::U256;
 
-fn ret<T: Tracer, const RETURN_TYPE: u8, const TO_LABEL: bool>(
+fn ret<T: Tracer, RT: TypeLevelReturnType, const TO_LABEL: bool>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate_ext::<opcodes::Ret<RETURN_TYPE>, _>(vm, world, tracer, |vm, args, _| {
-        let mut return_type = ReturnType::from_u8(RETURN_TYPE);
+    instruction_boilerplate_ext::<opcodes::Ret<RT>, _>(vm, world, tracer, |vm, args, _| {
+        let mut return_type = RT::VALUE;
         let near_call_leftover_gas = vm.state.current_frame.gas;
 
         let (snapshot, leftover_gas) = if let Some(FrameRemnant {
@@ -155,33 +158,31 @@ pub(crate) fn free_panic<T: Tracer>(
     world: &mut dyn World<T>,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    ret::<T, { ReturnType::Panic as u8 }, false>(vm, world, tracer)
+    ret::<T, opcodes::Panic, false>(vm, world, tracer)
 }
 
 use super::monomorphization::*;
+use eravm_stable_interface::opcodes::{Normal, Panic, Revert};
 
 impl<T: Tracer> Instruction<T> {
     pub fn from_ret(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
-        const RETURN_TYPE: u8 = ReturnType::Normal as u8;
         Self {
-            handler: monomorphize!(ret [T RETURN_TYPE] match_boolean to_label),
+            handler: monomorphize!(ret [T Normal] match_boolean to_label),
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
     pub fn from_revert(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
-        const RETURN_TYPE: u8 = ReturnType::Revert as u8;
         Self {
-            handler: monomorphize!(ret [T RETURN_TYPE] match_boolean to_label),
+            handler: monomorphize!(ret [T Revert] match_boolean to_label),
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
     pub fn from_panic(label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
-        const RETURN_TYPE: u8 = ReturnType::Panic as u8;
         Self {
-            handler: monomorphize!(ret [T RETURN_TYPE] match_boolean to_label),
+            handler: monomorphize!(ret [T Panic] match_boolean to_label),
             arguments: arguments.write_source(&label),
         }
     }
@@ -189,7 +190,7 @@ impl<T: Tracer> Instruction<T> {
     pub const fn from_invalid() -> Self {
         Self {
             // This field is never read because the instruction fails at the gas cost stage.
-            handler: ret::<T, { ReturnType::Panic as u8 }, false>,
+            handler: ret::<T, Panic, false>,
             arguments: Arguments::new(
                 Predicate::Always,
                 INVALID_INSTRUCTION_COST,

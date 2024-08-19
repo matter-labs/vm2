@@ -12,7 +12,10 @@ use crate::{
     predication::Flags,
     Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::{opcodes::FarCall, Tracer};
+use eravm_stable_interface::{
+    opcodes::{FarCall, TypeLevelCallingMode},
+    Tracer,
+};
 use u256::U256;
 use zkevm_opcode_defs::{
     system_params::{EVM_SIMULATOR_STIPEND, MSG_VALUE_SIMULATOR_ADDITIVE_COST},
@@ -29,12 +32,12 @@ use zkevm_opcode_defs::{
 ///
 /// Even though all errors happen before the new stack frame, they cause a panic in the new frame,
 /// not in the caller!
-fn far_call<T: Tracer, const CALLING_MODE: u8, const IS_STATIC: bool, const IS_SHARD: bool>(
+fn far_call<T: Tracer, M: TypeLevelCallingMode, const IS_STATIC: bool, const IS_SHARD: bool>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<FarCall<CALLING_MODE>, _>(vm, world, tracer, |vm, args, world| {
+    instruction_boilerplate::<FarCall<M>, _>(vm, world, tracer, |vm, args, world| {
         let (raw_abi, raw_abi_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
 
         let address_mask: U256 = U256::MAX >> (256 - 160);
@@ -111,7 +114,7 @@ fn far_call<T: Tracer, const CALLING_MODE: u8, const IS_STATIC: bool, const IS_S
             .expect("stipend must not cause overflow");
 
         let new_frame_is_static = IS_STATIC || vm.state.current_frame.is_static;
-        vm.push_frame::<CALLING_MODE>(
+        vm.push_frame::<M>(
             u256_into_address(destination_address),
             program,
             new_frame_gas,
@@ -253,7 +256,7 @@ impl FatPointer {
 use super::monomorphization::*;
 
 impl<T: Tracer> Instruction<T> {
-    pub fn from_far_call<const MODE: u8>(
+    pub fn from_far_call<M: TypeLevelCallingMode>(
         src1: Register1,
         src2: Register2,
         error_handler: Immediate1,
@@ -262,7 +265,7 @@ impl<T: Tracer> Instruction<T> {
         arguments: Arguments,
     ) -> Self {
         Self {
-            handler: monomorphize!(far_call [T MODE] match_boolean is_static match_boolean is_shard),
+            handler: monomorphize!(far_call [T M] match_boolean is_static match_boolean is_shard),
             arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)

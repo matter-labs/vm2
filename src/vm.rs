@@ -13,6 +13,7 @@ use crate::{
     ExecutionEnd, Program, World,
 };
 use crate::{Instruction, ModeRequirements, Predicate};
+use eravm_stable_interface::opcodes::TypeLevelCallingMode;
 use eravm_stable_interface::{opcodes, CallingMode, HeapId, Tracer};
 use u256::H160;
 
@@ -202,7 +203,7 @@ impl<T: Tracer> VirtualMachine<T> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn push_frame<const CALLING_MODE: u8>(
+    pub(crate) fn push_frame<M: TypeLevelCallingMode>(
         &mut self,
         code_address: H160,
         program: Program<T>,
@@ -214,19 +215,16 @@ impl<T: Tracer> VirtualMachine<T> {
         world_before_this_frame: Snapshot,
     ) {
         let mut new_frame = Callframe::new(
-            if CALLING_MODE == CallingMode::Delegate as u8 {
+            if M::VALUE == CallingMode::Delegate {
                 self.state.current_frame.address
             } else {
                 code_address
             },
             code_address,
-            if CALLING_MODE == CallingMode::Normal as u8 {
-                self.state.current_frame.address
-            } else if CALLING_MODE == CallingMode::Delegate as u8 {
-                self.state.current_frame.caller
-            } else {
-                // Mimic call
-                u256_into_address(self.state.registers[15])
+            match M::VALUE {
+                CallingMode::Normal => self.state.current_frame.address,
+                CallingMode::Delegate => self.state.current_frame.caller,
+                CallingMode::Mimic => u256_into_address(self.state.registers[15]),
             },
             program,
             self.stack_pool.get(),
@@ -236,7 +234,7 @@ impl<T: Tracer> VirtualMachine<T> {
             gas,
             stipend,
             exception_handler,
-            if CALLING_MODE == CallingMode::Delegate as u8 {
+            if M::VALUE == CallingMode::Delegate {
                 self.state.current_frame.context_u128
             } else {
                 self.state.context_u128

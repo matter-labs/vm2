@@ -13,7 +13,7 @@ use crate::{
     mode_requirements::ModeRequirements,
     Instruction, Predicate, VirtualMachine, World,
 };
-use eravm_stable_interface::{CallingMode, Tracer};
+use eravm_stable_interface::{opcodes, Tracer};
 use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
     ImmMemHandlerFlags, Opcode,
@@ -210,13 +210,13 @@ pub(crate) fn decode<T: Tracer>(raw: u64, is_bootloader: bool) -> Instruction<T>
         zkevm_opcode_defs::Opcode::FarCall(kind) => {
             let constructor = match kind {
                 zkevm_opcode_defs::FarCallOpcode::Normal => {
-                    Instruction::from_far_call::<{ CallingMode::Normal as u8 }>
+                    Instruction::from_far_call::<opcodes::Normal>
                 }
                 zkevm_opcode_defs::FarCallOpcode::Delegate => {
-                    Instruction::from_far_call::<{ CallingMode::Delegate as u8 }>
+                    Instruction::from_far_call::<opcodes::Delegate>
                 }
                 zkevm_opcode_defs::FarCallOpcode::Mimic => {
-                    Instruction::from_far_call::<{ CallingMode::Mimic as u8 }>
+                    Instruction::from_far_call::<opcodes::Mimic>
                 }
             };
             constructor(
