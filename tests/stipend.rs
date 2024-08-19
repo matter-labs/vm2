@@ -1,5 +1,6 @@
 #![cfg(not(feature = "single_instruction_test"))]
 
+use eravm_stable_interface::CallingMode;
 use u256::U256;
 use vm2::{
     address_into_u256,
@@ -7,7 +8,7 @@ use vm2::{
         Arguments, CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
     },
     initial_decommit,
-    instruction_handlers::{Add, CallingMode},
+    instruction_handlers::Add,
     testworld::TestWorld,
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, VirtualMachine,
 };

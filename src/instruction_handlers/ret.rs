@@ -7,38 +7,15 @@ use crate::{
     predication::Flags,
     Instruction, Predicate, VirtualMachine, World,
 };
-use eravm_stable_interface::{opcodes, Tracer};
+use eravm_stable_interface::{opcodes, ReturnType, Tracer};
 use u256::U256;
-
-#[repr(u8)]
-#[derive(PartialEq)]
-enum ReturnType {
-    Normal = 0,
-    Revert,
-    Panic,
-}
-
-impl ReturnType {
-    fn is_failure(&self) -> bool {
-        *self != ReturnType::Normal
-    }
-
-    fn from_u8(value: u8) -> Self {
-        match value {
-            0 => ReturnType::Normal,
-            1 => ReturnType::Revert,
-            2 => ReturnType::Panic,
-            _ => unreachable!(),
-        }
-    }
-}
 
 fn ret<T: Tracer, const RETURN_TYPE: u8, const TO_LABEL: bool>(
     vm: &mut VirtualMachine<T>,
     world: &mut dyn World<T>,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate_ext::<opcodes::Ret, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate_ext::<opcodes::Ret<RETURN_TYPE>, _>(vm, world, tracer, |vm, args, _| {
         let mut return_type = ReturnType::from_u8(RETURN_TYPE);
         let near_call_leftover_gas = vm.state.current_frame.gas;
 

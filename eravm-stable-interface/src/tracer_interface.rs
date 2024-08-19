@@ -1,6 +1,6 @@
 use crate::StateInterface;
 
-macro_rules! forall_opcodes {
+macro_rules! forall_simple_opcodes {
     ($m:ident) => {
         $m!(Nop);
         $m!(Add);
@@ -15,8 +15,6 @@ macro_rules! forall_opcodes {
         $m!(Mul);
         $m!(Div);
         $m!(NearCall);
-        $m!(FarCall);
-        $m!(Ret);
         $m!(Jump);
         $m!(Event);
         $m!(L2ToL1Message);
@@ -55,7 +53,9 @@ macro_rules! pub_struct {
 }
 
 pub mod opcodes {
-    forall_opcodes!(pub_struct);
+    forall_simple_opcodes!(pub_struct);
+    pub struct FarCall<const M: u8>;
+    pub struct Ret<const M: u8>;
 }
 
 #[derive(PartialEq, Eq)]
@@ -73,8 +73,8 @@ pub enum Opcode {
     Mul,
     Div,
     NearCall,
-    FarCall,
-    Ret,
+    FarCall(CallingMode),
+    Ret(ReturnType),
     Jump,
     Event,
     L2ToL1Message,
@@ -105,6 +105,48 @@ pub enum Opcode {
     TransientStorageWrite,
 }
 
+#[derive(PartialEq, Eq)]
+#[repr(u8)]
+pub enum CallingMode {
+    Normal = 0,
+    Delegate,
+    Mimic,
+}
+
+impl CallingMode {
+    pub const fn from_u8(value: u8) -> Self {
+        match value {
+            0 => CallingMode::Normal,
+            1 => CallingMode::Delegate,
+            2 => CallingMode::Mimic,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[repr(u8)]
+#[derive(PartialEq, Eq)]
+pub enum ReturnType {
+    Normal = 0,
+    Revert,
+    Panic,
+}
+
+impl ReturnType {
+    pub fn is_failure(&self) -> bool {
+        *self != ReturnType::Normal
+    }
+
+    pub const fn from_u8(value: u8) -> Self {
+        match value {
+            0 => ReturnType::Normal,
+            1 => ReturnType::Revert,
+            2 => ReturnType::Panic,
+            _ => unreachable!(),
+        }
+    }
+}
+
 pub trait OpcodeType {
     const VALUE: Opcode;
 }
@@ -117,7 +159,15 @@ macro_rules! impl_opcode {
     };
 }
 
-forall_opcodes!(impl_opcode);
+forall_simple_opcodes!(impl_opcode);
+
+impl<const M: u8> OpcodeType for opcodes::FarCall<M> {
+    const VALUE: Opcode = Opcode::FarCall(CallingMode::from_u8(M));
+}
+
+impl<const M: u8> OpcodeType for opcodes::Ret<M> {
+    const VALUE: Opcode = Opcode::Ret(ReturnType::from_u8(M));
+}
 
 pub trait Tracer {
     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
@@ -131,7 +181,7 @@ pub trait Tracer {
 /// impl Tracer for FarCallCounter {
 ///     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S) {
 ///         match OP::VALUE {
-///             Opcode::FarCall => self.0 += 1,
+///             Opcode::FarCall(_) => self.0 += 1,
 ///             _ => {}
 ///         }
 ///     }
@@ -155,16 +205,16 @@ impl<A: Tracer, B: Tracer> Tracer for (A, B) {
 
 #[cfg(test)]
 mod tests {
+    use super::{CallingMode, OpcodeType};
     use crate::{opcodes, DummyState, Tracer};
-
-    use super::OpcodeType;
 
     struct FarCallCounter(usize);
 
     impl Tracer for FarCallCounter {
         fn before_instruction<OP: OpcodeType, S: crate::StateInterface>(&mut self, _: &mut S) {
-            if OP::VALUE == super::Opcode::FarCall {
-                self.0 += 1;
+            match OP::VALUE {
+                super::Opcode::FarCall(CallingMode::Normal) => self.0 += 1,
+                _ => {}
             }
         }
     }
@@ -176,7 +226,14 @@ mod tests {
         tracer.before_instruction::<opcodes::Nop, _>(&mut DummyState);
         assert_eq!(tracer.0, 0);
 
-        tracer.before_instruction::<opcodes::FarCall, _>(&mut DummyState);
+        tracer.before_instruction::<opcodes::FarCall<{ CallingMode::Normal as u8 }>, _>(
+            &mut DummyState,
+        );
+        assert_eq!(tracer.0, 1);
+
+        tracer.before_instruction::<opcodes::FarCall<{ CallingMode::Delegate as u8 }>, _>(
+            &mut DummyState,
+        );
         assert_eq!(tracer.0, 1);
     }
 
@@ -189,7 +246,9 @@ mod tests {
         assert_eq!(tracer.1 .0 .0, 0);
         assert_eq!(tracer.1 .1 .0, 0);
 
-        tracer.before_instruction::<opcodes::FarCall, _>(&mut DummyState);
+        tracer.before_instruction::<opcodes::FarCall<{ CallingMode::Normal as u8 }>, _>(
+            &mut DummyState,
+        );
         assert_eq!(tracer.0 .0, 1);
         assert_eq!(tracer.1 .0 .0, 1);
         assert_eq!(tracer.1 .1 .0, 1);

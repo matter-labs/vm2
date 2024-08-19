@@ -12,19 +12,12 @@ use crate::{
     predication::Flags,
     Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::{opcodes, Tracer};
+use eravm_stable_interface::{opcodes::FarCall, Tracer};
 use u256::U256;
 use zkevm_opcode_defs::{
     system_params::{EVM_SIMULATOR_STIPEND, MSG_VALUE_SIMULATOR_ADDITIVE_COST},
     ADDRESS_MSG_VALUE,
 };
-
-#[repr(u8)]
-pub enum CallingMode {
-    Normal,
-    Delegate,
-    Mimic,
-}
 
 /// A call to another contract.
 ///
@@ -41,7 +34,7 @@ fn far_call<T: Tracer, const CALLING_MODE: u8, const IS_STATIC: bool, const IS_S
     world: &mut dyn World<T>,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::FarCall, _>(vm, world, tracer, |vm, args, world| {
+    instruction_boilerplate::<FarCall<CALLING_MODE>, _>(vm, world, tracer, |vm, args, world| {
         let (raw_abi, raw_abi_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
 
         let address_mask: U256 = U256::MAX >> (256 - 160);

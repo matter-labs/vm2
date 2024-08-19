@@ -6,14 +6,14 @@ use crate::{
     },
     instruction::{ExecutionEnd, ExecutionStatus},
     instruction_handlers::{
-        Add, And, AuxHeap, CallingMode, Div, Heap, Mul, Or, PointerAdd, PointerPack, PointerShrink,
-        PointerSub, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
+        Add, And, AuxHeap, Div, Heap, Mul, Or, PointerAdd, PointerPack, PointerShrink, PointerSub,
+        RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
     },
     jump_to_beginning,
     mode_requirements::ModeRequirements,
     Instruction, Predicate, VirtualMachine, World,
 };
-use eravm_stable_interface::Tracer;
+use eravm_stable_interface::{CallingMode, Tracer};
 use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
     ImmMemHandlerFlags, Opcode,
