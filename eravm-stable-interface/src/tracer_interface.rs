@@ -169,12 +169,15 @@ impl<const M: u8> OpcodeType for opcodes::Ret<M> {
     const VALUE: Opcode = Opcode::Ret(ReturnType::from_u8(M));
 }
 
-pub trait Tracer {
-    fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
-    fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
-}
-
-/// For example, here `FarCallCounter` counts the number of far calls.
+/// Implement this for a type that holds the state of your tracer.
+///
+/// [Tracer::before_instruction] is called just before the actual instruction is executed.
+/// If the instruction is skipped, `before_instruction` will be called with [Nop](opcodes::Nop).
+/// [Tracer::after_instruction] is called once the instruction is executed and the program
+/// counter has advanced.
+///
+/// # Examples
+/// Here `FarCallCounter` counts the number of far calls.
 /// ```
 /// use eravm_stable_interface::{Tracer, StateInterface, OpcodeType, Opcode};
 /// struct FarCallCounter(usize);
@@ -187,6 +190,10 @@ pub trait Tracer {
 ///     }
 /// }
 /// ```
+pub trait Tracer {
+    fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
+    fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
+}
 
 impl Tracer for () {}
 
