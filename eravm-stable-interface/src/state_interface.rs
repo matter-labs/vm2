@@ -38,8 +38,6 @@ pub trait StateInterface {
 
     /// it is run in kernel mode
     fn run_arbitrary_code(code: &[u64]);
-
-    fn static_heap(&self) -> HeapId;
 }
 
 pub struct Flags {
@@ -262,10 +260,6 @@ impl StateInterface for DummyState {
     }
 
     fn run_arbitrary_code(_: &[u64]) {
-        unimplemented!()
-    }
-
-    fn static_heap(&self) -> crate::HeapId {
         unimplemented!()
     }
 }
