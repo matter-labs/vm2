@@ -154,10 +154,6 @@ impl<T> StateInterface for VirtualMachine<T> {
     fn set_pubdata(&mut self, value: i32) {
         self.world_diff.pubdata.0 = value;
     }
-
-    fn run_arbitrary_code(_code: &[u64]) {
-        todo!()
-    }
 }
 
 struct CallframeWrapper<'a, T> {

@@ -31,9 +31,6 @@ pub trait StateInterface {
 
     fn pubdata(&self) -> i32;
     fn set_pubdata(&mut self, value: i32);
-
-    /// it is run in kernel mode
-    fn run_arbitrary_code(code: &[u64]);
 }
 
 pub struct Flags {
@@ -227,10 +224,6 @@ impl StateInterface for DummyState {
     }
 
     fn set_pubdata(&mut self, _: i32) {
-        unimplemented!()
-    }
-
-    fn run_arbitrary_code(_: &[u64]) {
         unimplemented!()
     }
 }
