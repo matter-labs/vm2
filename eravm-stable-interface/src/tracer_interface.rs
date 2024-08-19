@@ -212,9 +212,8 @@ mod tests {
 
     impl Tracer for FarCallCounter {
         fn before_instruction<OP: OpcodeType, S: crate::StateInterface>(&mut self, _: &mut S) {
-            match OP::VALUE {
-                super::Opcode::FarCall(CallingMode::Normal) => self.0 += 1,
-                _ => {}
+            if let super::Opcode::FarCall(CallingMode::Normal) = OP::VALUE {
+                self.0 += 1;
             }
         }
     }
