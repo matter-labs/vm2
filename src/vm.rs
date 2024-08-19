@@ -6,7 +6,7 @@ use crate::world_diff::ExternalSnapshot;
 use crate::{
     callframe::{Callframe, FrameRemnant},
     decommit::u256_into_address,
-    instruction_handlers::{free_panic, CallingMode, NotifyTracer},
+    instruction_handlers::{free_panic, CallingMode},
     stack::StackPool,
     state::State,
     world_diff::{Snapshot, WorldDiff},
@@ -100,9 +100,9 @@ impl<T: Tracer> VirtualMachine<T> {
                         return end;
                     };
                 } else {
-                    opcodes::Nop::before(tracer, self);
+                    tracer.before_instruction::<opcodes::Nop, _>(self);
                     self.state.current_frame.pc = self.state.current_frame.pc.add(1);
-                    opcodes::Nop::after(tracer, self);
+                    tracer.after_instruction::<opcodes::Nop, _>(self);
                 }
             }
         }

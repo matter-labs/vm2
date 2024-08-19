@@ -1,4 +1,4 @@
-use super::common::{instruction_boilerplate, NotifyTracer};
+use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Source},
     decommit::address_into_u256,
@@ -8,7 +8,7 @@ use crate::{
 };
 use eravm_stable_interface::{
     opcodes::{self, Caller, CodeAddress, ContextU128, ErgsLeft, This, SP},
-    Tracer,
+    OpcodeType, Tracer,
 };
 use u256::U256;
 use zkevm_opcode_defs::VmMetaParameters;
@@ -24,7 +24,7 @@ fn context<T: Tracer, Op: ContextOp>(
     })
 }
 
-trait ContextOp: NotifyTracer {
+trait ContextOp: OpcodeType {
     fn get<T>(state: &State<T>) -> U256;
 }
 

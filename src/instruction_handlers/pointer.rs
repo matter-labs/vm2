@@ -1,4 +1,4 @@
-use super::common::{instruction_boilerplate, NotifyTracer};
+use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
@@ -10,7 +10,7 @@ use crate::{
 };
 use eravm_stable_interface::{
     opcodes::{PointerAdd, PointerPack, PointerShrink, PointerSub},
-    Tracer,
+    OpcodeType, Tracer,
 };
 use u256::U256;
 
@@ -46,7 +46,7 @@ fn ptr<T: Tracer, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     })
 }
 
-pub trait PtrOp: NotifyTracer {
+pub trait PtrOp: OpcodeType {
     fn perform(in1: U256, in2: U256) -> Option<U256>;
 }
 

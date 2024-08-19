@@ -1,4 +1,4 @@
-use super::common::{instruction_boilerplate, instruction_boilerplate_ext, NotifyTracer};
+use super::common::{instruction_boilerplate, instruction_boilerplate_ext};
 use crate::{
     addressing_modes::{
         Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
@@ -9,7 +9,7 @@ use crate::{
     state::State,
     ExecutionEnd, HeapId, Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::{opcodes, Tracer};
+use eravm_stable_interface::{opcodes, OpcodeType, Tracer};
 use std::ops::Range;
 use u256::U256;
 
@@ -22,8 +22,8 @@ pub trait HeapInterface {
 pub trait HeapFromState {
     fn get_heap<T>(state: &State<T>) -> HeapId;
     fn get_heap_size<T>(state: &mut State<T>) -> &mut u32;
-    type Read: NotifyTracer;
-    type Write: NotifyTracer;
+    type Read: OpcodeType;
+    type Write: OpcodeType;
 }
 
 pub struct Heap;

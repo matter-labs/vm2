@@ -1,4 +1,4 @@
-use super::common::{instruction_boilerplate, NotifyTracer};
+use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{
         AbsoluteStack, Addressable, AdvanceStackPointer, AnyDestination, AnySource, Arguments,
@@ -11,7 +11,7 @@ use crate::{
 };
 use eravm_stable_interface::{
     opcodes::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor},
-    Tracer,
+    OpcodeType, Tracer,
 };
 use u256::U256;
 
@@ -41,7 +41,7 @@ fn binop<
     })
 }
 
-pub trait Binop: NotifyTracer {
+pub trait Binop: OpcodeType {
     type Out2: SecondOutput;
     fn perform(a: &U256, b: &U256) -> (U256, Self::Out2, Flags);
 }
