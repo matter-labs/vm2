@@ -21,10 +21,6 @@ pub trait StateInterface {
     fn set_context_u128_register(&mut self, value: u128);
 
     fn get_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)>;
-    /// Returns the new value and the amount of pubdata paid for it.
-    fn get_storage(&self, address: H160, slot: U256) -> Option<(U256, u32)>;
-    fn get_storage_initial_value(&self, address: H160, slot: U256) -> U256;
-    fn write_storage(&mut self, address: H160, slot: U256, value: U256);
 
     fn get_transient_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)>;
     fn get_transient_storage(&self, address: H160, slot: U256) -> U256;
@@ -188,31 +184,6 @@ impl StateInterface for DummyState {
         ),
     > {
         std::iter::empty()
-    }
-
-    fn get_storage(
-        &self,
-        _: primitive_types::H160,
-        _: primitive_types::U256,
-    ) -> Option<(primitive_types::U256, u32)> {
-        unimplemented!()
-    }
-
-    fn get_storage_initial_value(
-        &self,
-        _: primitive_types::H160,
-        _: primitive_types::U256,
-    ) -> primitive_types::U256 {
-        unimplemented!()
-    }
-
-    fn write_storage(
-        &mut self,
-        _: primitive_types::H160,
-        _: primitive_types::U256,
-        _: primitive_types::U256,
-    ) {
-        unimplemented!()
     }
 
     fn get_transient_storage_state(

@@ -99,18 +99,6 @@ impl<T> StateInterface for VirtualMachine<T> {
             .map(|(key, value)| (*key, *value))
     }
 
-    fn get_storage(&self, _address: u256::H160, _slot: u256::U256) -> Option<(u256::U256, u32)> {
-        todo!() // Do we really want to expose the pubdata?
-    }
-
-    fn get_storage_initial_value(&self, _address: u256::H160, _slot: u256::U256) -> u256::U256 {
-        todo!() // Do we really want to expose the caching?
-    }
-
-    fn write_storage(&mut self, _address: u256::H160, _slot: u256::U256, _value: u256::U256) {
-        todo!()
-    }
-
     fn get_transient_storage_state(
         &self,
     ) -> impl Iterator<Item = ((u256::H160, u256::U256), u256::U256)> {
@@ -130,11 +118,12 @@ impl<T> StateInterface for VirtualMachine<T> {
 
     fn write_transient_storage(
         &mut self,
-        _address: u256::H160,
-        _slot: u256::U256,
-        _value: u256::U256,
+        address: u256::H160,
+        slot: u256::U256,
+        value: u256::U256,
     ) {
-        todo!()
+        self.world_diff
+            .write_transient_storage(address, slot, value)
     }
 
     fn events(&self) -> impl Iterator<Item = Event> {
@@ -167,10 +156,6 @@ impl<T> StateInterface for VirtualMachine<T> {
     }
 
     fn run_arbitrary_code(_code: &[u64]) {
-        todo!()
-    }
-
-    fn static_heap(&self) -> HeapId {
         todo!()
     }
 }
