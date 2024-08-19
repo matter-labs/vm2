@@ -24,46 +24,60 @@
 //!
 //! This is how you would add a new method to StateInterface and a new opcode.
 //! ```
-//! # trait StateInterface {}
-//! # trait Tracer {
-//! #     #[inline(always)]
-//! #     fn before_old_opcode<S: StateInterface>(&mut self, _state: &mut S) {}
-//! #     #[inline(always)]
-//! #     fn after_old_opcode<S: StateInterface>(&mut self, _state: &mut S) {}
-//! # }
+//! # use eravm_stable_interface as eravm_stable_interface_v1;
+//! use eravm_stable_interface_v1::{StateInterface as StateInterfaceV1, Tracer as TracerV1, opcodes::NearCall};
 //!
-//! trait StateInterfaceV2: StateInterface {
+//! trait StateInterface: StateInterfaceV1 {
 //!     fn get_some_new_field(&self) -> u32;
 //! }
 //!
-//! trait TracerV2 {
-//!     // redefine all existing opcodes
-//!     #[inline(always)]
-//!     fn before_old_opcode<S: StateInterfaceV2>(&mut self, _state: &mut S) {}
-//!     #[inline(always)]
-//!     fn after_old_opcode<S: StateInterfaceV2>(&mut self, _state: &mut S) {}
+//! pub struct NewOpcode;
 //!
-//!     #[inline(always)]
-//!     fn before_new_opcode<S: StateInterfaceV2>(&mut self, _state: &mut S) {}
-//!     #[inline(always)]
-//!     fn after_new_opcode<S: StateInterfaceV2>(&mut self, _state: &mut S) {}
+//! #[derive(PartialEq, Eq)]
+//! enum Opcode {
+//!     NewOpcode,
+//!     NearCall,
+//!     // ...
 //! }
 //!
-//! impl<T: Tracer> TracerV2 for T {
-//!     // repeat this for all existing opcodes
-//!     fn before_old_opcode<S: StateInterfaceV2>(&mut self, state: &mut S) {
-//!         <Self as Tracer>::before_old_opcode(self, state);
+//! trait OpcodeType {
+//!     const VALUE: Opcode;
+//! }
+//!
+//! impl OpcodeType for NewOpcode {
+//!     const VALUE: Opcode = Opcode::NewOpcode;
+//! }
+//!
+//! // Do this for every old opcode
+//! impl OpcodeType for NearCall {
+//!     const VALUE: Opcode = Opcode::NearCall;
+//! }
+//!
+//! trait Tracer {
+//!     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
+//!     fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
+//! }
+//!
+//! impl<T: TracerV1> Tracer for T {
+//!     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S) {
+//!         match OP::VALUE {
+//!             Opcode::NewOpcode => {}
+//!             // Do this for every old opcode
+//!             Opcode::NearCall => {
+//!                 <Self as TracerV1>::before_instruction::<NearCall, _>(self, state)
+//!             }
+//!         }
 //!     }
-//!     fn after_old_opcode<S: StateInterfaceV2>(&mut self, state: &mut S) {
-//!         <Self as Tracer>::after_old_opcode(self, state);
-//!     }
+//!     fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
 //! }
 //!
 //! // Now you can use the new features by implementing TracerV2
 //! struct MyTracer;
-//! impl TracerV2 for MyTracer {
-//!     fn before_new_opcode<S: StateInterfaceV2>(&mut self, state: &mut S) {
-//!         state.get_some_new_field();
+//! impl Tracer for MyTracer {
+//!     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S) {
+//!         if OP::VALUE == Opcode::NewOpcode {
+//!             state.get_some_new_field();
+//!         }
 //!     }
 //! }
 //! ```
