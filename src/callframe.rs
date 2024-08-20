@@ -29,7 +29,7 @@ pub struct Callframe<T> {
 
     pub(crate) near_calls: Vec<NearCallFrame>,
 
-    pub pc: *const Instruction<T>,
+    pub(crate) pc: *const Instruction<T>,
     pub(crate) program: Program<T>,
 
     pub heap: HeapId,
