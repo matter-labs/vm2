@@ -171,6 +171,7 @@ impl<T> Callframe<T> {
 
             context_u128: self.context_u128,
             sp: self.sp,
+            pc: self.get_pc_as_u16(),
             gas: self.gas,
             near_calls: self.near_calls.clone(),
             heap_size: self.heap_size,
@@ -189,6 +190,7 @@ impl<T> Callframe<T> {
             stack,
             context_u128,
             sp,
+            pc,
             gas,
             near_calls,
             heap_size,
@@ -200,6 +202,7 @@ impl<T> Callframe<T> {
 
         self.context_u128 = context_u128;
         self.sp = sp;
+        self.set_pc_from_u16(pc);
         self.gas = gas;
         self.near_calls = near_calls;
         self.heap_size = heap_size;
@@ -221,6 +224,7 @@ pub(crate) struct CallframeSnapshot {
     stack: StackSnapshot,
     context_u128: u128,
     sp: u16,
+    pc: u16,
     gas: u32,
     near_calls: Vec<NearCallFrame>,
     heap_size: u32,
