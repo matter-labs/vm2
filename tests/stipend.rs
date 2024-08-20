@@ -1,6 +1,6 @@
 #![cfg(not(feature = "single_instruction_test"))]
 
-use eravm_stable_interface::CallingMode;
+use eravm_stable_interface::opcodes;
 use u256::U256;
 use vm2::{
     address_into_u256,
@@ -53,7 +53,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
                 false,
                 false,
             ),
-            Instruction::from_far_call::<{ CallingMode::Normal as u8 }>(
+            Instruction::from_far_call::<opcodes::Normal>(
                 Register1(r1),
                 Register2(r2),
                 // crash on error

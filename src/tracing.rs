@@ -382,7 +382,7 @@ mod test {
         let mut frame_count = 1;
 
         let add_far_frame = |vm: &mut VirtualMachine<()>, counter: &mut u16| {
-            vm.push_frame::<0>(
+            vm.push_frame::<opcodes::Normal>(
                 H160::from_low_u64_be(1),
                 program.clone(),
                 0,
