@@ -72,6 +72,10 @@ fn ret<T: Tracer, RT: TypeLevelReturnType, const TO_LABEL: bool>(
                 // the caller may take external snapshots while the VM is in the initial frame and
                 // these would break were the initial frame to be rolled back.
 
+                // But to continue execution would be nonsensical and can cause UB because there
+                // is no next instruction after a panic arising from some other instruction.
+                vm.state.current_frame.pc = invalid_instruction();
+
                 return if let Some(return_value) = return_value_or_panic {
                     let output = vm.state.heaps[return_value.memory_page]
                         .read_range_big_endian(
