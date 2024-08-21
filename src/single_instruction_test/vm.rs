@@ -74,6 +74,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for VirtualMachine<T, W> {
                 sha256_cycles: 0,
                 secp256v1_verify_cycles: 0,
                 code_decommitter_cycles: 0,
+                storage_application_cycles: 0,
             },
             settings: u.arbitrary()?,
             world_diff: Default::default(),
