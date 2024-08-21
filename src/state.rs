@@ -131,6 +131,11 @@ impl<T, W> State<T, W> {
             bootloader_heap_snapshot: self.heaps.snapshot(),
             transaction_number: self.transaction_number,
             context_u128: self.context_u128,
+            keccak256_cycles: self.keccak256_cycles,
+            ecrecover_cycles: self.ecrecover_cycles,
+            sha256_cycles: self.sha256_cycles,
+            secp256v1_verify_cycles: self.secp256v1_verify_cycles,
+            code_decommitter_cycles: self.code_decommitter_cycles,
         }
     }
 
@@ -143,6 +148,11 @@ impl<T, W> State<T, W> {
             bootloader_heap_snapshot,
             transaction_number,
             context_u128,
+            keccak256_cycles,
+            ecrecover_cycles,
+            sha256_cycles,
+            secp256v1_verify_cycles,
+            code_decommitter_cycles,
         } = snapshot;
 
         for heap in self.current_frame.rollback(bootloader_frame) {
@@ -154,6 +164,11 @@ impl<T, W> State<T, W> {
         self.flags = flags;
         self.transaction_number = transaction_number;
         self.context_u128 = context_u128;
+        self.keccak256_cycles = keccak256_cycles;
+        self.ecrecover_cycles = ecrecover_cycles;
+        self.sha256_cycles = sha256_cycles;
+        self.secp256v1_verify_cycles = secp256v1_verify_cycles;
+        self.code_decommitter_cycles = code_decommitter_cycles;
     }
 
     pub(crate) fn delete_history(&mut self) {
@@ -234,5 +249,12 @@ pub(crate) struct StateSnapshot {
     bootloader_frame: CallframeSnapshot,
     bootloader_heap_snapshot: (usize, usize),
     transaction_number: u16,
+
+    keccak256_cycles: usize,
+    ecrecover_cycles: usize,
+    sha256_cycles: usize,
+    secp256v1_verify_cycles: usize,
+    code_decommitter_cycles: usize,
+
     context_u128: u128,
 }
