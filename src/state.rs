@@ -36,6 +36,7 @@ pub struct State<T, W> {
     pub secp256v1_verify_cycles: usize,
 
     pub code_decommitter_cycles: usize,
+    pub storage_application_cycles: usize,
 
     pub(crate) context_u128: u128,
 }
@@ -90,6 +91,7 @@ impl<T, W> State<T, W> {
             sha256_cycles: 0,
             secp256v1_verify_cycles: 0,
             code_decommitter_cycles: 0,
+            storage_application_cycles: 0,
         }
     }
 
@@ -136,6 +138,7 @@ impl<T, W> State<T, W> {
             sha256_cycles: self.sha256_cycles,
             secp256v1_verify_cycles: self.secp256v1_verify_cycles,
             code_decommitter_cycles: self.code_decommitter_cycles,
+            storage_application_cycles: self.storage_application_cycles,
         }
     }
 
@@ -153,6 +156,7 @@ impl<T, W> State<T, W> {
             sha256_cycles,
             secp256v1_verify_cycles,
             code_decommitter_cycles,
+            storage_application_cycles,
         } = snapshot;
 
         for heap in self.current_frame.rollback(bootloader_frame) {
@@ -169,6 +173,7 @@ impl<T, W> State<T, W> {
         self.sha256_cycles = sha256_cycles;
         self.secp256v1_verify_cycles = secp256v1_verify_cycles;
         self.code_decommitter_cycles = code_decommitter_cycles;
+        self.storage_application_cycles = storage_application_cycles
     }
 
     pub(crate) fn delete_history(&mut self) {
@@ -255,6 +260,7 @@ pub(crate) struct StateSnapshot {
     sha256_cycles: usize,
     secp256v1_verify_cycles: usize,
     code_decommitter_cycles: usize,
+    storage_application_cycles: usize,
 
     context_u128: u128,
 }

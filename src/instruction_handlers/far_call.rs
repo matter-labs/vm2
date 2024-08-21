@@ -10,6 +10,7 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
     predication::Flags,
+    vm::STORAGE_READ_STORAGE_APPLICATION_CYCLES,
     Instruction, VirtualMachine, World,
 };
 use eravm_stable_interface::{
@@ -18,8 +19,9 @@ use eravm_stable_interface::{
 };
 use u256::U256;
 use zkevm_opcode_defs::{
+    ethereum_types::Address,
     system_params::{EVM_SIMULATOR_STIPEND, MSG_VALUE_SIMULATOR_ADDITIVE_COST},
-    ADDRESS_MSG_VALUE,
+    ADDRESS_MSG_VALUE, DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
 
 /// A call to another contract.
@@ -63,6 +65,16 @@ fn far_call<
             };
 
         let failing_part = (|| {
+            let deployer_system_contract_address =
+                Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
+            if !vm
+                .world_diff
+                .read_storage_slots_ct
+                .contains(&(deployer_system_contract_address, destination_address))
+            {
+                vm.state.storage_application_cycles +=
+                    STORAGE_READ_STORAGE_APPLICATION_CYCLES as usize;
+            }
             let decommit_result = vm.world_diff.decommit(
                 world,
                 destination_address,
