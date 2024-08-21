@@ -12,6 +12,7 @@ pub struct Program<T, W> {
 
     // Need a two-instruction array so that incrementing the program counter is safe
     first_instruction: MockRead<u16, Rc<[Instruction<T, W>; 2]>>,
+    #[allow(clippy::type_complexity)]
     other_instruction: MockRead<u16, Rc<Option<[Instruction<T, W>; 2]>>>,
 
     code_page: Arc<[U256]>,
