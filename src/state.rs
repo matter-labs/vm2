@@ -27,6 +27,14 @@ pub struct State<T, W> {
 
     pub transaction_number: u16,
 
+    pub keccak256_cycles: usize,
+
+    pub ecrecover_cycles: usize,
+
+    pub sha256_cycles: usize,
+
+    pub secp256v1_verify_cycles: usize,
+
     pub(crate) context_u128: u128,
 }
 
@@ -75,6 +83,10 @@ impl<T, W> State<T, W> {
 
             transaction_number: 0,
             context_u128: 0,
+            keccak256_cycles: 0,
+            ecrecover_cycles: 0,
+            sha256_cycles: 0,
+            secp256v1_verify_cycles: 0,
         }
     }
 
