@@ -116,6 +116,7 @@ impl WorldDiff {
         } else {
             0
         };
+
         Some((decommit, decommit_cycles))
     }
 }
