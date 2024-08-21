@@ -7,7 +7,7 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
     state::State,
-    ExecutionEnd, HeapId, Instruction, VirtualMachine, World,
+    ExecutionEnd, HeapId, Instruction, VirtualMachine,
 };
 use eravm_stable_interface::{opcodes, OpcodeType, Tracer};
 use std::ops::Range;
@@ -20,18 +20,18 @@ pub trait HeapInterface {
 }
 
 pub trait HeapFromState {
-    fn get_heap<T>(state: &State<T>) -> HeapId;
-    fn get_heap_size<T>(state: &mut State<T>) -> &mut u32;
+    fn get_heap<T, W>(state: &State<T, W>) -> HeapId;
+    fn get_heap_size<T, W>(state: &mut State<T, W>) -> &mut u32;
     type Read: OpcodeType;
     type Write: OpcodeType;
 }
 
 pub struct Heap;
 impl HeapFromState for Heap {
-    fn get_heap<T>(state: &State<T>) -> HeapId {
+    fn get_heap<T, W>(state: &State<T, W>) -> HeapId {
         state.current_frame.heap
     }
-    fn get_heap_size<T>(state: &mut State<T>) -> &mut u32 {
+    fn get_heap_size<T, W>(state: &mut State<T, W>) -> &mut u32 {
         &mut state.current_frame.heap_size
     }
     type Read = opcodes::HeapRead;
@@ -40,10 +40,10 @@ impl HeapFromState for Heap {
 
 pub struct AuxHeap;
 impl HeapFromState for AuxHeap {
-    fn get_heap<T>(state: &State<T>) -> HeapId {
+    fn get_heap<T, W>(state: &State<T, W>) -> HeapId {
         state.current_frame.aux_heap
     }
-    fn get_heap_size<T>(state: &mut State<T>) -> &mut u32 {
+    fn get_heap_size<T, W>(state: &mut State<T, W>) -> &mut u32 {
         &mut state.current_frame.aux_heap_size
     }
     type Read = opcodes::AuxHeapRead;
@@ -53,12 +53,12 @@ impl HeapFromState for AuxHeap {
 /// The last address to which 32 can be added without overflow.
 const LAST_ADDRESS: u32 = u32::MAX - 32;
 
-fn load<T: Tracer, H: HeapFromState, In: Source, const INCREMENT: bool>(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+fn load<T: Tracer, W, H: HeapFromState, In: Source, const INCREMENT: bool>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<H::Read, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate::<H::Read, _, _>(vm, world, tracer, |vm, args, _| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
@@ -66,7 +66,7 @@ fn load<T: Tracer, H: HeapFromState, In: Source, const INCREMENT: bool>(
         let address = pointer.low_u32();
 
         let new_bound = address.wrapping_add(32);
-        if grow_heap::<_, H>(&mut vm.state, new_bound).is_err() {
+        if grow_heap::<_, _, H>(&mut vm.state, new_bound).is_err() {
             vm.state.current_frame.pc = &*vm.panic;
             return;
         };
@@ -91,16 +91,17 @@ fn load<T: Tracer, H: HeapFromState, In: Source, const INCREMENT: bool>(
 
 fn store<
     T: Tracer,
+    W,
     H: HeapFromState,
     In: Source,
     const INCREMENT: bool,
     const HOOKING_ENABLED: bool,
 >(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate_ext::<H::Write, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate_ext::<H::Write, _, _>(vm, world, tracer, |vm, args, _| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
@@ -109,7 +110,7 @@ fn store<
         let value = Register2::get(args, &mut vm.state);
 
         let new_bound = address.wrapping_add(32);
-        if grow_heap::<_, H>(&mut vm.state, new_bound).is_err() {
+        if grow_heap::<_, _, H>(&mut vm.state, new_bound).is_err() {
             vm.state.current_frame.pc = &*vm.panic;
             return ExecutionStatus::Running;
         }
@@ -139,8 +140,8 @@ fn store<
 
 /// Pays for more heap space. Doesn't acually grow the heap.
 /// That distinction is necessary because the bootloader gets u32::MAX heap for free.
-pub fn grow_heap<T: Tracer, H: HeapFromState>(
-    state: &mut State<T>,
+pub fn grow_heap<T: Tracer, W, H: HeapFromState>(
+    state: &mut State<T, W>,
     new_bound: u32,
 ) -> Result<(), ()> {
     let already_paid = H::get_heap_size(state);
@@ -153,12 +154,12 @@ pub fn grow_heap<T: Tracer, H: HeapFromState>(
     Ok(())
 }
 
-fn load_pointer<T: Tracer, const INCREMENT: bool>(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+fn load_pointer<T: Tracer, W, const INCREMENT: bool>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::PointerRead, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate::<opcodes::PointerRead, _, _>(vm, world, tracer, |vm, args, _| {
         let (input, input_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
         if !input_is_pointer {
             vm.state.current_frame.pc = &*vm.panic;
@@ -189,7 +190,7 @@ fn load_pointer<T: Tracer, const INCREMENT: bool>(
 
 use super::monomorphization::*;
 
-impl<T: Tracer> Instruction<T> {
+impl<T: Tracer, W> Instruction<T, W> {
     #[inline(always)]
     pub fn from_load<H: HeapFromState>(
         src: RegisterOrImmediate,
@@ -205,7 +206,7 @@ impl<T: Tracer> Instruction<T> {
         }
 
         Self {
-            handler: monomorphize!(load [T H] match_reg_imm src match_boolean increment),
+            handler: monomorphize!(load [T W H] match_reg_imm src match_boolean increment),
             arguments,
         }
     }
@@ -220,7 +221,7 @@ impl<T: Tracer> Instruction<T> {
     ) -> Self {
         let increment = incremented_out.is_some();
         Self {
-            handler: monomorphize!(store [T H] match_reg_imm src1 match_boolean increment match_boolean should_hook),
+            handler: monomorphize!(store [T W H] match_reg_imm src1 match_boolean increment match_boolean should_hook),
             arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)
@@ -237,7 +238,7 @@ impl<T: Tracer> Instruction<T> {
     ) -> Self {
         let increment = incremented_out.is_some();
         Self {
-            handler: monomorphize!(load_pointer [T] match_boolean increment),
+            handler: monomorphize!(load_pointer [T W] match_boolean increment),
             arguments: arguments
                 .write_source(&src)
                 .write_destination(&out)

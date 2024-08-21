@@ -23,7 +23,10 @@ use zkevm_opcode_defs::{
     SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
 };
 
-pub fn decode_program<T: Tracer>(raw: &[u64], is_bootloader: bool) -> Vec<Instruction<T>> {
+pub fn decode_program<T: Tracer, W: World<T>>(
+    raw: &[u64],
+    is_bootloader: bool,
+) -> Vec<Instruction<T, W>> {
     raw.iter()
         .take(1 << 16)
         .map(|i| decode(*i, is_bootloader))
@@ -35,7 +38,7 @@ pub fn decode_program<T: Tracer>(raw: &[u64], is_bootloader: bool) -> Vec<Instru
         .collect()
 }
 
-fn unimplemented_instruction<T>(variant: Opcode) -> Instruction<T> {
+fn unimplemented_instruction<T, W>(variant: Opcode) -> Instruction<T, W> {
     let mut arguments = Arguments::new(Predicate::Always, 0, ModeRequirements::none());
     let variant_as_number: u16 = unsafe { std::mem::transmute(variant) };
     Immediate1(variant_as_number).write_source(&mut arguments);
@@ -44,9 +47,9 @@ fn unimplemented_instruction<T>(variant: Opcode) -> Instruction<T> {
         arguments,
     }
 }
-fn unimplemented_handler<T>(
-    vm: &mut VirtualMachine<T>,
-    _: &mut dyn World<T>,
+fn unimplemented_handler<T, W>(
+    vm: &mut VirtualMachine<T, W>,
+    _: &mut W,
     _: &mut T,
 ) -> ExecutionStatus {
     let variant: Opcode = unsafe {
@@ -59,7 +62,7 @@ fn unimplemented_handler<T>(
     ExecutionStatus::Stopped(ExecutionEnd::Panicked)
 }
 
-pub(crate) fn decode<T: Tracer>(raw: u64, is_bootloader: bool) -> Instruction<T> {
+pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> Instruction<T, W> {
     let (parsed, _) = EncodingModeProduction::parse_preliminary_variant_and_absolute_number(raw);
 
     let predicate = match parsed.condition {

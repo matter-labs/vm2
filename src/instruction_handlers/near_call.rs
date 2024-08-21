@@ -3,16 +3,16 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Source},
     instruction::ExecutionStatus,
     predication::Flags,
-    Instruction, VirtualMachine, World,
+    Instruction, VirtualMachine,
 };
 use eravm_stable_interface::{opcodes, Tracer};
 
-fn near_call<T: Tracer>(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+fn near_call<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::NearCall, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate::<opcodes::NearCall, _, _>(vm, world, tracer, |vm, args, _| {
         let gas_to_pass = Register1::get(args, &mut vm.state).0[0] as u32;
         let destination = Immediate1::get(args, &mut vm.state);
         let error_handler = Immediate2::get(args, &mut vm.state);
@@ -36,7 +36,7 @@ fn near_call<T: Tracer>(
     })
 }
 
-impl<T: Tracer> Instruction<T> {
+impl<T: Tracer, W> Instruction<T, W> {
     pub fn from_near_call(
         gas: Register1,
         destination: Immediate1,

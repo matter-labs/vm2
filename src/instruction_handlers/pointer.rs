@@ -6,7 +6,7 @@ use crate::{
     },
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
-    Instruction, VirtualMachine, World,
+    Instruction, VirtualMachine,
 };
 use eravm_stable_interface::{
     opcodes::{PointerAdd, PointerPack, PointerShrink, PointerSub},
@@ -14,12 +14,12 @@ use eravm_stable_interface::{
 };
 use u256::U256;
 
-fn ptr<T: Tracer, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+fn ptr<T: Tracer, W, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<Op, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate::<Op, _, _>(vm, world, tracer, |vm, args, _| {
         let ((a, a_is_pointer), (b, b_is_pointer)) = if SWAP {
             (
                 Register2::get_with_pointer_flag(args, &mut vm.state),
@@ -99,7 +99,7 @@ impl PtrOp for PointerShrink {
 
 use super::monomorphization::*;
 
-impl<T: Tracer> Instruction<T> {
+impl<T: Tracer, W> Instruction<T, W> {
     #[inline(always)]
     pub fn from_ptr<Op: PtrOp>(
         src1: AnySource,
@@ -109,7 +109,7 @@ impl<T: Tracer> Instruction<T> {
         swap: bool,
     ) -> Self {
         Self {
-            handler: monomorphize!(ptr [T Op] match_source src1 match_destination out match_boolean swap),
+            handler: monomorphize!(ptr [T W Op] match_source src1 match_destination out match_boolean swap),
             arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)

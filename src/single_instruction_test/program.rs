@@ -1,4 +1,4 @@
-use crate::{decode::decode, Instruction};
+use crate::{decode::decode, Instruction, World};
 use arbitrary::Arbitrary;
 use eravm_stable_interface::Tracer;
 use std::{rc::Rc, sync::Arc};
@@ -7,17 +7,17 @@ use u256::U256;
 use super::mock_array::MockRead;
 
 #[derive(Debug)]
-pub struct Program<T> {
+pub struct Program<T, W> {
     pub raw_first_instruction: u64,
 
     // Need a two-instruction array so that incrementing the program counter is safe
-    first_instruction: MockRead<u16, Rc<[Instruction<T>; 2]>>,
-    other_instruction: MockRead<u16, Rc<Option<[Instruction<T>; 2]>>>,
+    first_instruction: MockRead<u16, Rc<[Instruction<T, W>; 2]>>,
+    other_instruction: MockRead<u16, Rc<Option<[Instruction<T, W>; 2]>>>,
 
     code_page: Arc<[U256]>,
 }
 
-impl<T> Clone for Program<T> {
+impl<T, W> Clone for Program<T, W> {
     fn clone(&self) -> Self {
         Self {
             raw_first_instruction: self.raw_first_instruction,
@@ -28,7 +28,7 @@ impl<T> Clone for Program<T> {
     }
 }
 
-impl<'a, T: Tracer> Arbitrary<'a> for Program<T> {
+impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for Program<T, W> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         let raw_first_instruction = u.arbitrary()?;
 
@@ -47,8 +47,8 @@ impl<'a, T: Tracer> Arbitrary<'a> for Program<T> {
     }
 }
 
-impl<T> Program<T> {
-    pub fn instruction(&self, n: u16) -> Option<&Instruction<T>> {
+impl<T, W> Program<T, W> {
+    pub fn instruction(&self, n: u16) -> Option<&Instruction<T, W>> {
         if n == 0 {
             Some(&self.first_instruction.get(n).as_ref()[0])
         } else {
@@ -65,7 +65,7 @@ impl<T> Program<T> {
     }
 }
 
-impl<T: Tracer> Program<T> {
+impl<T: Tracer, W> Program<T, W> {
     pub fn for_decommit() -> Self {
         Self {
             raw_first_instruction: 0,
@@ -82,7 +82,7 @@ impl<T: Tracer> Program<T> {
     }
 }
 
-impl<T> PartialEq for Program<T> {
+impl<T, W> PartialEq for Program<T, W> {
     fn eq(&self, _: &Self) -> bool {
         false
     }

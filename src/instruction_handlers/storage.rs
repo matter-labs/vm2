@@ -8,12 +8,12 @@ use crate::{
 };
 use eravm_stable_interface::{opcodes, Tracer};
 
-fn sstore<T: Tracer>(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+fn sstore<T: Tracer, W: World<T>>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::StorageWrite, _>(vm, world, tracer, |vm, args, world| {
+    instruction_boilerplate::<opcodes::StorageWrite, _, _>(vm, world, tracer, |vm, args, world| {
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
 
@@ -26,12 +26,12 @@ fn sstore<T: Tracer>(
     })
 }
 
-fn sstore_transient<T: Tracer>(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+fn sstore_transient<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::TransientStorageWrite, _>(
+    instruction_boilerplate::<opcodes::TransientStorageWrite, _, _>(
         vm,
         world,
         tracer,
@@ -45,12 +45,12 @@ fn sstore_transient<T: Tracer>(
     )
 }
 
-fn sload<T: Tracer>(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+fn sload<T: Tracer, W: World<T>>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::StorageRead, _>(vm, world, tracer, |vm, args, world| {
+    instruction_boilerplate::<opcodes::StorageRead, _, _>(vm, world, tracer, |vm, args, world| {
         let key = Register1::get(args, &mut vm.state);
         let (value, refund) =
             vm.world_diff
@@ -63,22 +63,27 @@ fn sload<T: Tracer>(
     })
 }
 
-fn sload_transient<T: Tracer>(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+fn sload_transient<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::TransientStorageRead, _>(vm, world, tracer, |vm, args, _| {
-        let key = Register1::get(args, &mut vm.state);
-        let value = vm
-            .world_diff
-            .read_transient_storage(vm.state.current_frame.address, key);
+    instruction_boilerplate::<opcodes::TransientStorageRead, _, _>(
+        vm,
+        world,
+        tracer,
+        |vm, args, _| {
+            let key = Register1::get(args, &mut vm.state);
+            let value = vm
+                .world_diff
+                .read_transient_storage(vm.state.current_frame.address, key);
 
-        Register1::set(args, &mut vm.state, value);
-    })
+            Register1::set(args, &mut vm.state, value);
+        },
+    )
 }
 
-impl<T: Tracer> Instruction<T> {
+impl<T: Tracer, W: World<T>> Instruction<T, W> {
     #[inline(always)]
     pub fn from_sstore(src1: Register1, src2: Register2, arguments: Arguments) -> Self {
         Self {

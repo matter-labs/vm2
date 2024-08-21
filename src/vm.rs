@@ -10,7 +10,7 @@ use crate::{
     stack::StackPool,
     state::State,
     world_diff::{Snapshot, WorldDiff},
-    ExecutionEnd, Program, World,
+    ExecutionEnd, Program,
 };
 use crate::{Instruction, ModeRequirements, Predicate};
 use eravm_stable_interface::opcodes::TypeLevelCallingMode;
@@ -26,25 +26,25 @@ pub struct Settings {
     pub hook_address: u32,
 }
 
-pub struct VirtualMachine<T> {
+pub struct VirtualMachine<T, W> {
     pub world_diff: WorldDiff,
 
     /// Storing the state in a separate struct is not just cosmetic.
     /// The state couldn't be passed to the world if it was inlined.
-    pub state: State<T>,
+    pub state: State<T, W>,
 
     pub(crate) settings: Settings,
 
     pub(crate) stack_pool: StackPool,
 
     // Instructions that are jumped to when things go wrong.
-    pub(crate) panic: Box<Instruction<T>>,
+    pub(crate) panic: Box<Instruction<T, W>>,
 }
 
-impl<T: Tracer> VirtualMachine<T> {
+impl<T: Tracer, W> VirtualMachine<T, W> {
     pub fn new(
         address: H160,
-        program: Program<T>,
+        program: Program<T, W>,
         caller: H160,
         calldata: Vec<u8>,
         gas: u32,
@@ -74,7 +74,7 @@ impl<T: Tracer> VirtualMachine<T> {
         }
     }
 
-    pub fn run(&mut self, world: &mut dyn World<T>, tracer: &mut T) -> ExecutionEnd {
+    pub fn run(&mut self, world: &mut W, tracer: &mut T) -> ExecutionEnd {
         unsafe {
             loop {
                 let args = &(*self.state.current_frame.pc).arguments;
@@ -117,7 +117,7 @@ impl<T: Tracer> VirtualMachine<T> {
     /// depending on remaining gas.
     pub fn resume_with_additional_gas_limit(
         &mut self,
-        world: &mut dyn World<T>,
+        world: &mut W,
         tracer: &mut T,
         gas_limit: u32,
     ) -> Option<(u32, ExecutionEnd)> {
@@ -206,7 +206,7 @@ impl<T: Tracer> VirtualMachine<T> {
     pub(crate) fn push_frame<M: TypeLevelCallingMode>(
         &mut self,
         code_address: H160,
-        program: Program<T>,
+        program: Program<T, W>,
         gas: u32,
         stipend: u32,
         exception_handler: u16,

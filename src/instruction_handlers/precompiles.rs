@@ -3,7 +3,7 @@ use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     heap::Heaps,
     instruction::ExecutionStatus,
-    Instruction, VirtualMachine, World,
+    Instruction, VirtualMachine,
 };
 use eravm_stable_interface::{opcodes, HeapId, Tracer};
 use zk_evm_abstractions::{
@@ -23,12 +23,12 @@ use zkevm_opcode_defs::{
     PrecompileAuxData, PrecompileCallABI,
 };
 
-fn precompile_call<T: Tracer>(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+fn precompile_call<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::PrecompileCall, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate::<opcodes::PrecompileCall, _, _>(vm, world, tracer, |vm, args, _| {
         // The user gets to decide how much gas to burn
         // This is safe because system contracts are trusted
         let aux_data = PrecompileAuxData::from_u256(Register2::get(args, &mut vm.state));
@@ -121,7 +121,7 @@ impl Memory for Heaps {
     }
 }
 
-impl<T: Tracer> Instruction<T> {
+impl<T: Tracer, W> Instruction<T, W> {
     pub fn from_precompile_call(
         abi: Register1,
         burn: Register2,

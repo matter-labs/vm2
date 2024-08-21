@@ -7,7 +7,7 @@ use crate::{
 use eravm_stable_interface::*;
 use std::cmp::Ordering;
 
-impl<T> StateInterface for VirtualMachine<T> {
+impl<T, W> StateInterface for VirtualMachine<T, W> {
     fn read_register(&self, register: u8) -> (u256::U256, bool) {
         (
             self.state.registers[register as usize],
@@ -156,12 +156,12 @@ impl<T> StateInterface for VirtualMachine<T> {
     }
 }
 
-struct CallframeWrapper<'a, T> {
-    frame: &'a mut Callframe<T>,
+struct CallframeWrapper<'a, T, W> {
+    frame: &'a mut Callframe<T, W>,
     near_call: Option<usize>,
 }
 
-impl<T> CallframeInterface for CallframeWrapper<'_, T> {
+impl<T, W> CallframeInterface for CallframeWrapper<'_, T, W> {
     fn address(&self) -> u256::H160 {
         self.frame.address
     }
@@ -322,7 +322,7 @@ impl<T> CallframeInterface for CallframeWrapper<'_, T> {
     }
 }
 
-impl<T> CallframeWrapper<'_, T> {
+impl<T, W> CallframeWrapper<'_, T, W> {
     fn near_call_on_top(&self) -> Option<&NearCallFrame> {
         if self.frame.near_calls.is_empty() || self.near_call == Some(0) {
             None
@@ -366,7 +366,7 @@ mod test {
         let mut world = TestWorld::new(&[(address, program)]);
         let program = initial_decommit(&mut world, address);
 
-        let mut vm = VirtualMachine::<()>::new(
+        let mut vm = VirtualMachine::new(
             address,
             program.clone(),
             Address::zero(),
@@ -381,7 +381,7 @@ mod test {
 
         let mut frame_count = 1;
 
-        let add_far_frame = |vm: &mut VirtualMachine<()>, counter: &mut u16| {
+        let add_far_frame = |vm: &mut VirtualMachine<(), TestWorld<()>>, counter: &mut u16| {
             vm.push_frame::<opcodes::Normal>(
                 H160::from_low_u64_be(1),
                 program.clone(),
@@ -395,7 +395,7 @@ mod test {
             *counter += 1;
         };
 
-        let add_near_frame = |vm: &mut VirtualMachine<()>, counter: &mut u16| {
+        let add_near_frame = |vm: &mut VirtualMachine<(), TestWorld<()>>, counter: &mut u16| {
             vm.state
                 .current_frame
                 .push_near_call(0, *counter, vm.world_diff.snapshot());

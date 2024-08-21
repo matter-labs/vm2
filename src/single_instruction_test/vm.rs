@@ -9,12 +9,8 @@ use eravm_stable_interface::Tracer;
 use std::fmt::Debug;
 use u256::U256;
 
-impl<T: Tracer> VirtualMachine<T> {
-    pub fn run_single_instruction(
-        &mut self,
-        world: &mut dyn World<T>,
-        tracer: &mut T,
-    ) -> ExecutionStatus {
+impl<T: Tracer, W> VirtualMachine<T, W> {
+    pub fn run_single_instruction(&mut self, world: &mut W, tracer: &mut T) -> ExecutionStatus {
         unsafe {
             let args = &(*self.state.current_frame.pc).arguments;
 
@@ -60,9 +56,9 @@ impl<T: Tracer> VirtualMachine<T> {
     }
 }
 
-impl<'a, T: Tracer> Arbitrary<'a> for VirtualMachine<T> {
+impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for VirtualMachine<T, W> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        let current_frame: Callframe<T> = u.arbitrary()?;
+        let current_frame: Callframe<T, W> = u.arbitrary()?;
 
         let mut registers = [U256::zero(); 16];
         let mut register_pointer_flags = 0;
@@ -154,7 +150,7 @@ impl<'a> Arbitrary<'a> for Settings {
     }
 }
 
-impl<T> Debug for VirtualMachine<T> {
+impl<T, W> Debug for VirtualMachine<T, W> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "print useful debugging information here!")
     }

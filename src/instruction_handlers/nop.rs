@@ -2,16 +2,16 @@ use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{destination_stack_address, AdvanceStackPointer, Arguments, Source},
     instruction::ExecutionStatus,
-    Instruction, VirtualMachine, World,
+    Instruction, VirtualMachine,
 };
 use eravm_stable_interface::{opcodes, Tracer};
 
-fn nop<T: Tracer>(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+fn nop<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::Nop, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate::<opcodes::Nop, _, _>(vm, world, tracer, |vm, args, _| {
         // nop's addressing modes can move the stack pointer!
         AdvanceStackPointer::get(args, &mut vm.state);
         vm.state.current_frame.sp = vm
@@ -22,7 +22,7 @@ fn nop<T: Tracer>(
     })
 }
 
-impl<T: Tracer> Instruction<T> {
+impl<T: Tracer, W> Instruction<T, W> {
     pub fn from_nop(
         pop: AdvanceStackPointer,
         push: AdvanceStackPointer,

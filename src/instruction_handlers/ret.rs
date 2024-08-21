@@ -5,7 +5,7 @@ use crate::{
     instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
     predication::Flags,
-    Instruction, Predicate, VirtualMachine, World,
+    Instruction, Predicate, VirtualMachine,
 };
 use eravm_stable_interface::{
     opcodes::{self, TypeLevelReturnType},
@@ -13,12 +13,12 @@ use eravm_stable_interface::{
 };
 use u256::U256;
 
-fn ret<T: Tracer, RT: TypeLevelReturnType, const TO_LABEL: bool>(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+fn ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate_ext::<opcodes::Ret<RT>, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate_ext::<opcodes::Ret<RT>, _, _>(vm, world, tracer, |vm, args, _| {
         let mut return_type = RT::VALUE;
         let near_call_leftover_gas = vm.state.current_frame.gas;
 
@@ -121,8 +121,8 @@ fn ret<T: Tracer, RT: TypeLevelReturnType, const TO_LABEL: bool>(
 /// Formally, a far call pushes a new frame and returns from it immediately if it panics.
 /// This function instead panics without popping a frame to save on allocation.
 /// TODO: when tracers are implemented, this function should count as a separate instruction!
-pub(crate) fn panic_from_failed_far_call<T: Tracer>(
-    vm: &mut VirtualMachine<T>,
+pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
     exception_handler: u16,
 ) {
     // Gas is already subtracted in the far call code.
@@ -139,11 +139,11 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer>(
 }
 
 /// Panics, burning all available gas.
-static INVALID_INSTRUCTION: Instruction<()> = Instruction::from_invalid();
+static INVALID_INSTRUCTION: Instruction<(), ()> = Instruction::from_invalid();
 
-pub fn invalid_instruction<'a, T>() -> &'a Instruction<T> {
+pub fn invalid_instruction<'a, T, W>() -> &'a Instruction<T, W> {
     // Safety: the handler of an invalid instruction is never read.
-    unsafe { &*(&INVALID_INSTRUCTION as *const Instruction<()>).cast() }
+    unsafe { &*(&INVALID_INSTRUCTION as *const Instruction<(), ()>).cast() }
 }
 
 pub(crate) const RETURN_COST: u32 = 5;
@@ -157,36 +157,36 @@ pub(crate) const RETURN_COST: u32 = 5;
 /// - the far call stack overflows
 ///
 /// For all other panics, point the instruction pointer at [PANIC] instead.
-pub(crate) fn free_panic<T: Tracer>(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+pub(crate) fn free_panic<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    ret::<T, opcodes::Panic, false>(vm, world, tracer)
+    ret::<T, W, opcodes::Panic, false>(vm, world, tracer)
 }
 
 use super::monomorphization::*;
 use eravm_stable_interface::opcodes::{Normal, Panic, Revert};
 
-impl<T: Tracer> Instruction<T> {
+impl<T: Tracer, W> Instruction<T, W> {
     pub fn from_ret(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         Self {
-            handler: monomorphize!(ret [T Normal] match_boolean to_label),
+            handler: monomorphize!(ret [T W Normal] match_boolean to_label),
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
     pub fn from_revert(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         Self {
-            handler: monomorphize!(ret [T Revert] match_boolean to_label),
+            handler: monomorphize!(ret [T W Revert] match_boolean to_label),
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
     pub fn from_panic(label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         Self {
-            handler: monomorphize!(ret [T Panic] match_boolean to_label),
+            handler: monomorphize!(ret [T W Panic] match_boolean to_label),
             arguments: arguments.write_source(&label),
         }
     }
@@ -194,7 +194,7 @@ impl<T: Tracer> Instruction<T> {
     pub const fn from_invalid() -> Self {
         Self {
             // This field is never read because the instruction fails at the gas cost stage.
-            handler: ret::<T, Panic, false>,
+            handler: ret::<T, W, Panic, false>,
             arguments: Arguments::new(
                 Predicate::Always,
                 INVALID_INSTRUCTION_COST,

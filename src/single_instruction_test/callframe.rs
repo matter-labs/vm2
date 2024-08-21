@@ -3,7 +3,8 @@ use super::{
     stack::{Stack, StackPool},
 };
 use crate::{
-    callframe::Callframe, decommit::is_kernel, predication::Flags, HeapId, Program, WorldDiff,
+    callframe::Callframe, decommit::is_kernel, predication::Flags, HeapId, Program, World,
+    WorldDiff,
 };
 use arbitrary::Arbitrary;
 use eravm_stable_interface::Tracer;
@@ -16,7 +17,7 @@ impl<'a> Arbitrary<'a> for Flags {
     }
 }
 
-impl<'a, T: Tracer> Arbitrary<'a> for Callframe<T> {
+impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for Callframe<T, W> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         let address: H160 = u.arbitrary()?;
 
@@ -28,7 +29,7 @@ impl<'a, T: Tracer> Arbitrary<'a> for Callframe<T> {
         // but the calldata heap must be different from the heap and aux heap
         let calldata_heap = HeapId::from_u32_unchecked(u.int_in_range(0..=base_page - 1)?);
 
-        let program: Program<T> = u.arbitrary()?;
+        let program: Program<T, W> = u.arbitrary()?;
 
         let mut me = Self {
             address,
@@ -65,7 +66,7 @@ impl<'a, T: Tracer> Arbitrary<'a> for Callframe<T> {
     }
 }
 
-impl<T: Tracer> Callframe<T> {
+impl<T: Tracer, W> Callframe<T, W> {
     pub fn raw_first_instruction(&self) -> u64 {
         self.program.raw_first_instruction
     }

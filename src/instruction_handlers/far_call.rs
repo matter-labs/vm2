@@ -32,12 +32,18 @@ use zkevm_opcode_defs::{
 ///
 /// Even though all errors happen before the new stack frame, they cause a panic in the new frame,
 /// not in the caller!
-fn far_call<T: Tracer, M: TypeLevelCallingMode, const IS_STATIC: bool, const IS_SHARD: bool>(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+fn far_call<
+    T: Tracer,
+    W: World<T>,
+    M: TypeLevelCallingMode,
+    const IS_STATIC: bool,
+    const IS_SHARD: bool,
+>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<FarCall<M>, _>(vm, world, tracer, |vm, args, world| {
+    instruction_boilerplate::<FarCall<M>, _, _>(vm, world, tracer, |vm, args, world| {
         let (raw_abi, raw_abi_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
 
         let address_mask: U256 = U256::MAX >> (256 - 160);
@@ -173,10 +179,10 @@ pub(crate) fn get_far_call_arguments(abi: U256) -> FarCallABI {
 ///
 /// This function needs to be called even if we already know we will panic because
 /// overflowing start + length makes the heap resize even when already panicking.
-pub(crate) fn get_far_call_calldata<T: Tracer>(
+pub(crate) fn get_far_call_calldata<T: Tracer, W>(
     raw_abi: U256,
     is_pointer: bool,
-    vm: &mut VirtualMachine<T>,
+    vm: &mut VirtualMachine<T, W>,
     already_failed: bool,
 ) -> Option<FatPointer> {
     let mut pointer = FatPointer::from(raw_abi);
@@ -196,11 +202,11 @@ pub(crate) fn get_far_call_calldata<T: Tracer>(
                 }
                 match target {
                     ToHeap => {
-                        grow_heap::<_, Heap>(&mut vm.state, bound).ok()?;
+                        grow_heap::<_, _, Heap>(&mut vm.state, bound).ok()?;
                         pointer.memory_page = vm.state.current_frame.heap;
                     }
                     ToAuxHeap => {
-                        grow_heap::<_, AuxHeap>(&mut vm.state, bound).ok()?;
+                        grow_heap::<_, _, AuxHeap>(&mut vm.state, bound).ok()?;
                         pointer.memory_page = vm.state.current_frame.aux_heap;
                     }
                 }
@@ -210,10 +216,10 @@ pub(crate) fn get_far_call_calldata<T: Tracer>(
                 let bound = u32::MAX;
                 match target {
                     ToHeap => {
-                        grow_heap::<_, Heap>(&mut vm.state, bound).ok()?;
+                        grow_heap::<_, _, Heap>(&mut vm.state, bound).ok()?;
                     }
                     ToAuxHeap => {
-                        grow_heap::<_, AuxHeap>(&mut vm.state, bound).ok()?;
+                        grow_heap::<_, _, AuxHeap>(&mut vm.state, bound).ok()?;
                     }
                 }
                 return None;
@@ -255,7 +261,7 @@ impl FatPointer {
 
 use super::monomorphization::*;
 
-impl<T: Tracer> Instruction<T> {
+impl<T: Tracer, W: World<T>> Instruction<T, W> {
     pub fn from_far_call<M: TypeLevelCallingMode>(
         src1: Register1,
         src2: Register2,
@@ -265,7 +271,7 @@ impl<T: Tracer> Instruction<T> {
         arguments: Arguments,
     ) -> Self {
         Self {
-            handler: monomorphize!(far_call [T M] match_boolean is_static match_boolean is_shard),
+            handler: monomorphize!(far_call [T W M] match_boolean is_static match_boolean is_shard),
             arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)

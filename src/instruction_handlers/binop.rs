@@ -7,7 +7,7 @@ use crate::{
     },
     instruction::{ExecutionStatus, Instruction},
     predication::Flags,
-    VirtualMachine, World,
+    VirtualMachine,
 };
 use eravm_stable_interface::{
     opcodes::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor},
@@ -17,17 +17,18 @@ use u256::U256;
 
 fn binop<
     T: Tracer,
+    W,
     Op: Binop,
     In1: Source,
     Out: Destination,
     const SWAP: bool,
     const SET_FLAGS: bool,
 >(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<Op, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate::<Op, _, _>(vm, world, tracer, |vm, args, _| {
         let a = In1::get(args, &mut vm.state);
         let b = Register2::get(args, &mut vm.state);
         let (a, b) = if SWAP { (b, a) } else { (a, b) };
@@ -202,7 +203,7 @@ impl Binop for Div {
 
 use super::monomorphization::*;
 
-impl<T: Tracer> Instruction<T> {
+impl<T: Tracer, W> Instruction<T, W> {
     #[inline(always)]
     pub fn from_binop<Op: Binop>(
         src1: AnySource,
@@ -214,7 +215,7 @@ impl<T: Tracer> Instruction<T> {
         set_flags: bool,
     ) -> Self {
         Self {
-            handler: monomorphize!(binop [T Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
+            handler: monomorphize!(binop [T W Op] match_source src1 match_destination out match_boolean swap match_boolean set_flags),
             arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)

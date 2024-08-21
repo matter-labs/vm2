@@ -8,9 +8,9 @@ use zk_evm::{
 };
 use zkevm_opcode_defs::decoding::EncodingModeProduction;
 
-pub(crate) fn vm2_state_to_zk_evm_state<T: Tracer>(
-    state: &crate::State<T>,
-    panic: &crate::Instruction<T>,
+pub(crate) fn vm2_state_to_zk_evm_state<T: Tracer, W>(
+    state: &crate::State<T, W>,
+    panic: &crate::Instruction<T, W>,
 ) -> VmLocalState<8, EncodingModeProduction> {
     // zk_evm requires an unused bottom frame
     let mut callframes: Vec<_> = iter::once(CallStackEntry::empty_context())
@@ -58,7 +58,9 @@ pub(crate) fn vm2_state_to_zk_evm_state<T: Tracer>(
     }
 }
 
-fn vm2_frame_to_zk_evm_frames<T>(frame: Callframe<T>) -> impl Iterator<Item = CallStackEntry> {
+fn vm2_frame_to_zk_evm_frames<T, W>(
+    frame: Callframe<T, W>,
+) -> impl Iterator<Item = CallStackEntry> {
     let far_frame = CallStackEntry {
         this_address: frame.address,
         msg_sender: frame.caller,

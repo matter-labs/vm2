@@ -11,7 +11,7 @@ use u256::H160;
 use zkevm_opcode_defs::system_params::{NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND};
 
 #[derive(PartialEq, Debug)]
-pub struct Callframe<T> {
+pub struct Callframe<T, W> {
     pub address: H160,
     pub code_address: H160,
     pub caller: H160,
@@ -29,8 +29,8 @@ pub struct Callframe<T> {
 
     pub(crate) near_calls: Vec<NearCallFrame>,
 
-    pub(crate) pc: *const Instruction<T>,
-    pub(crate) program: Program<T>,
+    pub(crate) pc: *const Instruction<T, W>,
+    pub(crate) program: Program<T, W>,
 
     pub heap: HeapId,
     pub aux_heap: HeapId,
@@ -63,13 +63,13 @@ pub(crate) struct NearCallFrame {
     world_before_this_frame: Snapshot,
 }
 
-impl<T> Callframe<T> {
+impl<T, W> Callframe<T, W> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         address: H160,
         code_address: H160,
         caller: H160,
-        program: Program<T>,
+        program: Program<T, W>,
         stack: Box<Stack>,
         heap: HeapId,
         aux_heap: HeapId,
@@ -232,7 +232,7 @@ pub(crate) struct CallframeSnapshot {
     heaps_i_was_keeping_alive: usize,
 }
 
-impl<T> Clone for Callframe<T> {
+impl<T, W> Clone for Callframe<T, W> {
     fn clone(&self) -> Self {
         Self {
             address: self.address,

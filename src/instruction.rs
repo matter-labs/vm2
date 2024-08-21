@@ -1,16 +1,15 @@
 use std::fmt;
 
 use crate::{
-    addressing_modes::Arguments, mode_requirements::ModeRequirements, vm::VirtualMachine,
-    Predicate, World,
+    addressing_modes::Arguments, mode_requirements::ModeRequirements, vm::VirtualMachine, Predicate,
 };
 
-pub struct Instruction<T> {
-    pub(crate) handler: Handler<T>,
+pub struct Instruction<T, W> {
+    pub(crate) handler: Handler<T, W>,
     pub(crate) arguments: Arguments,
 }
 
-impl<T> fmt::Debug for Instruction<T> {
+impl<T, W> fmt::Debug for Instruction<T, W> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("Instruction")
@@ -19,8 +18,7 @@ impl<T> fmt::Debug for Instruction<T> {
     }
 }
 
-pub(crate) type Handler<T> =
-    fn(&mut VirtualMachine<T>, &mut dyn World<T>, &mut T) -> ExecutionStatus;
+pub(crate) type Handler<T, W> = fn(&mut VirtualMachine<T, W>, &mut W, &mut T) -> ExecutionStatus;
 pub enum ExecutionStatus {
     Running,
     Stopped(ExecutionEnd),
@@ -36,15 +34,15 @@ pub enum ExecutionEnd {
     SuspendedOnHook(u32),
 }
 
-pub fn jump_to_beginning<T>() -> Instruction<T> {
+pub fn jump_to_beginning<T, W>() -> Instruction<T, W> {
     Instruction {
         handler: jump_to_beginning_handler,
         arguments: Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
     }
 }
-fn jump_to_beginning_handler<T>(
-    vm: &mut VirtualMachine<T>,
-    _: &mut dyn World<T>,
+fn jump_to_beginning_handler<T, W>(
+    vm: &mut VirtualMachine<T, W>,
+    _: &mut W,
     _: &mut T,
 ) -> ExecutionStatus {
     let first_instruction = vm.state.current_frame.program.instruction(0).unwrap();

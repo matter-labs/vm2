@@ -3,18 +3,18 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
     instruction::ExecutionStatus,
     world_diff::{Event, L2ToL1Log},
-    Instruction, VirtualMachine, World,
+    Instruction, VirtualMachine,
 };
 use eravm_stable_interface::{opcodes, Tracer};
 use u256::H160;
 use zkevm_opcode_defs::ADDRESS_EVENT_WRITER;
 
-fn event<T: Tracer>(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+fn event<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::Event, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate::<opcodes::Event, _, _>(vm, world, tracer, |vm, args, _| {
         if vm.state.current_frame.address == H160::from_low_u64_be(ADDRESS_EVENT_WRITER as u64) {
             let key = Register1::get(args, &mut vm.state);
             let value = Register2::get(args, &mut vm.state);
@@ -31,12 +31,12 @@ fn event<T: Tracer>(
     })
 }
 
-fn l2_to_l1<T: Tracer>(
-    vm: &mut VirtualMachine<T>,
-    world: &mut dyn World<T>,
+fn l2_to_l1<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::L2ToL1Message, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate::<opcodes::L2ToL1Message, _, _>(vm, world, tracer, |vm, args, _| {
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
         let is_service = Immediate1::get(args, &mut vm.state).low_u32() == 1;
@@ -51,7 +51,7 @@ fn l2_to_l1<T: Tracer>(
     })
 }
 
-impl<T: Tracer> Instruction<T> {
+impl<T: Tracer, W> Instruction<T, W> {
     pub fn from_event(
         key: Register1,
         value: Register2,

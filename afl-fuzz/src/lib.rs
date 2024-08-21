@@ -4,6 +4,6 @@ use vm2::{single_instruction_test::MockWorld, VirtualMachine};
 
 #[derive(Arbitrary, Debug)]
 pub struct VmAndWorld<T: Tracer> {
-    pub vm: VirtualMachine<T>,
+    pub vm: VirtualMachine<T, MockWorld>,
     pub world: MockWorld,
 }
