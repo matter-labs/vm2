@@ -35,6 +35,8 @@ pub struct State<T, W> {
 
     pub secp256v1_verify_cycles: usize,
 
+    pub code_decommitter_cycles: usize,
+
     pub(crate) context_u128: u128,
 }
 
@@ -87,6 +89,7 @@ impl<T, W> State<T, W> {
             ecrecover_cycles: 0,
             sha256_cycles: 0,
             secp256v1_verify_cycles: 0,
+            code_decommitter_cycles: 0,
         }
     }
 

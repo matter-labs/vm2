@@ -97,7 +97,10 @@ impl WorldDiff {
     ) -> Option<(Program<T, W>, usize)> {
         // We intentionally record a decommitment event even if actual decommitment never happens because of an out-of-gas error.
         // This is how the old VM behaves.
-        self.decommitted_hashes.insert(decommit.code_key, ());
+        let is_old = self
+            .decommitted_hashes
+            .insert(decommit.code_key, ())
+            .is_some();
 
         if decommit.cost > *gas {
             // Unlike all other gas costs, this one is not paid if low on gas.
@@ -105,13 +108,13 @@ impl WorldDiff {
         }
         *gas -= decommit.cost;
 
-        let key = decommit.code_key;
         let decommit = world.decommit(decommit.code_key);
-        let decommit_cycles = if self.decommitted_hashes.insert(key, ()).is_none() {
+        let decommit_cycles = if !is_old {
             (decommit.code_page().len() + 1) / 2
         } else {
             0
         };
+
         Some((decommit, decommit_cycles))
     }
 }
