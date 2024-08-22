@@ -21,6 +21,7 @@ impl Stack {
         unsafe { Box::from_raw(alloc_zeroed(Layout::new::<Stack>()).cast::<Stack>()) }
     }
 
+    #[inline(always)]
     pub(crate) fn get(&self, slot: u16) -> U256 {
         self.slots[slot as usize]
     }
@@ -46,14 +47,17 @@ impl Stack {
         self.pointer_flags = Default::default();
     }
 
+    #[inline(always)]
     pub(crate) fn get_pointer_flag(&self, slot: u16) -> bool {
         self.pointer_flags.get(slot)
     }
 
+    #[inline(always)]
     pub(crate) fn set_pointer_flag(&mut self, slot: u16) {
         self.pointer_flags.set(slot);
     }
 
+    #[inline(always)]
     pub(crate) fn clear_pointer_flag(&mut self, slot: u16) {
         self.pointer_flags.clear(slot);
     }

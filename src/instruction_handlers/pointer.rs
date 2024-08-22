@@ -51,12 +51,14 @@ pub trait PtrOp: OpcodeType {
 }
 
 impl PtrOp for PointerAdd {
+    #[inline(always)]
     fn perform(in1: U256, in2: U256) -> Option<U256> {
         ptr_add_sub::<true>(in1, in2)
     }
 }
 
 impl PtrOp for PointerSub {
+    #[inline(always)]
     fn perform(in1: U256, in2: U256) -> Option<U256> {
         ptr_add_sub::<false>(in1, in2)
     }
@@ -80,6 +82,7 @@ fn ptr_add_sub<const IS_ADD: bool>(mut in1: U256, in2: U256) -> Option<U256> {
 }
 
 impl PtrOp for PointerPack {
+    #[inline(always)]
     fn perform(in1: U256, in2: U256) -> Option<U256> {
         if in2.low_u128() != 0 {
             None
@@ -90,6 +93,7 @@ impl PtrOp for PointerPack {
 }
 
 impl PtrOp for PointerShrink {
+    #[inline(always)]
     fn perform(mut in1: U256, in2: U256) -> Option<U256> {
         let pointer: &mut FatPointer = (&mut in1).into();
         pointer.length = pointer.length.checked_sub(in2.low_u32())?;
