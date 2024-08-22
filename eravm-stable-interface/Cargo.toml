@@ -1,9 +1,9 @@
 [package]
 name = "eravm-stable-interface"
-version = "0.1.0"
-edition = "2021"
-license = "MIT OR Apache-2.0"
-authors = ["The Matter Labs Team <hello@matterlabs.dev>"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
 
 [dependencies]
 primitive-types = "0.12.1"
