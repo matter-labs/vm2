@@ -47,9 +47,7 @@ impl Heap {
     /// Needed only by tracers
     pub(crate) fn read_byte(&self, address: u32) -> u8 {
         let (page, offset) = address_to_page_offset(address);
-        self.page(page as usize)
-            .map(|page| page.0[offset as usize])
-            .unwrap_or(0)
+        self.page(page).map(|page| page.0[offset]).unwrap_or(0)
     }
 
     fn page(&self, idx: usize) -> Option<&HeapPage> {
