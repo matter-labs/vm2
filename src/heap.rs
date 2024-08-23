@@ -274,9 +274,7 @@ impl PartialEq for Heaps {
 }
 
 #[derive(Default, Clone, Debug)]
-struct PagePool {
-    stack_top: Option<Box<DormantHeapPage>>,
-}
+struct PagePool(Vec<HeapPage>);
 
 impl PagePool {
     fn allocate_page(&mut self) -> HeapPage {
@@ -289,39 +287,11 @@ impl PagePool {
     }
 
     fn get_dirty_page(&mut self) -> Option<HeapPage> {
-        self.stack_top.take().map(|mut page| {
-            self.stack_top = page.next.take();
-            page.to_heap_page()
-        })
+        self.0.pop()
     }
 
     fn recycle_page(&mut self, page: HeapPage) {
-        self.stack_top = Some(DormantHeapPage::from_heap_page(page, self.stack_top.take()));
-    }
-}
-
-#[derive(Debug, Clone)]
-struct DormantHeapPage {
-    next: Option<Box<DormantHeapPage>>,
-    _padding: [u8; HEAP_PAGE_SIZE - mem::size_of::<Option<Box<DormantHeapPage>>>()],
-}
-
-impl DormantHeapPage {
-    fn from_heap_page(mut page: HeapPage, next: Option<Box<DormantHeapPage>>) -> Box<Self> {
-        // Safety: `next` is not dropped, as it is passed into std::ptr::write.
-        // The array is set up as a valid `DormantHeapPage` before casting.
-        unsafe {
-            std::ptr::write(
-                (&mut *page.0) as *mut u8 as *mut Option<Box<DormantHeapPage>>,
-                next,
-            );
-            Box::from_raw(Box::into_raw(page.0) as *mut Self)
-        }
-    }
-
-    fn to_heap_page(self: Box<Self>) -> HeapPage {
-        // Safety: a byte array is allowed to contain anything.
-        HeapPage(unsafe { Box::from_raw(Box::into_raw(self) as *mut [u8; HEAP_PAGE_SIZE]) })
+        self.0.push(page);
     }
 }
 
