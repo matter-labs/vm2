@@ -46,6 +46,7 @@ impl HeapFromState for AuxHeap {
 /// The last address to which 32 can be added without overflow.
 const LAST_ADDRESS: u32 = u32::MAX - 32;
 
+// Necessary because the obvious code compiles to a comparison of two 256-bit numbers.
 #[inline(always)]
 fn bigger_than_last_address(x: U256) -> bool {
     x.0[0] > LAST_ADDRESS.into() || x.0[1] != 0 || x.0[2] != 0 || x.0[3] != 0
