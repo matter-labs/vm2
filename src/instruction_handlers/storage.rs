@@ -19,7 +19,7 @@ fn sstore<T: Tracer, W: World<T>>(
         let value = Register2::get(args, &mut vm.state);
         if !vm
             .world_diff
-            .written_storage_slots_ct
+            .written_storage_slots
             .contains(&(vm.state.current_frame.address, key))
         {
             vm.state.storage_application_cycles +=
@@ -64,11 +64,11 @@ fn sload<T: Tracer, W: World<T>>(
 
         if !vm
             .world_diff
-            .read_storage_slots_ct
+            .read_storage_slots
             .contains(&(vm.state.current_frame.address, key))
             && !vm
                 .world_diff
-                .written_storage_slots_ct
+                .written_storage_slots
                 .contains(&(vm.state.current_frame.address, key))
         {
             vm.state.storage_application_cycles += STORAGE_READ_STORAGE_APPLICATION_CYCLES as usize;
