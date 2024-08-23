@@ -69,7 +69,7 @@ fn far_call<
                 Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
             if !vm
                 .world_diff
-                .read_storage_slots_ct
+                .read_storage_slots
                 .contains(&(deployer_system_contract_address, destination_address))
             {
                 vm.state.storage_application_cycles +=
