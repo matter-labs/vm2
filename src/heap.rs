@@ -146,7 +146,7 @@ impl HeapInterface for Heap {
     }
 
     fn read_range_big_endian(&self, range: Range<u32>) -> Vec<u8> {
-        let length = range.len() as usize;
+        let length = range.len();
 
         let (mut page_idx, mut offset_in_page) = address_to_page_offset(range.start);
         let mut result = Vec::with_capacity(length);
