@@ -46,6 +46,11 @@ impl HeapFromState for AuxHeap {
 /// The last address to which 32 can be added without overflow.
 const LAST_ADDRESS: u32 = u32::MAX - 32;
 
+#[inline(always)]
+fn bigger_than_last_address(x: U256) -> bool {
+    x.0[0] > LAST_ADDRESS.into() || x.0[1] != 0 || x.0[2] != 0 || x.0[3] != 0
+}
+
 fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
     vm: &mut VirtualMachine,
     instruction: *const Instruction,
@@ -65,7 +70,7 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
 
         // The heap is always grown even when the index nonsensical.
         // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
-        if pointer > LAST_ADDRESS.into() {
+        if bigger_than_last_address(pointer) {
             let _ = vm.state.use_gas(u32::MAX);
             return Ok(&PANIC);
         }
@@ -102,7 +107,7 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
 
         // The heap is always grown even when the index nonsensical.
         // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
-        if pointer > LAST_ADDRESS.into() {
+        if bigger_than_last_address(pointer) {
             let _ = vm.state.use_gas(u32::MAX);
             return Ok(&PANIC);
         }
