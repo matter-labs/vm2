@@ -59,7 +59,7 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
             state: State::new(
                 address,
                 caller,
-                calldata,
+                &calldata,
                 gas,
                 program,
                 world_before_this_frame,
