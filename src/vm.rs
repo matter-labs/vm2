@@ -6,7 +6,6 @@ use crate::world_diff::ExternalSnapshot;
 use crate::{
     callframe::{Callframe, FrameRemnant},
     decommit::u256_into_address,
-    instruction_handlers::free_panic,
     stack::StackPool,
     state::State,
     world_diff::{Snapshot, WorldDiff},
@@ -14,7 +13,7 @@ use crate::{
 };
 use crate::{Instruction, ModeRequirements, Predicate};
 use eravm_stable_interface::opcodes::TypeLevelCallingMode;
-use eravm_stable_interface::{opcodes, CallingMode, HeapId, Tracer};
+use eravm_stable_interface::{CallingMode, HeapId, Tracer};
 use u256::H160;
 
 #[derive(Debug)]
@@ -78,33 +77,10 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
     pub fn run(&mut self, world: &mut W, tracer: &mut T) -> ExecutionEnd {
         unsafe {
             loop {
-                let args = &(*self.state.current_frame.pc).arguments;
-
-                if self.state.use_gas(args.get_static_gas_cost()).is_err()
-                    || !args.mode_requirements().met(
-                        self.state.current_frame.is_kernel,
-                        self.state.current_frame.is_static,
-                    )
+                if let ExecutionStatus::Stopped(end) =
+                    ((*self.state.current_frame.pc).handler)(self, world, tracer)
                 {
-                    if let ExecutionStatus::Stopped(end) = free_panic(self, world, tracer) {
-                        return end;
-                    };
-                    continue;
-                }
-
-                #[cfg(feature = "trace")]
-                self.print_instruction(self.state.current_frame.pc);
-
-                if args.predicate().satisfied(&self.state.flags) {
-                    if let ExecutionStatus::Stopped(end) =
-                        ((*self.state.current_frame.pc).handler)(self, world, tracer)
-                    {
-                        return end;
-                    };
-                } else {
-                    tracer.before_instruction::<opcodes::Nop, _>(self);
-                    self.state.current_frame.pc = self.state.current_frame.pc.add(1);
-                    tracer.after_instruction::<opcodes::Nop, _>(self);
+                    return end;
                 }
             }
         }
@@ -126,31 +102,10 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
 
         let end = unsafe {
             loop {
-                let args = &(*self.state.current_frame.pc).arguments;
-
-                if self.state.use_gas(args.get_static_gas_cost()).is_err()
-                    || !args.mode_requirements().met(
-                        self.state.current_frame.is_kernel,
-                        self.state.current_frame.is_static,
-                    )
+                if let ExecutionStatus::Stopped(end) =
+                    ((*self.state.current_frame.pc).handler)(self, world, tracer)
                 {
-                    if let ExecutionStatus::Stopped(e) = free_panic(self, world, tracer) {
-                        break e;
-                    };
-                    continue;
-                }
-
-                #[cfg(feature = "trace")]
-                self.print_instruction(self.state.current_frame.pc);
-
-                if args.predicate().satisfied(&self.state.flags) {
-                    if let ExecutionStatus::Stopped(end) =
-                        ((*self.state.current_frame.pc).handler)(self, world, tracer)
-                    {
-                        break end;
-                    };
-                } else {
-                    self.state.current_frame.pc = self.state.current_frame.pc.add(1);
+                    break end;
                 }
 
                 if self.state.total_unspent_gas() < minimum_gas {
@@ -283,25 +238,6 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
                 snapshot: world_before_this_frame,
             }
         })
-    }
-
-    #[cfg(feature = "trace")]
-    fn print_instruction(&self, instruction: *const crate::instruction::Instruction<T, W>) {
-        print!("{:?}: ", unsafe {
-            instruction.offset_from(self.state.current_frame.program.instruction(0).unwrap())
-        });
-        self.state.registers[1..]
-            .iter()
-            .zip(1..)
-            .for_each(|(&(mut x), i)| {
-                if self.state.register_pointer_flags & (1 << i) != 0 {
-                    x.0[0] &= 0x00000000_ffffffffu64;
-                    x.0[1] &= 0xffffffff_00000000u64;
-                }
-                print!("{x:?} ")
-            });
-        print!("{}", self.state.current_frame.gas);
-        println!();
     }
 
     pub(crate) fn start_new_tx(&mut self) {

@@ -29,7 +29,6 @@ harness = false
 
 [features]
 default = []
-trace = []
 single_instruction_test = ["arbitrary", "u256/arbitrary", "zk_evm", "anyhow"]
 
 [workspace]
