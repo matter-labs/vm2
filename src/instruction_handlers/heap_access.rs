@@ -107,7 +107,7 @@ fn store<
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate_ext::<H::Write, _, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate_ext::<H::Write, _, _>(vm, world, tracer, |vm, args, _, _| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);

@@ -18,7 +18,7 @@ fn ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate_ext::<opcodes::Ret<RT>, _, _>(vm, world, tracer, |vm, args, _| {
+    instruction_boilerplate_ext::<opcodes::Ret<RT>, _, _>(vm, world, tracer, |vm, args, _, _| {
         let mut return_type = RT::VALUE;
         let near_call_leftover_gas = vm.state.current_frame.gas;
 
@@ -120,11 +120,13 @@ fn ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
 
 /// Formally, a far call pushes a new frame and returns from it immediately if it panics.
 /// This function instead panics without popping a frame to save on allocation.
-/// TODO: when tracers are implemented, this function should count as a separate instruction!
 pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
+    tracer: &mut T,
     exception_handler: u16,
 ) {
+    tracer.before_instruction::<opcodes::Ret<Panic>, _>(vm);
+
     // Gas is already subtracted in the far call code.
     // No need to roll back, as no changes are made in this "frame".
 
@@ -136,6 +138,8 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
     vm.state.flags = Flags::new(true, false, false);
 
     vm.state.current_frame.set_pc_from_u16(exception_handler);
+
+    tracer.after_instruction::<opcodes::Ret<Panic>, _>(vm);
 }
 
 /// Panics, burning all available gas.

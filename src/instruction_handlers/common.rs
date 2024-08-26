@@ -24,14 +24,19 @@ pub(crate) fn instruction_boilerplate_ext<Opcode: OpcodeType, T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-    business_logic: impl FnOnce(&mut VirtualMachine<T, W>, &Arguments, &mut W) -> ExecutionStatus,
+    business_logic: impl FnOnce(
+        &mut VirtualMachine<T, W>,
+        &Arguments,
+        &mut T,
+        &mut W,
+    ) -> ExecutionStatus,
 ) -> ExecutionStatus {
     tracer.before_instruction::<Opcode, _>(vm);
     let result = unsafe {
         let instruction = vm.state.current_frame.pc;
         vm.state.current_frame.pc = instruction.add(1);
 
-        business_logic(vm, &(*instruction).arguments, world)
+        business_logic(vm, &(*instruction).arguments, tracer, world)
     };
     tracer.after_instruction::<Opcode, _>(vm);
 
