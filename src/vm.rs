@@ -37,7 +37,8 @@ pub struct VirtualMachine<T, W> {
 
     pub(crate) stack_pool: StackPool,
 
-    // Instructions that are jumped to when things go wrong.
+    /// Instruction that is jumped to when things go wrong while executing another.
+    /// Boxed, so the pointer isn't invalidated by moves.
     pub(crate) panic: Box<Instruction<T, W>>,
 }
 
