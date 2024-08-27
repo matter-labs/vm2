@@ -3,7 +3,7 @@ pub use eravm_stable_interface::opcodes::{
     RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
 };
 pub use heap_access::{AuxHeap, Heap, HeapInterface};
-pub(crate) use ret::{free_panic, invalid_instruction, RETURN_COST};
+pub(crate) use ret::{invalid_instruction, RETURN_COST};
 
 mod binop;
 mod common;

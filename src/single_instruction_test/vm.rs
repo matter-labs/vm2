@@ -1,8 +1,8 @@
 use super::{heap::Heaps, stack::StackPool};
 use crate::{
     addressing_modes::Arguments, callframe::Callframe, fat_pointer::FatPointer,
-    instruction::ExecutionStatus, instruction_handlers::free_panic, HeapId, Instruction,
-    ModeRequirements, Predicate, Settings, State, VirtualMachine, World,
+    instruction::ExecutionStatus, HeapId, Instruction, ModeRequirements, Predicate, Settings,
+    State, VirtualMachine, World,
 };
 use arbitrary::Arbitrary;
 use eravm_stable_interface::Tracer;
@@ -11,25 +11,7 @@ use u256::U256;
 
 impl<T: Tracer, W> VirtualMachine<T, W> {
     pub fn run_single_instruction(&mut self, world: &mut W, tracer: &mut T) -> ExecutionStatus {
-        unsafe {
-            let args = &(*self.state.current_frame.pc).arguments;
-
-            if self.state.use_gas(args.get_static_gas_cost()).is_err()
-                || !args.mode_requirements().met(
-                    self.state.current_frame.is_kernel,
-                    self.state.current_frame.is_static,
-                )
-            {
-                return free_panic(self, world, tracer);
-            }
-
-            if args.predicate().satisfied(&self.state.flags) {
-                ((*self.state.current_frame.pc).handler)(self, world, tracer)
-            } else {
-                self.state.current_frame.pc = self.state.current_frame.pc.add(1);
-                ExecutionStatus::Running
-            }
-        }
+        unsafe { ((*self.state.current_frame.pc).handler)(self, world, tracer) }
     }
 
     pub fn is_in_valid_state(&self) -> bool {

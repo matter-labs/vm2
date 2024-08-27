@@ -1,4 +1,4 @@
-use super::free_panic;
+use super::ret::free_panic;
 use crate::{addressing_modes::Arguments, instruction::ExecutionStatus, VirtualMachine};
 use eravm_stable_interface::{opcodes, OpcodeType, Tracer};
 
