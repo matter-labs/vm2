@@ -95,12 +95,15 @@ impl WorldDiff {
         decommit: UnpaidDecommit,
         gas: &mut u32,
     ) -> Option<Program<T, W>> {
+        // We intentionally record a decommitment event even if actual decommitment never happens because of an out-of-gas error.
+        // This is how the old VM behaves.
+        self.decommitted_hashes.insert(decommit.code_key, ());
+
         if decommit.cost > *gas {
             // Unlike all other gas costs, this one is not paid if low on gas.
             return None;
         }
         *gas -= decommit.cost;
-        self.decommitted_hashes.insert(decommit.code_key, ());
         Some(world.decommit(decommit.code_key))
     }
 }

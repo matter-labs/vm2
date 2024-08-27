@@ -1,7 +1,7 @@
 use crate::instruction_handlers::HeapInterface;
 use eravm_stable_interface::HeapId;
 use std::{
-    mem,
+    fmt, mem,
     ops::{Index, Range},
 };
 use u256::U256;
@@ -20,9 +20,34 @@ impl Default for HeapPage {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Heap {
     pages: Vec<Option<HeapPage>>,
+}
+
+// We never remove `HeapPage`s (even after rollbacks – although we do zero all added pages in this case),
+// we allow additional pages to be present if they are zeroed.
+impl PartialEq for Heap {
+    fn eq(&self, other: &Self) -> bool {
+        for i in 0..self.pages.len().max(other.pages.len()) {
+            let this_page = self.pages.get(i).and_then(Option::as_ref);
+            let other_page = other.pages.get(i).and_then(Option::as_ref);
+            match (this_page, other_page) {
+                (Some(this_page), Some(other_page)) => {
+                    if this_page != other_page {
+                        return false;
+                    }
+                }
+                (Some(page), None) | (None, Some(page)) => {
+                    if page.0.iter().any(|&byte| byte != 0) {
+                        return false;
+                    }
+                }
+                (None, None) => { /* do nothing */ }
+            }
+        }
+        true
+    }
 }
 
 impl Heap {
@@ -279,8 +304,17 @@ impl PartialEq for Heaps {
     }
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone)]
 struct PagePool(Vec<HeapPage>);
+
+impl fmt::Debug for PagePool {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PagePool")
+            .field("len", &self.0.len())
+            .finish_non_exhaustive()
+    }
+}
 
 impl PagePool {
     fn allocate_page(&mut self) -> HeapPage {
