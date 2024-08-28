@@ -40,7 +40,7 @@ fn nested_near_call(bencher: Bencher) {
             },
         );
 
-        vm.run(black_box(&mut world));
+        vm.run(black_box(&mut world), &mut ());
     });
 }
 
@@ -87,7 +87,7 @@ fn nested_near_call_with_storage_write(bencher: Bencher) {
             },
         );
 
-        vm.run(black_box(&mut world));
+        vm.run(black_box(&mut world), &mut ());
     });
 }
 

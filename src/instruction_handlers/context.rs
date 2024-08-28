@@ -2,76 +2,74 @@ use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Source},
     decommit::address_into_u256,
-    instruction::InstructionResult,
+    instruction::ExecutionStatus,
     state::State,
-    Instruction, VirtualMachine, World,
+    Instruction, VirtualMachine,
+};
+use eravm_stable_interface::{
+    opcodes::{self, Caller, CodeAddress, ContextU128, ErgsLeft, This, SP},
+    OpcodeType, Tracer,
 };
 use u256::U256;
 use zkevm_opcode_defs::VmMetaParameters;
 
-fn context<Op: ContextOp>(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
+fn context<T: Tracer, W, Op: ContextOp>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    instruction_boilerplate::<Op, _, _>(vm, world, tracer, |vm, args, _| {
         let result = Op::get(&vm.state);
         Register1::set(args, &mut vm.state, result)
     })
 }
 
-trait ContextOp {
-    fn get(state: &State) -> U256;
+trait ContextOp: OpcodeType {
+    fn get<T, W>(state: &State<T, W>) -> U256;
 }
 
-struct This;
 impl ContextOp for This {
-    fn get(state: &State) -> U256 {
+    fn get<T, W>(state: &State<T, W>) -> U256 {
         address_into_u256(state.current_frame.address)
     }
 }
 
-struct Caller;
 impl ContextOp for Caller {
-    fn get(state: &State) -> U256 {
+    fn get<T, W>(state: &State<T, W>) -> U256 {
         address_into_u256(state.current_frame.caller)
     }
 }
 
-struct CodeAddress;
 impl ContextOp for CodeAddress {
-    fn get(state: &State) -> U256 {
+    fn get<T, W>(state: &State<T, W>) -> U256 {
         address_into_u256(state.current_frame.code_address)
     }
 }
 
-struct ErgsLeft;
 impl ContextOp for ErgsLeft {
-    fn get(state: &State) -> U256 {
+    fn get<T, W>(state: &State<T, W>) -> U256 {
         U256([state.current_frame.gas as u64, 0, 0, 0])
     }
 }
 
-struct U128;
-impl ContextOp for U128 {
-    fn get(state: &State) -> U256 {
+impl ContextOp for ContextU128 {
+    fn get<T, W>(state: &State<T, W>) -> U256 {
         state.get_context_u128().into()
     }
 }
 
-struct SP;
 impl ContextOp for SP {
-    fn get(state: &State) -> U256 {
+    fn get<T, W>(state: &State<T, W>) -> U256 {
         state.current_frame.sp.into()
     }
 }
 
-fn context_meta(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
+fn context_meta<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    instruction_boilerplate::<opcodes::ContextMeta, _, _>(vm, world, tracer, |vm, args, _| {
         let result = VmMetaParameters {
             heap_size: vm.state.current_frame.heap_size,
             aux_heap_size: vm.state.current_frame.aux_heap_size,
@@ -91,41 +89,41 @@ fn context_meta(
     })
 }
 
-fn set_context_u128(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, args, _| {
+fn set_context_u128<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    instruction_boilerplate::<opcodes::SetContextU128, _, _>(vm, world, tracer, |vm, args, _| {
         let value = Register1::get(args, &mut vm.state).low_u128();
         vm.state.set_context_u128(value);
     })
 }
 
-fn increment_tx_number(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |vm, _, _| {
+fn increment_tx_number<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    instruction_boilerplate::<opcodes::IncrementTxNumber, _, _>(vm, world, tracer, |vm, _, _| {
         vm.start_new_tx();
     })
 }
 
-fn aux_mutating(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate(vm, instruction, world, |_, _, _| {
+fn aux_mutating<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    instruction_boilerplate::<opcodes::AuxMutating0, _, _>(vm, world, tracer, |_, _, _| {
         // This instruction just crashes or nops
     })
 }
 
-impl Instruction {
+impl<T: Tracer, W> Instruction<T, W> {
     fn from_context<Op: ContextOp>(out: Register1, arguments: Arguments) -> Self {
         Self {
-            handler: context::<Op>,
+            handler: context::<T, W, Op>,
             arguments: arguments.write_destination(&out),
         }
     }
@@ -143,7 +141,7 @@ impl Instruction {
         Self::from_context::<ErgsLeft>(out, arguments)
     }
     pub fn from_context_u128(out: Register1, arguments: Arguments) -> Self {
-        Self::from_context::<U128>(out, arguments)
+        Self::from_context::<ContextU128>(out, arguments)
     }
     pub fn from_context_sp(out: Register1, arguments: Arguments) -> Self {
         Self::from_context::<SP>(out, arguments)

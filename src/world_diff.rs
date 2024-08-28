@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::{
     rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackablePod, RollbackableSet},
-    World,
+    StorageInterface,
 };
 use u256::{H160, U256};
 use zkevm_opcode_defs::system_params::{
@@ -68,7 +68,7 @@ impl WorldDiff {
     /// Returns the storage slot's value and a refund based on its hot/cold status.
     pub(crate) fn read_storage(
         &mut self,
-        world: &mut dyn World,
+        world: &mut impl StorageInterface,
         contract: H160,
         key: U256,
     ) -> (U256, u32) {
@@ -82,7 +82,7 @@ impl WorldDiff {
     /// the latter must not record a refund as per previous VM versions).
     pub(crate) fn read_storage_without_refund(
         &mut self,
-        world: &mut dyn World,
+        world: &mut impl StorageInterface,
         contract: H160,
         key: U256,
     ) -> U256 {
@@ -91,7 +91,7 @@ impl WorldDiff {
 
     fn read_storage_inner(
         &mut self,
-        world: &mut dyn World,
+        world: &mut impl StorageInterface,
         contract: H160,
         key: U256,
     ) -> (U256, u32) {
@@ -117,7 +117,7 @@ impl WorldDiff {
     /// Returns the refund based the hot/cold status of the storage slot and the change in pubdata.
     pub(crate) fn write_storage(
         &mut self,
-        world: &mut dyn World,
+        world: &mut impl StorageInterface,
         contract: H160,
         key: U256,
         value: U256,
@@ -229,6 +229,10 @@ impl WorldDiff {
         self.pubdata_costs.push(0);
         self.transient_storage_changes
             .insert((contract, key), value);
+    }
+
+    pub fn get_transient_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
+        self.transient_storage_changes.as_ref()
     }
 
     pub(crate) fn record_event(&mut self, event: Event) {
@@ -452,11 +456,7 @@ mod tests {
     }
 
     struct NoWorld;
-    impl World for NoWorld {
-        fn decommit(&mut self, _: U256) -> crate::Program {
-            unimplemented!()
-        }
-
+    impl StorageInterface for NoWorld {
         fn read_storage(&mut self, _: H160, _: U256) -> Option<U256> {
             None
         }
@@ -467,10 +467,6 @@ mod tests {
 
         fn is_free_storage_slot(&self, _: &H160, _: &U256) -> bool {
             false
-        }
-
-        fn decommit_code(&mut self, _: U256) -> Vec<u8> {
-            unimplemented!()
         }
     }
 }

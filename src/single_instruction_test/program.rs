@@ -1,22 +1,35 @@
-use crate::{decode::decode, Instruction};
+use crate::{decode::decode, Instruction, World};
 use arbitrary::Arbitrary;
+use eravm_stable_interface::Tracer;
 use std::{rc::Rc, sync::Arc};
 use u256::U256;
 
 use super::mock_array::MockRead;
 
-#[derive(Clone, Debug)]
-pub struct Program {
+#[derive(Debug)]
+pub struct Program<T, W> {
     pub raw_first_instruction: u64,
 
     // Need a two-instruction array so that incrementing the program counter is safe
-    first_instruction: MockRead<u16, Rc<[Instruction; 2]>>,
-    other_instruction: MockRead<u16, Rc<Option<[Instruction; 2]>>>,
+    first_instruction: MockRead<u16, Rc<[Instruction<T, W>; 2]>>,
+    #[allow(clippy::type_complexity)]
+    other_instruction: MockRead<u16, Rc<Option<[Instruction<T, W>; 2]>>>,
 
     code_page: Arc<[U256]>,
 }
 
-impl<'a> Arbitrary<'a> for Program {
+impl<T, W> Clone for Program<T, W> {
+    fn clone(&self) -> Self {
+        Self {
+            raw_first_instruction: self.raw_first_instruction,
+            first_instruction: self.first_instruction.clone(),
+            other_instruction: self.other_instruction.clone(),
+            code_page: self.code_page.clone(),
+        }
+    }
+}
+
+impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for Program<T, W> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         let raw_first_instruction = u.arbitrary()?;
 
@@ -35,8 +48,8 @@ impl<'a> Arbitrary<'a> for Program {
     }
 }
 
-impl Program {
-    pub fn instruction(&self, n: u16) -> Option<&Instruction> {
+impl<T, W> Program<T, W> {
+    pub fn instruction(&self, n: u16) -> Option<&Instruction<T, W>> {
         if n == 0 {
             Some(&self.first_instruction.get(n).as_ref()[0])
         } else {
@@ -51,7 +64,9 @@ impl Program {
     pub fn code_page(&self) -> &Arc<[U256]> {
         &self.code_page
     }
+}
 
+impl<T: Tracer, W> Program<T, W> {
     pub fn for_decommit() -> Self {
         Self {
             raw_first_instruction: 0,
@@ -68,7 +83,7 @@ impl Program {
     }
 }
 
-impl PartialEq for Program {
+impl<T, W> PartialEq for Program<T, W> {
     fn eq(&self, _: &Self) -> bool {
         false
     }

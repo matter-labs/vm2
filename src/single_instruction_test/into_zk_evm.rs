@@ -2,15 +2,16 @@ use std::sync::Arc;
 
 use super::{stack::Stack, state_to_zk_evm::vm2_state_to_zk_evm_state, MockWorld};
 use crate::{
-    zkevm_opcode_defs::decoding::EncodingModeProduction, Instruction, VirtualMachine, World,
+    zkevm_opcode_defs::decoding::EncodingModeProduction, StorageInterface, VirtualMachine,
 };
+use eravm_stable_interface::Tracer;
 use u256::U256;
 use zk_evm::{
     abstractions::{DecommittmentProcessor, Memory, MemoryType, PrecompilesProcessor, Storage},
     aux_structures::PubdataCost,
     block_properties::BlockProperties,
     reference_impls::event_sink::InMemoryEventSink,
-    tracing::Tracer,
+    tracing,
     vm_state::VmState,
     witness_trace::VmWitnessTracer,
 };
@@ -28,16 +29,12 @@ type ZkEvmState = VmState<
     EncodingModeProduction,
 >;
 
-pub fn vm2_to_zk_evm(
-    vm: &VirtualMachine,
-    world: MockWorld,
-    program_counter: *const Instruction,
-) -> ZkEvmState {
+pub fn vm2_to_zk_evm<T: Tracer, W>(vm: &VirtualMachine<T, W>, world: MockWorld) -> ZkEvmState {
     let mut event_sink = InMemoryEventSink::new();
     event_sink.start_frame(zk_evm::aux_structures::Timestamp(0));
 
     VmState {
-        local_state: vm2_state_to_zk_evm_state(&vm.state, program_counter),
+        local_state: vm2_state_to_zk_evm_state(&vm.state, &*vm.panic),
         block_properties: BlockProperties {
             default_aa_code_hash: U256::from_big_endian(&vm.settings.default_aa_code_hash),
             evm_simulator_code_hash: U256::from_big_endian(&vm.settings.evm_interpreter_code_hash),
@@ -57,7 +54,10 @@ pub fn vm2_to_zk_evm(
     }
 }
 
-pub fn add_heap_to_zk_evm(zk_evm: &mut ZkEvmState, vm_after_execution: &VirtualMachine) {
+pub fn add_heap_to_zk_evm<T, W>(
+    zk_evm: &mut ZkEvmState,
+    vm_after_execution: &VirtualMachine<T, W>,
+) {
     if let Some((heapid, heap)) = vm_after_execution.state.heaps.read.read_that_happened() {
         if let Some((start_index, mut value)) = heap.read.read_that_happened() {
             value.reverse();
@@ -248,7 +248,7 @@ impl DecommittmentProcessor for MockDecommitter {
 #[derive(Debug)]
 pub struct NoTracer;
 
-impl Tracer for NoTracer {
+impl tracing::Tracer for NoTracer {
     type SupportedMemory = MockMemory;
 
     fn before_decoding(

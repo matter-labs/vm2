@@ -1,6 +1,6 @@
 use crate::{callframe::Callframe, State, VirtualMachine};
 
-impl VirtualMachine {
+impl<T, W> VirtualMachine<T, W> {
     pub fn print_mock_info(&self) {
         self.state.print_mock_info();
         println!("Events: {:?}", self.world_diff.events());
@@ -12,7 +12,7 @@ impl VirtualMachine {
     }
 }
 
-impl State {
+impl<T, W> State<T, W> {
     pub fn print_mock_info(&self) {
         if let Some((heapid, heap)) = self.heaps.read.read_that_happened() {
             println!("Heap: {:?}", heapid);
@@ -27,14 +27,14 @@ impl State {
         println!("Current frame:");
         self.current_frame.print_mock_info();
 
-        if let Some((pc, previous)) = self.previous_frames.first() {
-            println!("Previous frame (pc at {pc}):");
+        if let Some(previous) = self.previous_frames.first() {
+            println!("Previous frame (pc at {}):", previous.get_pc_as_u16());
             previous.print_mock_info();
         }
     }
 }
 
-impl Callframe {
+impl<T, W> Callframe<T, W> {
     pub fn print_mock_info(&self) {
         if let Some((address, (value, tag))) = self.stack.read_that_happened() {
             println!("  {value:?} (is_pointer: {tag}) read from stack address {address}",);

@@ -4,15 +4,16 @@ use crate::{
         Immediate1, Immediate2, Register, Register1, Register2, RegisterAndImmediate,
         RelativeStack, Source, SourceWriter,
     },
-    instruction::{ExecutionEnd, InstructionResult},
+    instruction::{ExecutionEnd, ExecutionStatus},
     instruction_handlers::{
-        Add, And, AuxHeap, CallingMode, Div, Heap, Mul, Or, PtrAdd, PtrPack, PtrShrink, PtrSub,
+        Add, And, AuxHeap, Div, Heap, Mul, Or, PointerAdd, PointerPack, PointerShrink, PointerSub,
         RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
     },
     jump_to_beginning,
     mode_requirements::ModeRequirements,
     Instruction, Predicate, VirtualMachine, World,
 };
+use eravm_stable_interface::{opcodes, Tracer};
 use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
     ImmMemHandlerFlags, Opcode,
@@ -22,7 +23,10 @@ use zkevm_opcode_defs::{
     SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
 };
 
-pub fn decode_program(raw: &[u64], is_bootloader: bool) -> Vec<Instruction> {
+pub fn decode_program<T: Tracer, W: World<T>>(
+    raw: &[u64],
+    is_bootloader: bool,
+) -> Vec<Instruction<T, W>> {
     raw.iter()
         .take(1 << 16)
         .map(|i| decode(*i, is_bootloader))
@@ -34,7 +38,7 @@ pub fn decode_program(raw: &[u64], is_bootloader: bool) -> Vec<Instruction> {
         .collect()
 }
 
-fn unimplemented_instruction(variant: Opcode) -> Instruction {
+fn unimplemented_instruction<T, W>(variant: Opcode) -> Instruction<T, W> {
     let mut arguments = Arguments::new(Predicate::Always, 0, ModeRequirements::none());
     let variant_as_number: u16 = unsafe { std::mem::transmute(variant) };
     Immediate1(variant_as_number).write_source(&mut arguments);
@@ -43,21 +47,22 @@ fn unimplemented_instruction(variant: Opcode) -> Instruction {
         arguments,
     }
 }
-fn unimplemented_handler(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    _: &mut dyn World,
-) -> InstructionResult {
+fn unimplemented_handler<T, W>(
+    vm: &mut VirtualMachine<T, W>,
+    _: &mut W,
+    _: &mut T,
+) -> ExecutionStatus {
     let variant: Opcode = unsafe {
         std::mem::transmute(
-            Immediate1::get(&(*instruction).arguments, &mut vm.state).low_u32() as u16,
+            Immediate1::get(&(*vm.state.current_frame.pc).arguments, &mut vm.state).low_u32()
+                as u16,
         )
     };
     eprintln!("Unimplemented instruction: {:?}!", variant);
-    Err(ExecutionEnd::Panicked)
+    ExecutionStatus::Stopped(ExecutionEnd::Panicked)
 }
 
-pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
+pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> Instruction<T, W> {
     let (parsed, _) = EncodingModeProduction::parse_preliminary_variant_and_absolute_number(raw);
 
     let predicate = match parsed.condition {
@@ -194,10 +199,10 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
             }
         },
         zkevm_opcode_defs::Opcode::Ptr(x) => match x {
-            zkevm_opcode_defs::PtrOpcode::Add => ptr!(PtrAdd),
-            zkevm_opcode_defs::PtrOpcode::Sub => ptr!(PtrSub),
-            zkevm_opcode_defs::PtrOpcode::Pack => ptr!(PtrPack),
-            zkevm_opcode_defs::PtrOpcode::Shrink => ptr!(PtrShrink),
+            zkevm_opcode_defs::PtrOpcode::Add => ptr!(PointerAdd),
+            zkevm_opcode_defs::PtrOpcode::Sub => ptr!(PointerSub),
+            zkevm_opcode_defs::PtrOpcode::Pack => ptr!(PointerPack),
+            zkevm_opcode_defs::PtrOpcode::Shrink => ptr!(PointerShrink),
         },
         zkevm_opcode_defs::Opcode::NearCall(_) => Instruction::from_near_call(
             Register1(Register::new(parsed.src0_reg_idx)),
@@ -208,13 +213,13 @@ pub(crate) fn decode(raw: u64, is_bootloader: bool) -> Instruction {
         zkevm_opcode_defs::Opcode::FarCall(kind) => {
             let constructor = match kind {
                 zkevm_opcode_defs::FarCallOpcode::Normal => {
-                    Instruction::from_far_call::<{ CallingMode::Normal as u8 }>
+                    Instruction::from_far_call::<opcodes::Normal>
                 }
                 zkevm_opcode_defs::FarCallOpcode::Delegate => {
-                    Instruction::from_far_call::<{ CallingMode::Delegate as u8 }>
+                    Instruction::from_far_call::<opcodes::Delegate>
                 }
                 zkevm_opcode_defs::FarCallOpcode::Mimic => {
-                    Instruction::from_far_call::<{ CallingMode::Mimic as u8 }>
+                    Instruction::from_far_call::<opcodes::Mimic>
                 }
             };
             constructor(

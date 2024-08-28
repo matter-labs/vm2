@@ -5,9 +5,9 @@ use zkevm_opcode_defs::{
 };
 
 impl WorldDiff {
-    pub(crate) fn decommit(
+    pub(crate) fn decommit<T>(
         &mut self,
-        world: &mut dyn World,
+        world: &mut impl World<T>,
         address: U256,
         default_aa_code_hash: [u8; 32],
         evm_interpreter_code_hash: [u8; 32],
@@ -80,17 +80,21 @@ impl WorldDiff {
     /// Returns the decommitted contract code and a flag set to `true` if this is a fresh decommit (i.e.,
     /// the code wasn't decommitted previously in the same VM run).
     #[doc(hidden)] // should be used for testing purposes only; can break VM operation otherwise
-    pub fn decommit_opcode(&mut self, world: &mut dyn World, code_hash: U256) -> (Vec<u8>, bool) {
+    pub fn decommit_opcode<T>(
+        &mut self,
+        world: &mut impl World<T>,
+        code_hash: U256,
+    ) -> (Vec<u8>, bool) {
         let was_decommitted = self.decommitted_hashes.insert(code_hash, ()).is_some();
         (world.decommit_code(code_hash), !was_decommitted)
     }
 
-    pub(crate) fn pay_for_decommit(
+    pub(crate) fn pay_for_decommit<T, W: World<T>>(
         &mut self,
-        world: &mut dyn World,
+        world: &mut W,
         decommit: UnpaidDecommit,
         gas: &mut u32,
-    ) -> Option<Program> {
+    ) -> Option<Program<T, W>> {
         // We intentionally record a decommitment event even if actual decommitment never happens because of an out-of-gas error.
         // This is how the old VM behaves.
         self.decommitted_hashes.insert(decommit.code_key, ());
@@ -112,7 +116,7 @@ pub(crate) struct UnpaidDecommit {
 /// May be used to load code when the VM first starts up.
 /// Doesn't check for any errors.
 /// Doesn't cost anything but also doesn't make the code free in future decommits.
-pub fn initial_decommit(world: &mut impl World, address: H160) -> Program {
+pub fn initial_decommit<T, W: World<T>>(world: &mut W, address: H160) -> Program<T, W> {
     let deployer_system_contract_address =
         Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
     let code_info = world

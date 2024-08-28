@@ -1,6 +1,7 @@
 use super::mock_array::MockRead;
-use crate::{Program, World};
+use crate::{Program, StorageInterface, World};
 use arbitrary::Arbitrary;
+use eravm_stable_interface::Tracer;
 use u256::{H160, U256};
 
 #[derive(Debug, Arbitrary, Clone)]
@@ -8,15 +9,17 @@ pub struct MockWorld {
     storage_slot: MockRead<(H160, U256), Option<U256>>,
 }
 
-impl World for MockWorld {
-    fn decommit(&mut self, _hash: U256) -> Program {
+impl<T: Tracer> World<T> for MockWorld {
+    fn decommit(&mut self, _hash: U256) -> Program<T, Self> {
         Program::for_decommit()
     }
 
     fn decommit_code(&mut self, _hash: U256) -> Vec<u8> {
         vec![0; 32]
     }
+}
 
+impl StorageInterface for MockWorld {
     fn read_storage(&mut self, contract: H160, key: U256) -> Option<U256> {
         *self.storage_slot.get((contract, key))
     }

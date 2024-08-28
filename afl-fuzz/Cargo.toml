@@ -1,7 +1,7 @@
 [package]
 name = "differential_fuzzing"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 publish = false
 
 [dependencies]
@@ -12,6 +12,9 @@ pretty_assertions = "1.4.0"
 [dependencies.vm2]
 path = ".."
 features = ["single_instruction_test"]
+
+[dependencies.eravm-stable-interface]
+path = "../eravm-stable-interface"
 
 [[bin]]
 name = "show_testcase"

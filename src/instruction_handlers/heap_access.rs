@@ -1,14 +1,15 @@
-use super::{common::instruction_boilerplate_with_panic, PANIC};
+use super::common::{instruction_boilerplate, instruction_boilerplate_ext};
 use crate::{
     addressing_modes::{
         Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
         RegisterOrImmediate, Source,
     },
     fat_pointer::FatPointer,
-    instruction::InstructionResult,
+    instruction::ExecutionStatus,
     state::State,
-    ExecutionEnd, HeapId, Instruction, VirtualMachine, World,
+    ExecutionEnd, HeapId, Instruction, VirtualMachine,
 };
+use eravm_stable_interface::{opcodes, OpcodeType, Tracer};
 use std::ops::Range;
 use u256::U256;
 
@@ -19,28 +20,34 @@ pub trait HeapInterface {
 }
 
 pub trait HeapFromState {
-    fn get_heap(state: &State) -> HeapId;
-    fn get_heap_size(state: &mut State) -> &mut u32;
+    fn get_heap<T, W>(state: &State<T, W>) -> HeapId;
+    fn get_heap_size<T, W>(state: &mut State<T, W>) -> &mut u32;
+    type Read: OpcodeType;
+    type Write: OpcodeType;
 }
 
 pub struct Heap;
 impl HeapFromState for Heap {
-    fn get_heap(state: &State) -> HeapId {
+    fn get_heap<T, W>(state: &State<T, W>) -> HeapId {
         state.current_frame.heap
     }
-    fn get_heap_size(state: &mut State) -> &mut u32 {
+    fn get_heap_size<T, W>(state: &mut State<T, W>) -> &mut u32 {
         &mut state.current_frame.heap_size
     }
+    type Read = opcodes::HeapRead;
+    type Write = opcodes::HeapWrite;
 }
 
 pub struct AuxHeap;
 impl HeapFromState for AuxHeap {
-    fn get_heap(state: &State) -> HeapId {
+    fn get_heap<T, W>(state: &State<T, W>) -> HeapId {
         state.current_frame.aux_heap
     }
-    fn get_heap_size(state: &mut State) -> &mut u32 {
+    fn get_heap_size<T, W>(state: &mut State<T, W>) -> &mut u32 {
         &mut state.current_frame.aux_heap_size
     }
+    type Read = opcodes::AuxHeapRead;
+    type Write = opcodes::AuxHeapWrite;
 }
 
 /// The last address to which 32 can be added without overflow.
@@ -52,12 +59,12 @@ fn bigger_than_last_address(x: U256) -> bool {
     x.0[0] > LAST_ADDRESS.into() || x.0[1] != 0 || x.0[2] != 0 || x.0[3] != 0
 }
 
-fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
+fn load<T: Tracer, W, H: HeapFromState, In: Source, const INCREMENT: bool>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    instruction_boilerplate::<H::Read, _, _>(vm, world, tracer, |vm, args, _| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
@@ -65,15 +72,17 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
         let address = pointer.low_u32();
 
         let new_bound = address.wrapping_add(32);
-        if grow_heap::<H>(&mut vm.state, new_bound).is_err() {
-            return Ok(&PANIC);
+        if grow_heap::<_, _, H>(&mut vm.state, new_bound).is_err() {
+            vm.state.current_frame.pc = &*vm.panic;
+            return;
         };
 
         // The heap is always grown even when the index nonsensical.
         // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
         if bigger_than_last_address(pointer) {
             let _ = vm.state.use_gas(u32::MAX);
-            return Ok(&PANIC);
+            vm.state.current_frame.pc = &*vm.panic;
+            return;
         }
 
         let heap = H::get_heap(&vm.state);
@@ -83,17 +92,22 @@ fn load<H: HeapFromState, In: Source, const INCREMENT: bool>(
         if INCREMENT {
             Register2::set(args, &mut vm.state, pointer + 32)
         }
-
-        continue_normally
     })
 }
 
-fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENABLED: bool>(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
+fn store<
+    T: Tracer,
+    W,
+    H: HeapFromState,
+    In: Source,
+    const INCREMENT: bool,
+    const HOOKING_ENABLED: bool,
+>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    instruction_boilerplate_ext::<H::Write, _, _>(vm, world, tracer, |vm, args, _, _| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
@@ -102,15 +116,17 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
         let value = Register2::get(args, &mut vm.state);
 
         let new_bound = address.wrapping_add(32);
-        if grow_heap::<H>(&mut vm.state, new_bound).is_err() {
-            return Ok(&PANIC);
+        if grow_heap::<_, _, H>(&mut vm.state, new_bound).is_err() {
+            vm.state.current_frame.pc = &*vm.panic;
+            return ExecutionStatus::Running;
         }
 
         // The heap is always grown even when the index nonsensical.
         // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
         if bigger_than_last_address(pointer) {
             let _ = vm.state.use_gas(u32::MAX);
-            return Ok(&PANIC);
+            vm.state.current_frame.pc = &*vm.panic;
+            return ExecutionStatus::Running;
         }
 
         let heap = H::get_heap(&vm.state);
@@ -121,23 +137,19 @@ fn store<H: HeapFromState, In: Source, const INCREMENT: bool, const HOOKING_ENAB
         }
 
         if HOOKING_ENABLED && address == vm.settings.hook_address {
-            Err(ExecutionEnd::SuspendedOnHook {
-                hook: value.as_u32(),
-                pc_to_resume_from: vm
-                    .state
-                    .current_frame
-                    .pc_to_u16(instruction)
-                    .wrapping_add(1),
-            })
+            ExecutionStatus::Stopped(ExecutionEnd::SuspendedOnHook(value.as_u32()))
         } else {
-            continue_normally
+            ExecutionStatus::Running
         }
     })
 }
 
 /// Pays for more heap space. Doesn't acually grow the heap.
 /// That distinction is necessary because the bootloader gets u32::MAX heap for free.
-pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<(), ()> {
+pub fn grow_heap<T: Tracer, W, H: HeapFromState>(
+    state: &mut State<T, W>,
+    new_bound: u32,
+) -> Result<(), ()> {
     let already_paid = H::get_heap_size(state);
     if *already_paid < new_bound {
         let to_pay = new_bound - *already_paid;
@@ -148,15 +160,16 @@ pub fn grow_heap<H: HeapFromState>(state: &mut State, new_bound: u32) -> Result<
     Ok(())
 }
 
-fn load_pointer<const INCREMENT: bool>(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
+fn load_pointer<T: Tracer, W, const INCREMENT: bool>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    instruction_boilerplate::<opcodes::PointerRead, _, _>(vm, world, tracer, |vm, args, _| {
         let (input, input_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
         if !input_is_pointer {
-            return Ok(&PANIC);
+            vm.state.current_frame.pc = &*vm.panic;
+            return;
         }
         let pointer = FatPointer::from(input);
 
@@ -164,7 +177,8 @@ fn load_pointer<const INCREMENT: bool>(
         // but if offset + 32 is not representable, we panic, even if we could've read some bytes.
         // This is not a bug, this is how it must work to be backwards compatible.
         if pointer.offset > LAST_ADDRESS {
-            return Ok(&PANIC);
+            vm.state.current_frame.pc = &*vm.panic;
+            return;
         };
 
         let start = pointer.start + pointer.offset.min(pointer.length);
@@ -177,14 +191,12 @@ fn load_pointer<const INCREMENT: bool>(
             // This addition does not overflow because we checked that the offset is small enough above.
             Register2::set_fat_ptr(args, &mut vm.state, input + 32)
         }
-
-        continue_normally
     })
 }
 
 use super::monomorphization::*;
 
-impl Instruction {
+impl<T: Tracer, W> Instruction<T, W> {
     #[inline(always)]
     pub fn from_load<H: HeapFromState>(
         src: RegisterOrImmediate,
@@ -200,7 +212,7 @@ impl Instruction {
         }
 
         Self {
-            handler: monomorphize!(load [H] match_reg_imm src match_boolean increment),
+            handler: monomorphize!(load [T W H] match_reg_imm src match_boolean increment),
             arguments,
         }
     }
@@ -215,7 +227,7 @@ impl Instruction {
     ) -> Self {
         let increment = incremented_out.is_some();
         Self {
-            handler: monomorphize!(store [H] match_reg_imm src1 match_boolean increment match_boolean should_hook),
+            handler: monomorphize!(store [T W H] match_reg_imm src1 match_boolean increment match_boolean should_hook),
             arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)
@@ -232,7 +244,7 @@ impl Instruction {
     ) -> Self {
         let increment = incremented_out.is_some();
         Self {
-            handler: monomorphize!(load_pointer match_boolean increment),
+            handler: monomorphize!(load_pointer [T W] match_boolean increment),
             arguments: arguments
                 .write_source(&src)
                 .write_destination(&out)

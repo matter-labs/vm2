@@ -1,64 +1,38 @@
-use super::{far_call::get_far_call_calldata, HeapInterface};
+use super::{common::instruction_boilerplate_ext, far_call::get_far_call_calldata, HeapInterface};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     callframe::FrameRemnant,
-    instruction::{ExecutionEnd, InstructionResult},
+    instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
     predication::Flags,
-    Instruction, Predicate, VirtualMachine, World,
+    Instruction, Predicate, VirtualMachine,
+};
+use eravm_stable_interface::{
+    opcodes::{self, TypeLevelReturnType},
+    ReturnType, Tracer,
 };
 use u256::U256;
 
-#[repr(u8)]
-#[derive(PartialEq)]
-enum ReturnType {
-    Normal = 0,
-    Revert,
-    Panic,
-}
-
-impl ReturnType {
-    fn is_failure(&self) -> bool {
-        *self != ReturnType::Normal
-    }
-
-    fn from_u8(value: u8) -> Self {
-        match value {
-            0 => ReturnType::Normal,
-            1 => ReturnType::Revert,
-            2 => ReturnType::Panic,
-            _ => unreachable!(),
-        }
-    }
-}
-
-fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    _: &mut dyn World,
-) -> InstructionResult {
-    let args = unsafe { &(*instruction).arguments };
-
-    let mut return_type = ReturnType::from_u8(RETURN_TYPE);
+fn naked_ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
+    vm: &mut VirtualMachine<T, W>,
+    args: &Arguments,
+) -> ExecutionStatus {
+    let mut return_type = RT::VALUE;
     let near_call_leftover_gas = vm.state.current_frame.gas;
 
-    let (pc, snapshot, leftover_gas) = if let Some(FrameRemnant {
-        program_counter,
+    let (snapshot, leftover_gas) = if let Some(FrameRemnant {
         exception_handler,
         snapshot,
     }) = vm.state.current_frame.pop_near_call()
     {
-        (
-            if TO_LABEL {
-                Immediate1::get(args, &mut vm.state).low_u32() as u16
-            } else if return_type.is_failure() {
-                exception_handler
-            } else {
-                program_counter.wrapping_add(1)
-            },
-            snapshot,
-            near_call_leftover_gas,
-        )
+        if TO_LABEL {
+            let pc = Immediate1::get(args, &mut vm.state).low_u32() as u16;
+            vm.state.current_frame.set_pc_from_u16(pc);
+        } else if return_type.is_failure() {
+            vm.state.current_frame.set_pc_from_u16(exception_handler)
+        }
+
+        (snapshot, near_call_leftover_gas)
     } else {
         let return_value_or_panic = if return_type == ReturnType::Panic {
             None
@@ -82,7 +56,6 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
             .saturating_sub(vm.state.current_frame.stipend);
 
         let Some(FrameRemnant {
-            program_counter,
             exception_handler,
             snapshot,
         }) = vm.pop_frame(
@@ -96,6 +69,10 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
             // the caller may take external snapshots while the VM is in the initial frame and
             // these would break were the initial frame to be rolled back.
 
+            // But to continue execution would be nonsensical and can cause UB because there
+            // is no next instruction after a panic arising from some other instruction.
+            vm.state.current_frame.pc = invalid_instruction();
+
             return if let Some(return_value) = return_value_or_panic {
                 let output = vm.state.heaps[return_value.memory_page]
                     .read_range_big_endian(
@@ -103,12 +80,12 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
                     )
                     .to_vec();
                 if return_type == ReturnType::Revert {
-                    Err(ExecutionEnd::Reverted(output))
+                    ExecutionStatus::Stopped(ExecutionEnd::Reverted(output))
                 } else {
-                    Err(ExecutionEnd::ProgramFinished(output))
+                    ExecutionStatus::Stopped(ExecutionEnd::ProgramFinished(output))
                 }
             } else {
-                Err(ExecutionEnd::Panicked)
+                ExecutionStatus::Stopped(ExecutionEnd::Panicked)
             };
         };
 
@@ -120,15 +97,11 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
         }
         vm.state.register_pointer_flags = 2;
 
-        (
-            if return_type.is_failure() {
-                exception_handler
-            } else {
-                program_counter.wrapping_add(1)
-            },
-            snapshot,
-            leftover_gas,
-        )
+        if return_type.is_failure() {
+            vm.state.current_frame.set_pc_from_u16(exception_handler)
+        }
+
+        (snapshot, leftover_gas)
     };
 
     if return_type.is_failure() {
@@ -138,50 +111,18 @@ fn ret<const RETURN_TYPE: u8, const TO_LABEL: bool>(
     vm.state.flags = Flags::new(return_type == ReturnType::Panic, false, false);
     vm.state.current_frame.gas += leftover_gas;
 
-    match vm.state.current_frame.pc_from_u16(pc) {
-        Some(i) => Ok(i),
-        None => Ok(&INVALID_INSTRUCTION),
-    }
+    ExecutionStatus::Running
 }
 
-/// Formally, a far call pushes a new frame and returns from it immediately if it panics.
-/// This function instead panics without popping a frame to save on allocation.
-/// TODO: when tracers are implemented, this function should count as a separate instruction!
-pub(crate) fn panic_from_failed_far_call(
-    vm: &mut VirtualMachine,
-    exception_handler: u16,
-) -> InstructionResult {
-    // Gas is already subtracted in the far call code.
-    // No need to roll back, as no changes are made in this "frame".
-
-    vm.state.set_context_u128(0);
-
-    vm.state.registers = [U256::zero(); 16];
-    vm.state.register_pointer_flags = 2;
-
-    vm.state.flags = Flags::new(true, false, false);
-
-    match vm.state.current_frame.pc_from_u16(exception_handler) {
-        Some(i) => Ok(i),
-        None => Ok(&INVALID_INSTRUCTION),
-    }
+fn ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    instruction_boilerplate_ext::<opcodes::Ret<RT>, _, _>(vm, world, tracer, |vm, args, _, _| {
+        naked_ret::<T, W, RT, TO_LABEL>(vm, args)
+    })
 }
-
-/// Panics, burning all available gas.
-pub const INVALID_INSTRUCTION: Instruction = Instruction {
-    handler: ret::<{ ReturnType::Panic as u8 }, false>,
-    arguments: Arguments::new(
-        Predicate::Always,
-        INVALID_INSTRUCTION_COST,
-        ModeRequirements::none(),
-    ),
-};
-
-pub(crate) const RETURN_COST: u32 = 5;
-pub static PANIC: Instruction = Instruction {
-    handler: ret::<{ ReturnType::Panic as u8 }, false>,
-    arguments: Arguments::new(Predicate::Always, RETURN_COST, ModeRequirements::none()),
-};
 
 /// Turn the current instruction into a panic at no extra cost. (Great value, I know.)
 ///
@@ -192,39 +133,89 @@ pub static PANIC: Instruction = Instruction {
 /// - the far call stack overflows
 ///
 /// For all other panics, point the instruction pointer at [PANIC] instead.
-pub(crate) fn free_panic(vm: &mut VirtualMachine, world: &mut dyn World) -> InstructionResult {
-    ret::<{ ReturnType::Panic as u8 }, false>(vm, &PANIC, world)
+pub(crate) fn free_panic<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    tracer.before_instruction::<opcodes::Ret<Panic>, _>(vm);
+    // args aren't used for panics unless TO_LABEL
+    let result = naked_ret::<T, W, opcodes::Panic, false>(
+        vm,
+        &Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
+    );
+    tracer.after_instruction::<opcodes::Ret<Panic>, _>(vm);
+    result
 }
 
-use super::monomorphization::*;
+/// Formally, a far call pushes a new frame and returns from it immediately if it panics.
+/// This function instead panics without popping a frame to save on allocation.
+pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    tracer: &mut T,
+    exception_handler: u16,
+) {
+    tracer.before_instruction::<opcodes::Ret<Panic>, _>(vm);
 
-impl Instruction {
+    // Gas is already subtracted in the far call code.
+    // No need to roll back, as no changes are made in this "frame".
+
+    vm.state.set_context_u128(0);
+
+    vm.state.registers = [U256::zero(); 16];
+    vm.state.register_pointer_flags = 2;
+
+    vm.state.flags = Flags::new(true, false, false);
+
+    vm.state.current_frame.set_pc_from_u16(exception_handler);
+
+    tracer.after_instruction::<opcodes::Ret<Panic>, _>(vm);
+}
+
+/// Panics, burning all available gas.
+static INVALID_INSTRUCTION: Instruction<(), ()> = Instruction::from_invalid();
+
+pub fn invalid_instruction<'a, T, W>() -> &'a Instruction<T, W> {
+    // Safety: the handler of an invalid instruction is never read.
+    unsafe { &*(&INVALID_INSTRUCTION as *const Instruction<(), ()>).cast() }
+}
+
+pub(crate) const RETURN_COST: u32 = 5;
+
+use super::monomorphization::*;
+use eravm_stable_interface::opcodes::{Normal, Panic, Revert};
+
+impl<T: Tracer, W> Instruction<T, W> {
     pub fn from_ret(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
-        const RETURN_TYPE: u8 = ReturnType::Normal as u8;
         Self {
-            handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
+            handler: monomorphize!(ret [T W Normal] match_boolean to_label),
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
     pub fn from_revert(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
-        const RETURN_TYPE: u8 = ReturnType::Revert as u8;
         Self {
-            handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
+            handler: monomorphize!(ret [T W Revert] match_boolean to_label),
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
     pub fn from_panic(label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
-        const RETURN_TYPE: u8 = ReturnType::Panic as u8;
         Self {
-            handler: monomorphize!(ret [RETURN_TYPE] match_boolean to_label),
+            handler: monomorphize!(ret [T W Panic] match_boolean to_label),
             arguments: arguments.write_source(&label),
         }
     }
 
-    pub fn from_invalid() -> Self {
-        INVALID_INSTRUCTION
+    pub const fn from_invalid() -> Self {
+        Self {
+            // This field is never read because the instruction fails at the gas cost stage.
+            handler: ret::<T, W, Panic, false>,
+            arguments: Arguments::new(
+                Predicate::Always,
+                INVALID_INSTRUCTION_COST,
+                ModeRequirements::none(),
+            ),
+        }
     }
 }

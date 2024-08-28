@@ -1,21 +1,25 @@
-use super::{common::instruction_boilerplate_with_panic, PANIC};
+use super::common::instruction_boilerplate;
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
         Destination, Immediate1, Register1, Register2, RelativeStack, Source,
     },
     fat_pointer::FatPointer,
-    instruction::InstructionResult,
-    Instruction, VirtualMachine, World,
+    instruction::ExecutionStatus,
+    Instruction, VirtualMachine,
+};
+use eravm_stable_interface::{
+    opcodes::{PointerAdd, PointerPack, PointerShrink, PointerSub},
+    OpcodeType, Tracer,
 };
 use u256::U256;
 
-fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
-    vm: &mut VirtualMachine,
-    instruction: *const Instruction,
-    world: &mut dyn World,
-) -> InstructionResult {
-    instruction_boilerplate_with_panic(vm, instruction, world, |vm, args, _, continue_normally| {
+fn ptr<T: Tracer, W, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    instruction_boilerplate::<Op, _, _>(vm, world, tracer, |vm, args, _| {
         let ((a, a_is_pointer), (b, b_is_pointer)) = if SWAP {
             (
                 Register2::get_with_pointer_flag(args, &mut vm.state),
@@ -29,48 +33,56 @@ fn ptr<Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
         };
 
         if !a_is_pointer || b_is_pointer {
-            return Ok(&PANIC);
+            vm.state.current_frame.pc = &*vm.panic;
+            return;
         }
 
         let Some(result) = Op::perform(a, b) else {
-            return Ok(&PANIC);
+            vm.state.current_frame.pc = &*vm.panic;
+            return;
         };
 
         Out::set_fat_ptr(args, &mut vm.state, result);
-
-        continue_normally
     })
 }
 
-pub trait PtrOp {
+pub trait PtrOp: OpcodeType {
     fn perform(in1: U256, in2: U256) -> Option<U256>;
 }
 
-pub struct PtrAddSub<const IS_ADD: bool>;
-pub type PtrAdd = PtrAddSub<true>;
-pub type PtrSub = PtrAddSub<false>;
-
-impl<const IS_ADD: bool> PtrOp for PtrAddSub<IS_ADD> {
-    fn perform(mut in1: U256, in2: U256) -> Option<U256> {
-        if in2 > u32::MAX.into() {
-            return None;
-        }
-        let pointer: &mut FatPointer = (&mut in1).into();
-
-        let new_offset = if IS_ADD {
-            pointer.offset.checked_add(in2.low_u32())
-        } else {
-            pointer.offset.checked_sub(in2.low_u32())
-        }?;
-
-        pointer.offset = new_offset;
-
-        Some(in1)
+impl PtrOp for PointerAdd {
+    #[inline(always)]
+    fn perform(in1: U256, in2: U256) -> Option<U256> {
+        ptr_add_sub::<true>(in1, in2)
     }
 }
 
-pub struct PtrPack;
-impl PtrOp for PtrPack {
+impl PtrOp for PointerSub {
+    #[inline(always)]
+    fn perform(in1: U256, in2: U256) -> Option<U256> {
+        ptr_add_sub::<false>(in1, in2)
+    }
+}
+
+fn ptr_add_sub<const IS_ADD: bool>(mut in1: U256, in2: U256) -> Option<U256> {
+    if in2 > u32::MAX.into() {
+        return None;
+    }
+    let pointer: &mut FatPointer = (&mut in1).into();
+
+    let new_offset = if IS_ADD {
+        pointer.offset.checked_add(in2.low_u32())
+    } else {
+        pointer.offset.checked_sub(in2.low_u32())
+    }?;
+
+    pointer.offset = new_offset;
+
+    Some(in1)
+}
+
+impl PtrOp for PointerPack {
+    #[inline(always)]
     fn perform(in1: U256, in2: U256) -> Option<U256> {
         if in2.low_u128() != 0 {
             None
@@ -80,8 +92,8 @@ impl PtrOp for PtrPack {
     }
 }
 
-pub struct PtrShrink;
-impl PtrOp for PtrShrink {
+impl PtrOp for PointerShrink {
+    #[inline(always)]
     fn perform(mut in1: U256, in2: U256) -> Option<U256> {
         let pointer: &mut FatPointer = (&mut in1).into();
         pointer.length = pointer.length.checked_sub(in2.low_u32())?;
@@ -91,7 +103,7 @@ impl PtrOp for PtrShrink {
 
 use super::monomorphization::*;
 
-impl Instruction {
+impl<T: Tracer, W> Instruction<T, W> {
     #[inline(always)]
     pub fn from_ptr<Op: PtrOp>(
         src1: AnySource,
@@ -101,7 +113,7 @@ impl Instruction {
         swap: bool,
     ) -> Self {
         Self {
-            handler: monomorphize!(ptr [Op] match_source src1 match_destination out match_boolean swap),
+            handler: monomorphize!(ptr [T W Op] match_source src1 match_destination out match_boolean swap),
             arguments: arguments
                 .write_source(&src1)
                 .write_source(&src2)

@@ -18,6 +18,7 @@ mod rollback;
 mod stack;
 mod state;
 pub mod testworld;
+mod tracing;
 mod vm;
 mod world_diff;
 
@@ -26,7 +27,10 @@ use u256::{H160, U256};
 
 pub use decommit::address_into_u256;
 pub use decommit::initial_decommit;
-pub use heap::{HeapId, FIRST_HEAP};
+pub use eravm_stable_interface::{
+    CallframeInterface, HeapId, Opcode, OpcodeType, StateInterface, Tracer,
+};
+pub use heap::FIRST_HEAP;
 pub use instruction::{jump_to_beginning, ExecutionEnd, Instruction};
 pub use mode_requirements::ModeRequirements;
 pub use predication::Predicate;
@@ -46,13 +50,15 @@ use single_instruction_test::stack;
 #[cfg(feature = "single_instruction_test")]
 pub use zkevm_opcode_defs;
 
-pub trait World {
+pub trait World<T>: StorageInterface + Sized {
     /// This will be called *every* time a contract is called. Caching and decoding is
     /// the world implementor's job.
-    fn decommit(&mut self, hash: U256) -> Program;
+    fn decommit(&mut self, hash: U256) -> Program<T, Self>;
 
     fn decommit_code(&mut self, hash: U256) -> Vec<u8>;
+}
 
+pub trait StorageInterface {
     /// There is no write_storage; [WorldDiff::get_storage_changes] gives a list of all storage changes.
     fn read_storage(&mut self, contract: H160, key: U256) -> Option<U256>;
 

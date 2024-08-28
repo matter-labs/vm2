@@ -3,9 +3,11 @@ use super::{
     stack::{Stack, StackPool},
 };
 use crate::{
-    callframe::Callframe, decommit::is_kernel, predication::Flags, HeapId, Program, WorldDiff,
+    callframe::Callframe, decommit::is_kernel, predication::Flags, HeapId, Program, World,
+    WorldDiff,
 };
 use arbitrary::Arbitrary;
+use eravm_stable_interface::Tracer;
 use u256::H160;
 use zkevm_opcode_defs::EVM_SIMULATOR_STIPEND;
 
@@ -15,7 +17,7 @@ impl<'a> Arbitrary<'a> for Flags {
     }
 }
 
-impl<'a> Arbitrary<'a> for Callframe {
+impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for Callframe<T, W> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         let address: H160 = u.arbitrary()?;
 
@@ -26,6 +28,8 @@ impl<'a> Arbitrary<'a> for Callframe {
         // vm2 doesn't care about the order
         // but the calldata heap must be different from the heap and aux heap
         let calldata_heap = HeapId::from_u32_unchecked(u.int_in_range(0..=base_page - 1)?);
+
+        let program: Program<T, W> = u.arbitrary()?;
 
         let mut me = Self {
             address,
@@ -41,7 +45,8 @@ impl<'a> Arbitrary<'a> for Callframe {
             gas: u.int_in_range(0..=u32::MAX - EVM_SIMULATOR_STIPEND)?,
             stipend: u.arbitrary()?,
             near_calls: vec![],
-            program: u.arbitrary()?,
+            pc: program.instruction(0).unwrap(),
+            program,
             heap: HeapId::from_u32_unchecked(base_page + 2),
             aux_heap: HeapId::from_u32_unchecked(base_page + 3),
             heap_size: u.arbitrary()?,
@@ -53,7 +58,6 @@ impl<'a> Arbitrary<'a> for Callframe {
         if u.arbitrary()? {
             me.push_near_call(
                 u.arbitrary::<u32>()?.min(me.gas),
-                me.program.instruction(0).unwrap(),
                 u.arbitrary()?,
                 WorldDiff::default().snapshot(),
             );
@@ -62,7 +66,7 @@ impl<'a> Arbitrary<'a> for Callframe {
     }
 }
 
-impl Callframe {
+impl<T: Tracer, W> Callframe<T, W> {
     pub fn raw_first_instruction(&self) -> u64 {
         self.program.raw_first_instruction
     }
@@ -81,6 +85,7 @@ impl Callframe {
             gas: 0,
             stipend: 0,
             near_calls: vec![],
+            pc: std::ptr::null(),
             program: Program::for_decommit(),
             heap: FIRST_AUX_HEAP,
             aux_heap: FIRST_AUX_HEAP,

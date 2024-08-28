@@ -1,4 +1,5 @@
-use crate::{address_into_u256, Program, World};
+use crate::{address_into_u256, Program, StorageInterface, World};
+use eravm_stable_interface::Tracer;
 use std::{
     collections::{hash_map::DefaultHasher, BTreeMap},
     hash::{Hash, Hasher},
@@ -8,13 +9,13 @@ use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
 
-pub struct TestWorld {
+pub struct TestWorld<T> {
     pub address_to_hash: BTreeMap<U256, U256>,
-    pub hash_to_contract: BTreeMap<U256, Program>,
+    pub hash_to_contract: BTreeMap<U256, Program<T, Self>>,
 }
 
-impl TestWorld {
-    pub fn new(contracts: &[(Address, Program)]) -> Self {
+impl<T> TestWorld<T> {
+    pub fn new(contracts: &[(Address, Program<T, Self>)]) -> Self {
         let mut address_to_hash = BTreeMap::new();
         let mut hash_to_contract = BTreeMap::new();
         for (i, (address, code)) in contracts.iter().enumerate() {
@@ -39,8 +40,8 @@ impl TestWorld {
     }
 }
 
-impl World for TestWorld {
-    fn decommit(&mut self, hash: u256::U256) -> Program {
+impl<T: Tracer> World<T> for TestWorld<T> {
+    fn decommit(&mut self, hash: u256::U256) -> Program<T, Self> {
         if let Some(program) = self.hash_to_contract.get(&hash) {
             program.clone()
         } else {
@@ -59,7 +60,9 @@ impl World for TestWorld {
             })
             .collect()
     }
+}
 
+impl<T> StorageInterface for TestWorld<T> {
     fn read_storage(&mut self, contract: u256::H160, key: u256::U256) -> Option<U256> {
         let deployer_system_contract_address =
             Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);

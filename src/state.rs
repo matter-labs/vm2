@@ -11,17 +11,17 @@ use crate::{
 use u256::{H160, U256};
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct State {
+pub struct State<T, W> {
     pub registers: [U256; 16],
     pub(crate) register_pointer_flags: u16,
 
     pub flags: Flags,
 
-    pub current_frame: Callframe,
+    pub current_frame: Callframe<T, W>,
 
     /// Contains indices to the far call instructions currently being executed.
     /// They are needed to continue execution from the correct spot upon return.
-    pub previous_frames: Vec<(u16, Callframe)>,
+    pub previous_frames: Vec<Callframe<T, W>>,
 
     pub heaps: Heaps,
 
@@ -30,13 +30,13 @@ pub struct State {
     pub(crate) context_u128: u128,
 }
 
-impl State {
+impl<T, W> State<T, W> {
     pub(crate) fn new(
         address: H160,
         caller: H160,
         calldata: &[u8],
         gas: u32,
-        program: Program,
+        program: Program<T, W>,
         world_before_this_frame: Snapshot,
         stack: Box<Stack>,
     ) -> Self {
@@ -95,7 +95,7 @@ impl State {
             + self
                 .previous_frames
                 .iter()
-                .map(|(_, frame)| frame.contained_gas())
+                .map(|frame| frame.contained_gas())
                 .sum::<u32>()
     }
 
@@ -146,7 +146,7 @@ impl State {
     }
 }
 
-impl Addressable for State {
+impl<T, W> Addressable for State<T, W> {
     fn registers(&mut self) -> &mut [U256; 16] {
         &mut self.registers
     }

@@ -1,38 +1,17 @@
 use super::{heap::Heaps, stack::StackPool};
 use crate::{
-    callframe::Callframe, fat_pointer::FatPointer, instruction::InstructionResult,
-    instruction_handlers::free_panic, HeapId, Instruction, Settings, State, VirtualMachine, World,
+    addressing_modes::Arguments, callframe::Callframe, fat_pointer::FatPointer,
+    instruction::ExecutionStatus, HeapId, Instruction, ModeRequirements, Predicate, Settings,
+    State, VirtualMachine, World,
 };
 use arbitrary::Arbitrary;
+use eravm_stable_interface::Tracer;
 use std::fmt::Debug;
 use u256::U256;
 
-impl VirtualMachine {
-    fn get_first_instruction(&self) -> *const Instruction {
-        self.state.current_frame.program.instruction(0).unwrap()
-    }
-
-    pub fn run_single_instruction(&mut self, world: &mut dyn World) -> InstructionResult {
-        let instruction = self.get_first_instruction();
-
-        unsafe {
-            let args = &(*instruction).arguments;
-
-            if self.state.use_gas(args.get_static_gas_cost()).is_err()
-                || !args.mode_requirements().met(
-                    self.state.current_frame.is_kernel,
-                    self.state.current_frame.is_static,
-                )
-            {
-                return free_panic(self, world);
-            }
-
-            if args.predicate().satisfied(&self.state.flags) {
-                ((*instruction).handler)(self, instruction, world)
-            } else {
-                Ok(instruction.add(1))
-            }
-        }
+impl<T: Tracer, W> VirtualMachine<T, W> {
+    pub fn run_single_instruction(&mut self, world: &mut W, tracer: &mut T) -> ExecutionStatus {
+        unsafe { ((*self.state.current_frame.pc).handler)(self, world, tracer) }
     }
 
     pub fn is_in_valid_state(&self) -> bool {
@@ -59,9 +38,9 @@ impl VirtualMachine {
     }
 }
 
-impl<'a> Arbitrary<'a> for VirtualMachine {
+impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for VirtualMachine<T, W> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        let current_frame: Callframe = u.arbitrary()?;
+        let current_frame: Callframe<T, W> = u.arbitrary()?;
 
         let mut registers = [U256::zero(); 16];
         let mut register_pointer_flags = 0;
@@ -86,7 +65,7 @@ impl<'a> Arbitrary<'a> for VirtualMachine {
                 current_frame,
                 // Exiting the final frame is different in vm2 on purpose,
                 // so always generate two frames to avoid that.
-                previous_frames: vec![(0, Callframe::dummy())],
+                previous_frames: vec![Callframe::dummy()],
                 heaps,
                 transaction_number: u.arbitrary()?,
                 context_u128: u.arbitrary()?,
@@ -94,6 +73,10 @@ impl<'a> Arbitrary<'a> for VirtualMachine {
             settings: u.arbitrary()?,
             world_diff: Default::default(),
             stack_pool: StackPool {},
+            panic: Box::new(Instruction::from_panic(
+                None,
+                Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+            )),
         })
     }
 }
@@ -149,7 +132,7 @@ impl<'a> Arbitrary<'a> for Settings {
     }
 }
 
-impl Debug for VirtualMachine {
+impl<T, W> Debug for VirtualMachine<T, W> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "print useful debugging information here!")
     }

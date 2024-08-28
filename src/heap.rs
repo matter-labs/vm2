@@ -1,21 +1,10 @@
 use crate::instruction_handlers::HeapInterface;
-use std::ops::{Index, Range};
-use std::{fmt, mem};
+use eravm_stable_interface::HeapId;
+use std::{
+    fmt, mem,
+    ops::{Index, Range},
+};
 use u256::U256;
-
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub struct HeapId(u32);
-
-impl HeapId {
-    /// Only for dealing with external data structures, never use internally.
-    pub fn from_u32_unchecked(value: u32) -> Self {
-        Self(value)
-    }
-
-    pub fn to_u32(self) -> u32 {
-        self.0
-    }
-}
 
 /// Heap page size in bytes.
 const HEAP_PAGE_SIZE: usize = 1 << 12;
@@ -78,6 +67,12 @@ impl Heap {
             })
             .collect();
         Self { pages }
+    }
+
+    /// Needed only by tracers
+    pub(crate) fn read_byte(&self, address: u32) -> u8 {
+        let (page, offset) = address_to_page_offset(address);
+        self.page(page).map(|page| page.0[offset]).unwrap_or(0)
     }
 
     fn page(&self, idx: usize) -> Option<&HeapPage> {
@@ -197,9 +192,9 @@ pub struct Heaps {
     bootloader_aux_rollback_info: Vec<(u32, U256)>,
 }
 
-pub(crate) const CALLDATA_HEAP: HeapId = HeapId(1);
-pub const FIRST_HEAP: HeapId = HeapId(2);
-pub(crate) const FIRST_AUX_HEAP: HeapId = HeapId(3);
+pub(crate) const CALLDATA_HEAP: HeapId = HeapId::from_u32_unchecked(1);
+pub const FIRST_HEAP: HeapId = HeapId::from_u32_unchecked(2);
+pub(crate) const FIRST_AUX_HEAP: HeapId = HeapId::from_u32_unchecked(3);
 
 impl Heaps {
     pub(crate) fn new(calldata: &[u8]) -> Self {
@@ -228,14 +223,14 @@ impl Heaps {
     }
 
     fn allocate_inner(&mut self, memory: &[u8]) -> HeapId {
-        let id = HeapId(self.heaps.len() as u32);
+        let id = HeapId::from_u32_unchecked(self.heaps.len() as u32);
         self.heaps
             .push(Heap::from_bytes(memory, &mut self.pagepool));
         id
     }
 
     pub(crate) fn deallocate(&mut self, heap: HeapId) {
-        let heap = mem::take(&mut self.heaps[heap.0 as usize]);
+        let heap = mem::take(&mut self.heaps[heap.to_u32() as usize]);
         for page in heap.pages.into_iter().flatten() {
             self.pagepool.recycle_page(page);
         }
@@ -249,7 +244,15 @@ impl Heaps {
             self.bootloader_aux_rollback_info
                 .push((start_address, self[heap].read_u256(start_address)));
         }
-        self.heaps[heap.0 as usize].write_u256(start_address, value, &mut self.pagepool);
+        self.heaps[heap.to_u32() as usize].write_u256(start_address, value, &mut self.pagepool);
+    }
+
+    /// Needed only by tracers
+    pub(crate) fn write_byte(&mut self, heap: HeapId, address: u32, value: u8) {
+        let (page, offset) = address_to_page_offset(address);
+        self.heaps[heap.to_u32() as usize]
+            .get_or_insert_page(page, &mut self.pagepool)
+            .0[offset] = value;
     }
 
     pub(crate) fn snapshot(&self) -> (usize, usize) {
@@ -261,10 +264,14 @@ impl Heaps {
 
     pub(crate) fn rollback(&mut self, (heap_snap, aux_snap): (usize, usize)) {
         for (address, value) in self.bootloader_heap_rollback_info.drain(heap_snap..).rev() {
-            self.heaps[FIRST_HEAP.0 as usize].write_u256(address, value, &mut self.pagepool);
+            self.heaps[FIRST_HEAP.to_u32() as usize].write_u256(address, value, &mut self.pagepool);
         }
         for (address, value) in self.bootloader_aux_rollback_info.drain(aux_snap..).rev() {
-            self.heaps[FIRST_AUX_HEAP.0 as usize].write_u256(address, value, &mut self.pagepool);
+            self.heaps[FIRST_AUX_HEAP.to_u32() as usize].write_u256(
+                address,
+                value,
+                &mut self.pagepool,
+            );
         }
     }
 
@@ -278,7 +285,7 @@ impl Index<HeapId> for Heaps {
     type Output = Heap;
 
     fn index(&self, index: HeapId) -> &Self::Output {
-        &self.heaps[index.0 as usize]
+        &self.heaps[index.to_u32() as usize]
     }
 }
 
