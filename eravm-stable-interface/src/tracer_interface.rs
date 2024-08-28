@@ -94,7 +94,7 @@ pub mod opcodes {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub enum Opcode {
     Nop,
     Add,
@@ -141,14 +141,14 @@ pub enum Opcode {
     TransientStorageWrite,
 }
 
-#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub enum CallingMode {
     Normal,
     Delegate,
     Mimic,
 }
 
-#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub enum ReturnType {
     Normal,
     Revert,
