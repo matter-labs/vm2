@@ -143,7 +143,7 @@ pub(crate) fn free_panic<T: Tracer, W>(
         vm,
         &Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
     );
-    tracer.before_instruction::<opcodes::Ret<Panic>, _>(vm);
+    tracer.after_instruction::<opcodes::Ret<Panic>, _>(vm);
     result
 }
 
