@@ -71,17 +71,21 @@ pub struct RollbackableSet<K: Ord> {
 }
 
 impl<T: Ord + Clone> RollbackableSet<T> {
-    /// Adds `key` to the set and returns `true` if it was not already present.
+    /// Adds `key` to the set and returns if it was already present.
     pub fn add(&mut self, key: T) -> bool {
         let is_new = self.map.insert(key.clone(), ()).is_none();
         if is_new {
             self.old_entries.push(key);
         }
-        is_new
+        !is_new
     }
 
     pub fn contains(&self, key: &T) -> bool {
         self.map.contains_key(key)
+    }
+
+    pub(crate) fn added_after(&self, snapshot: <Self as Rollback>::Snapshot) -> &[T] {
+        &self.old_entries[snapshot..]
     }
 }
 

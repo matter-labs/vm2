@@ -3,7 +3,6 @@ use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
-    vm::STORAGE_READ_STORAGE_APPLICATION_CYCLES,
     Instruction, VirtualMachine, World,
 };
 use eravm_stable_interface::{opcodes, Tracer};
@@ -36,9 +35,6 @@ fn decommit<T: Tracer, W: World<T>>(
         let (program, is_fresh) = vm.world_diff.decommit_opcode(world, code_hash);
         if !is_fresh {
             vm.state.current_frame.gas += extra_cost;
-        } else {
-            vm.state.cycle_counts.storage_application_cycles +=
-                STORAGE_READ_STORAGE_APPLICATION_CYCLES as usize;
         }
 
         let heap = vm.state.heaps.allocate_with_content(program.as_ref());

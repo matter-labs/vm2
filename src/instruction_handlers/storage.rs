@@ -4,7 +4,6 @@ use crate::{
         Arguments, Destination, Register1, Register2, Source, SLOAD_COST, SSTORE_COST,
     },
     instruction::ExecutionStatus,
-    vm::{STORAGE_READ_STORAGE_APPLICATION_CYCLES, STORAGE_WRITE_STORAGE_APPLICATION_CYCLES},
     Instruction, VirtualMachine, World,
 };
 use eravm_stable_interface::{opcodes, Tracer};
@@ -17,14 +16,6 @@ fn sstore<T: Tracer, W: World<T>>(
     instruction_boilerplate::<opcodes::StorageWrite, _, _>(vm, world, tracer, |vm, args, world| {
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
-        if !vm
-            .world_diff
-            .written_storage_slots
-            .contains(&(vm.state.current_frame.address, key))
-        {
-            vm.state.cycle_counts.storage_application_cycles +=
-                STORAGE_WRITE_STORAGE_APPLICATION_CYCLES as usize;
-        }
 
         let refund = vm
             .world_diff
@@ -62,18 +53,6 @@ fn sload<T: Tracer, W: World<T>>(
     instruction_boilerplate::<opcodes::StorageRead, _, _>(vm, world, tracer, |vm, args, world| {
         let key = Register1::get(args, &mut vm.state);
 
-        if !vm
-            .world_diff
-            .read_storage_slots
-            .contains(&(vm.state.current_frame.address, key))
-            && !vm
-                .world_diff
-                .written_storage_slots
-                .contains(&(vm.state.current_frame.address, key))
-        {
-            vm.state.cycle_counts.storage_application_cycles +=
-                STORAGE_READ_STORAGE_APPLICATION_CYCLES as usize;
-        }
         let (value, refund) =
             vm.world_diff
                 .read_storage(world, vm.state.current_frame.address, key);

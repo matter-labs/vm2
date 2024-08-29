@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::{
     rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackablePod, RollbackableSet},
+    vm::{STORAGE_READ_STORAGE_APPLICATION_CYCLES, STORAGE_WRITE_STORAGE_APPLICATION_CYCLES},
     StorageInterface,
 };
 use u256::{H160, U256};
@@ -105,14 +106,13 @@ impl WorldDiff {
             .copied()
             .unwrap_or_else(|| world.read_storage(contract, key).unwrap_or_default());
 
-        let refund = if world.is_free_storage_slot(&contract, &key)
-            || self.read_storage_slots.contains(&(contract, key))
+        let refund = if self.read_storage_slots.add((contract, key))
+            || world.is_free_storage_slot(&contract, &key)
         {
             WARM_READ_REFUND
         } else {
             0
         };
-        self.read_storage_slots.add((contract, key));
         self.pubdata_costs.push(0);
         (value, refund)
     }
@@ -134,6 +134,8 @@ impl WorldDiff {
 
         if world.is_free_storage_slot(&contract, &key) {
             self.written_storage_slots.add((contract, key));
+            self.read_storage_slots.add((contract, key));
+
             self.storage_refunds.push(WARM_WRITE_REFUND);
             self.pubdata_costs.push(0);
             return WARM_WRITE_REFUND;
@@ -145,17 +147,12 @@ impl WorldDiff {
             .insert((contract, key), update_cost)
             .unwrap_or(0);
 
-        let refund = if self.written_storage_slots.contains(&(contract, key)) {
+        let refund = if self.written_storage_slots.add((contract, key)) {
             WARM_WRITE_REFUND
+        } else if self.read_storage_slots.add((contract, key)) {
+            COLD_WRITE_AFTER_WARM_READ_REFUND
         } else {
-            self.written_storage_slots.add((contract, key));
-
-            if self.read_storage_slots.contains(&(contract, key)) {
-                COLD_WRITE_AFTER_WARM_READ_REFUND
-            } else {
-                self.read_storage_slots.add((contract, key));
-                0
-            }
+            0
         };
 
         let pubdata_cost = (update_cost as i32) - (prepaid as i32);
@@ -338,6 +335,42 @@ impl WorldDiff {
     pub(crate) fn clear_transient_storage(&mut self) {
         self.transient_storage_changes = Default::default();
     }
+
+    pub fn storage_application_cycles_snapshot(&self) -> StorageApplicationCyclesSnapshot {
+        StorageApplicationCyclesSnapshot {
+            written_storage_slots: self.written_storage_slots.snapshot(),
+            read_storage_slots: self.read_storage_slots.snapshot(),
+            decommitted_hashes: self.decommitted_hashes.snapshot(),
+        }
+    }
+
+    pub fn storage_application_cycles_after(
+        &self,
+        snapshot: &StorageApplicationCyclesSnapshot,
+    ) -> usize {
+        self.written_storage_slots
+            .added_after(snapshot.written_storage_slots)
+            .len()
+            * STORAGE_WRITE_STORAGE_APPLICATION_CYCLES as usize
+            + self
+                .read_storage_slots
+                .added_after(snapshot.read_storage_slots)
+                .iter()
+                .filter(|slot| !self.written_storage_slots.contains(slot))
+                .count()
+                * STORAGE_READ_STORAGE_APPLICATION_CYCLES as usize
+            + self
+                .decommitted_hashes
+                .added_after(snapshot.decommitted_hashes)
+                .len()
+                * STORAGE_READ_STORAGE_APPLICATION_CYCLES as usize
+    }
+}
+
+pub struct StorageApplicationCyclesSnapshot {
+    written_storage_slots: <RollbackableSet<(H160, U256)> as Rollback>::Snapshot,
+    read_storage_slots: <RollbackableSet<(H160, U256)> as Rollback>::Snapshot,
+    decommitted_hashes: <RollbackableSet<U256> as Rollback>::Snapshot,
 }
 
 #[derive(Clone, PartialEq, Debug)]
