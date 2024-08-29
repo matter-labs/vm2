@@ -340,7 +340,6 @@ impl WorldDiff {
         StorageApplicationCyclesSnapshot {
             written_storage_slots: self.written_storage_slots.snapshot(),
             read_storage_slots: self.read_storage_slots.snapshot(),
-            decommitted_hashes: self.decommitted_hashes.snapshot(),
         }
     }
 
@@ -359,18 +358,12 @@ impl WorldDiff {
                 .filter(|slot| !self.written_storage_slots.contains(slot))
                 .count()
                 * STORAGE_READ_STORAGE_APPLICATION_CYCLES as usize
-            + self
-                .decommitted_hashes
-                .added_after(snapshot.decommitted_hashes)
-                .len()
-                * STORAGE_READ_STORAGE_APPLICATION_CYCLES as usize
     }
 }
 
 pub struct StorageApplicationCyclesSnapshot {
     written_storage_slots: <RollbackableSet<(H160, U256)> as Rollback>::Snapshot,
     read_storage_slots: <RollbackableSet<(H160, U256)> as Rollback>::Snapshot,
-    decommitted_hashes: <RollbackableSet<U256> as Rollback>::Snapshot,
 }
 
 #[derive(Clone, PartialEq, Debug)]
