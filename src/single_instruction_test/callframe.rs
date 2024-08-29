@@ -54,7 +54,6 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for Callframe<T, W> {
             calldata_heap,
             heaps_i_am_keeping_alive: vec![],
             world_before_this_frame: WorldDiff::default().snapshot(),
-            last_precompile_cycles: 0,
         };
         if u.arbitrary()? {
             me.push_near_call(
@@ -95,7 +94,6 @@ impl<T: Tracer, W> Callframe<T, W> {
             calldata_heap: HeapId::from_u32_unchecked(1),
             heaps_i_am_keeping_alive: vec![],
             world_before_this_frame: WorldDiff::default().snapshot(),
-            last_precompile_cycles: 0,
         }
     }
 }

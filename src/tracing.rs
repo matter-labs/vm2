@@ -327,10 +327,6 @@ impl<T, W> CallframeInterface for CallframeWrapper<'_, T, W> {
             self.frame.exception_handler
         }
     }
-
-    fn last_precompile_cycles(&self) -> usize {
-        self.frame.last_precompile_cycles
-    }
 }
 
 impl<T, W> CallframeWrapper<'_, T, W> {

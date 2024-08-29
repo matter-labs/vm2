@@ -35,8 +35,6 @@ pub struct Callframe<T, W> {
     pub heap: HeapId,
     pub aux_heap: HeapId,
 
-    pub last_precompile_cycles: usize,
-
     /// The amount of heap that has been paid for. This should always be greater
     /// or equal to the actual size of the heap in memory.
     pub heap_size: u32,
@@ -112,7 +110,6 @@ impl<T, W> Callframe<T, W> {
             exception_handler,
             near_calls: vec![],
             world_before_this_frame,
-            last_precompile_cycles: 0,
         }
     }
 
@@ -259,7 +256,6 @@ impl<T, W> Clone for Callframe<T, W> {
             calldata_heap: self.calldata_heap,
             heaps_i_am_keeping_alive: self.heaps_i_am_keeping_alive.clone(),
             world_before_this_frame: self.world_before_this_frame.clone(),
-            last_precompile_cycles: self.last_precompile_cycles,
         }
     }
 }

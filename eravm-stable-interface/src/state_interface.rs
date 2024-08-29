@@ -83,8 +83,6 @@ pub trait CallframeInterface {
     fn set_aux_heap_bound(&mut self, value: u32);
 
     fn read_code_page(&self, slot: u16) -> U256;
-
-    fn last_precompile_cycles(&self) -> usize;
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -346,10 +344,6 @@ impl CallframeInterface for DummyState {
     }
 
     fn read_code_page(&self, _: u16) -> primitive_types::U256 {
-        unimplemented!()
-    }
-
-    fn last_precompile_cycles(&self) -> usize {
         unimplemented!()
     }
 }

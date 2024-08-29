@@ -144,8 +144,6 @@ fn far_call<
             vm.world_diff.snapshot(),
         );
 
-        vm.state.current_frame.last_precompile_cycles = program.1;
-
         vm.state.flags = Flags::new(false, false, false);
 
         if abi.is_system_call {
