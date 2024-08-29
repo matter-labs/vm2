@@ -22,7 +22,7 @@ fn sstore<T: Tracer, W: World<T>>(
             .written_storage_slots
             .contains(&(vm.state.current_frame.address, key))
         {
-            vm.state.storage_application_cycles +=
+            vm.state.cycle_counts.storage_application_cycles +=
                 STORAGE_WRITE_STORAGE_APPLICATION_CYCLES as usize;
         }
 
@@ -71,7 +71,8 @@ fn sload<T: Tracer, W: World<T>>(
                 .written_storage_slots
                 .contains(&(vm.state.current_frame.address, key))
         {
-            vm.state.storage_application_cycles += STORAGE_READ_STORAGE_APPLICATION_CYCLES as usize;
+            vm.state.cycle_counts.storage_application_cycles +=
+                STORAGE_READ_STORAGE_APPLICATION_CYCLES as usize;
         }
         let (value, refund) =
             vm.world_diff

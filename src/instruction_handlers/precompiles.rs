@@ -66,17 +66,19 @@ fn precompile_call<T: Tracer, W>(
         let heaps = &mut vm.state.heaps;
         match address_low {
             KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
-                vm.state.keccak256_cycles +=
+                vm.state.cycle_counts.keccak256_cycles +=
                     keccak256_rounds_function::<_, false>(0, query, heaps).0;
             }
             SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
-                vm.state.sha256_cycles += sha256_rounds_function::<_, false>(0, query, heaps).0;
+                vm.state.cycle_counts.sha256_cycles +=
+                    sha256_rounds_function::<_, false>(0, query, heaps).0;
             }
             ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS => {
-                vm.state.ecrecover_cycles += ecrecover_function::<_, false>(0, query, heaps).0;
+                vm.state.cycle_counts.ecrecover_cycles +=
+                    ecrecover_function::<_, false>(0, query, heaps).0;
             }
             SECP256R1_VERIFY_PRECOMPILE_ADDRESS => {
-                vm.state.secp256v1_verify_cycles +=
+                vm.state.cycle_counts.secp256v1_verify_cycles +=
                     secp256r1_verify_function::<_, false>(0, query, heaps).0;
             }
             _ => {

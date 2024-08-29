@@ -72,7 +72,7 @@ fn far_call<
                 .read_storage_slots
                 .contains(&(deployer_system_contract_address, destination_address))
             {
-                vm.state.storage_application_cycles +=
+                vm.state.cycle_counts.storage_application_cycles +=
                     STORAGE_READ_STORAGE_APPLICATION_CYCLES as usize;
             }
             let decommit_result = vm.world_diff.decommit(
@@ -132,7 +132,7 @@ fn far_call<
             .expect("stipend must not cause overflow");
 
         let new_frame_is_static = IS_STATIC || vm.state.current_frame.is_static;
-        vm.state.code_decommitter_cycles += program.1;
+        vm.state.cycle_counts.code_decommitter_cycles += program.1;
         vm.push_frame::<M>(
             u256_into_address(destination_address),
             program.0,

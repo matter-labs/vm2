@@ -1,8 +1,8 @@
 use super::{heap::Heaps, stack::StackPool};
 use crate::{
     addressing_modes::Arguments, callframe::Callframe, fat_pointer::FatPointer,
-    instruction::ExecutionStatus, HeapId, Instruction, ModeRequirements, Predicate, Settings,
-    State, VirtualMachine, World,
+    instruction::ExecutionStatus, state::CycleCounts, HeapId, Instruction, ModeRequirements,
+    Predicate, Settings, State, VirtualMachine, World,
 };
 use arbitrary::Arbitrary;
 use eravm_stable_interface::Tracer;
@@ -69,12 +69,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for VirtualMachine<T, W> {
                 heaps,
                 transaction_number: u.arbitrary()?,
                 context_u128: u.arbitrary()?,
-                keccak256_cycles: 0,
-                ecrecover_cycles: 0,
-                sha256_cycles: 0,
-                secp256v1_verify_cycles: 0,
-                code_decommitter_cycles: 0,
-                storage_application_cycles: 0,
+                cycle_counts: CycleCounts::default(),
             },
             settings: u.arbitrary()?,
             world_diff: Default::default(),

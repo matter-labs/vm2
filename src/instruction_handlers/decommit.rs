@@ -37,7 +37,8 @@ fn decommit<T: Tracer, W: World<T>>(
         if !is_fresh {
             vm.state.current_frame.gas += extra_cost;
         } else {
-            vm.state.storage_application_cycles += STORAGE_READ_STORAGE_APPLICATION_CYCLES as usize;
+            vm.state.cycle_counts.storage_application_cycles +=
+                STORAGE_READ_STORAGE_APPLICATION_CYCLES as usize;
         }
 
         let heap = vm.state.heaps.allocate_with_content(program.as_ref());
