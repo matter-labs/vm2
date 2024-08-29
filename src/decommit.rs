@@ -86,11 +86,8 @@ impl WorldDiff {
         world: &mut impl World<T>,
         code_hash: U256,
     ) -> (Vec<u8>, bool) {
-        let was_decommitted = self.decommitted_hashes.as_ref().get(&code_hash) == Some(&true);
-        if !was_decommitted {
-            self.decommitted_hashes.insert(code_hash, true);
-        }
-        (world.decommit_code(code_hash), !was_decommitted)
+        let is_new = self.decommitted_hashes.insert(code_hash, true) != Some(true);
+        (world.decommit_code(code_hash), is_new)
     }
 
     pub(crate) fn pay_for_decommit<T, W: World<T>>(

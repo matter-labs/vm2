@@ -17,7 +17,7 @@ pub struct RollbackableMap<K: Ord, V> {
 impl<K: Ord + Clone, V: Clone> RollbackableMap<K, V> {
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
         let old_value = self.map.insert(key.clone(), value);
-        self.old_entries.push((key.clone(), old_value.clone()));
+        self.old_entries.push((key, old_value.clone()));
         old_value
     }
 
@@ -64,15 +64,48 @@ impl<K: Ord, V> AsRef<BTreeMap<K, V>> for RollbackableMap<K, V> {
     }
 }
 
-pub type RollbackableSet<T> = RollbackableMap<T, ()>;
+#[derive(Default)]
+pub struct RollbackableSet<K: Ord> {
+    map: BTreeMap<K, ()>,
+    old_entries: Vec<K>,
+}
 
 impl<T: Ord + Clone> RollbackableSet<T> {
-    pub fn add(&mut self, key: T) {
-        self.insert(key, ());
+    /// Adds `key` to the set and returns `true` if it was not already present.
+    pub fn add(&mut self, key: T) -> bool {
+        let is_new = self.map.insert(key.clone(), ()).is_none();
+        if is_new {
+            self.old_entries.push(key);
+        }
+        is_new
     }
 
     pub fn contains(&self, key: &T) -> bool {
-        self.as_ref().contains_key(key)
+        self.map.contains_key(key)
+    }
+}
+
+impl<K: Ord> Rollback for RollbackableSet<K> {
+    type Snapshot = usize;
+
+    fn snapshot(&self) -> Self::Snapshot {
+        self.old_entries.len()
+    }
+
+    fn rollback(&mut self, snapshot: Self::Snapshot) {
+        for k in self.old_entries.drain(snapshot..).rev() {
+            self.map.remove(&k);
+        }
+    }
+
+    fn delete_history(&mut self) {
+        self.old_entries.clear();
+    }
+}
+
+impl<K: Ord> AsRef<BTreeMap<K, ()>> for RollbackableSet<K> {
+    fn as_ref(&self) -> &BTreeMap<K, ()> {
+        &self.map
     }
 }
 

@@ -145,11 +145,7 @@ impl WorldDiff {
             .insert((contract, key), update_cost)
             .unwrap_or(0);
 
-        let refund = if self
-            .written_storage_slots
-            .as_ref()
-            .contains_key(&(contract, key))
-        {
+        let refund = if self.written_storage_slots.contains(&(contract, key)) {
             WARM_WRITE_REFUND
         } else {
             self.written_storage_slots.add((contract, key));
