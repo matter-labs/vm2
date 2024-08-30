@@ -35,6 +35,8 @@ pub struct WorldDiff {
 
     // This is never rolled back. It is just a cache to avoid asking these from DB every time.
     storage_initial_values: BTreeMap<(H160, U256), Option<U256>>,
+
+    pub storage_application_cycles: u32,
 }
 
 #[derive(Debug)]
@@ -106,9 +108,12 @@ impl WorldDiff {
             .copied()
             .unwrap_or_else(|| world.read_storage(contract, key).unwrap_or_default());
 
-        let refund = if self.read_storage_slots.add((contract, key))
-            || world.is_free_storage_slot(&contract, &key)
-        {
+        let already_accessed = self.read_storage_slots.add((contract, key));
+        if !already_accessed {
+            self.storage_application_cycles += STORAGE_READ_STORAGE_APPLICATION_CYCLES;
+        }
+
+        let refund = if already_accessed || world.is_free_storage_slot(&contract, &key) {
             WARM_READ_REFUND
         } else {
             0
@@ -133,7 +138,9 @@ impl WorldDiff {
             .or_insert_with(|| world.read_storage(contract, key));
 
         if world.is_free_storage_slot(&contract, &key) {
-            self.written_storage_slots.add((contract, key));
+            if !self.written_storage_slots.add((contract, key)) {
+                self.storage_application_cycles += STORAGE_WRITE_STORAGE_APPLICATION_CYCLES;
+            }
             self.read_storage_slots.add((contract, key));
 
             self.storage_refunds.push(WARM_WRITE_REFUND);
@@ -149,10 +156,14 @@ impl WorldDiff {
 
         let refund = if self.written_storage_slots.add((contract, key)) {
             WARM_WRITE_REFUND
-        } else if self.read_storage_slots.add((contract, key)) {
-            COLD_WRITE_AFTER_WARM_READ_REFUND
         } else {
-            0
+            self.storage_application_cycles += STORAGE_WRITE_STORAGE_APPLICATION_CYCLES;
+
+            if self.read_storage_slots.add((contract, key)) {
+                COLD_WRITE_AFTER_WARM_READ_REFUND
+            } else {
+                0
+            }
         };
 
         let pubdata_cost = (update_cost as i32) - (prepaid as i32);
@@ -335,35 +346,6 @@ impl WorldDiff {
     pub(crate) fn clear_transient_storage(&mut self) {
         self.transient_storage_changes = Default::default();
     }
-
-    pub fn storage_application_cycles_snapshot(&self) -> StorageApplicationCyclesSnapshot {
-        StorageApplicationCyclesSnapshot {
-            written_storage_slots: self.written_storage_slots.snapshot(),
-            read_storage_slots: self.read_storage_slots.snapshot(),
-        }
-    }
-
-    pub fn storage_application_cycles_after(
-        &self,
-        snapshot: &StorageApplicationCyclesSnapshot,
-    ) -> usize {
-        self.written_storage_slots
-            .added_after(snapshot.written_storage_slots)
-            .len()
-            * STORAGE_WRITE_STORAGE_APPLICATION_CYCLES as usize
-            + self
-                .read_storage_slots
-                .added_after(snapshot.read_storage_slots)
-                .iter()
-                .filter(|slot| !self.written_storage_slots.contains(slot))
-                .count()
-                * STORAGE_READ_STORAGE_APPLICATION_CYCLES as usize
-    }
-}
-
-pub struct StorageApplicationCyclesSnapshot {
-    written_storage_slots: <RollbackableSet<(H160, U256)> as Rollback>::Snapshot,
-    read_storage_slots: <RollbackableSet<(H160, U256)> as Rollback>::Snapshot,
 }
 
 #[derive(Clone, PartialEq, Debug)]

@@ -83,10 +83,6 @@ impl<T: Ord + Clone> RollbackableSet<T> {
     pub fn contains(&self, key: &T) -> bool {
         self.map.contains_key(key)
     }
-
-    pub(crate) fn added_after(&self, snapshot: <Self as Rollback>::Snapshot) -> &[T] {
-        &self.old_entries[snapshot..]
-    }
 }
 
 impl<K: Ord> Rollback for RollbackableSet<K> {
