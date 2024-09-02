@@ -67,7 +67,8 @@ impl WorldDiff {
         code_info[1] = 0;
         let code_key: U256 = U256::from_big_endian(&code_info);
 
-        let cost = if self.decommitted_hashes.as_ref().contains_key(&code_key) {
+        let was_decommitted = self.decommitted_hashes.as_ref().get(&code_key) == Some(&true);
+        let cost = if was_decommitted {
             0
         } else {
             let code_length_in_words = u16::from_be_bytes([code_info[2], code_info[3]]);
@@ -85,7 +86,10 @@ impl WorldDiff {
         world: &mut impl World<T>,
         code_hash: U256,
     ) -> (Vec<u8>, bool) {
-        let was_decommitted = self.decommitted_hashes.insert(code_hash, ()).is_some();
+        let was_decommitted = self.decommitted_hashes.as_ref().get(&code_hash) == Some(&true);
+        if !was_decommitted {
+            self.decommitted_hashes.insert(code_hash, true);
+        }
         (world.decommit_code(code_hash), !was_decommitted)
     }
 
@@ -95,19 +99,21 @@ impl WorldDiff {
         decommit: UnpaidDecommit,
         gas: &mut u32,
     ) -> Option<Program<T, W>> {
-        // We intentionally record a decommitment event even if actual decommitment never happens because of an out-of-gas error.
-        // This is how the old VM behaves.
-        self.decommitted_hashes.insert(decommit.code_key, ());
-
         if decommit.cost > *gas {
+            // We intentionally record a decommitment event even if actual decommitment never happens because of an out-of-gas error.
+            // This is how the old VM behaves.
+            self.decommitted_hashes.insert(decommit.code_key, false);
             // Unlike all other gas costs, this one is not paid if low on gas.
             return None;
         }
+
+        self.decommitted_hashes.insert(decommit.code_key, true);
         *gas -= decommit.cost;
         Some(world.decommit(decommit.code_key))
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct UnpaidDecommit {
     cost: u32,
     code_key: U256,
