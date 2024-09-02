@@ -53,17 +53,18 @@ macro_rules! pub_struct {
 }
 
 pub mod opcodes {
+    use super::{CallingMode, ReturnType};
+    use std::marker::PhantomData;
+
     forall_simple_opcodes!(pub_struct);
-    pub struct FarCall<M: TypeLevelCallingMode>(M);
-    pub struct Ret<T: TypeLevelReturnType>(T);
+    pub struct FarCall<M: TypeLevelCallingMode>(PhantomData<M>);
+    pub struct Ret<T: TypeLevelReturnType>(PhantomData<T>);
 
     pub struct Normal;
     pub struct Delegate;
     pub struct Mimic;
     pub struct Revert;
     pub struct Panic;
-
-    use super::{CallingMode, ReturnType};
 
     pub trait TypeLevelCallingMode {
         const VALUE: CallingMode;
