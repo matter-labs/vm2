@@ -97,7 +97,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
         (interpreter_address, interpreter),
         (main_address, main_program),
     ]);
-    let intepreter_hash = world.address_to_hash[&address_into_u256(interpreter_address)].into();
+    let interpreter_hash = world.address_to_hash[&address_into_u256(interpreter_address)].into();
 
     let mut ethereum_hash = [0; 32];
     ethereum_hash[0] = 2;
@@ -115,7 +115,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
         INITIAL_GAS,
         vm2::Settings {
             default_aa_code_hash: [0; 32],
-            evm_interpreter_code_hash: intepreter_hash,
+            evm_interpreter_code_hash: interpreter_hash,
             hook_address: 0,
         },
     );

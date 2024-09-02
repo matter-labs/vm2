@@ -9,6 +9,7 @@ use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
 
+#[derive(Debug)]
 pub struct TestWorld<T> {
     pub address_to_hash: BTreeMap<U256, U256>,
     pub hash_to_contract: BTreeMap<U256, Program<T, Self>>,
