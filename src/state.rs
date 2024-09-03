@@ -160,6 +160,7 @@ impl<T, W> Clone for State<T, W> {
             heaps: self.heaps.clone(),
             transaction_number: self.transaction_number,
             context_u128: self.context_u128,
+            cycle_counts: self.cycle_counts.clone(),
         }
     }
 }
