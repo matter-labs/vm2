@@ -109,12 +109,12 @@ impl WorldDiff {
             .copied()
             .unwrap_or_else(|| world.read_storage(contract, key).unwrap_or_default());
 
-        let already_accessed = self.read_storage_slots.add((contract, key));
-        if !already_accessed {
+        let newly_added = self.read_storage_slots.add((contract, key));
+        if newly_added {
             tracer.on_extra_prover_cycles(CycleStats::StorageRead);
         }
 
-        let refund = if already_accessed || world.is_free_storage_slot(&contract, &key) {
+        let refund = if !newly_added || world.is_free_storage_slot(&contract, &key) {
             WARM_READ_REFUND
         } else {
             0
@@ -140,7 +140,7 @@ impl WorldDiff {
             .or_insert_with(|| world.read_storage(contract, key));
 
         if world.is_free_storage_slot(&contract, &key) {
-            if !self.written_storage_slots.add((contract, key)) {
+            if self.written_storage_slots.add((contract, key)) {
                 tracer.on_extra_prover_cycles(CycleStats::StorageWrite);
             }
             self.read_storage_slots.add((contract, key));
@@ -156,12 +156,12 @@ impl WorldDiff {
             .insert((contract, key), update_cost)
             .unwrap_or(0);
 
-        let refund = if self.written_storage_slots.add((contract, key)) {
+        let refund = if !self.written_storage_slots.add((contract, key)) {
             WARM_WRITE_REFUND
         } else {
             tracer.on_extra_prover_cycles(CycleStats::StorageWrite);
 
-            if self.read_storage_slots.add((contract, key)) {
+            if !self.read_storage_slots.add((contract, key)) {
                 COLD_WRITE_AFTER_WARM_READ_REFUND
             } else {
                 0
