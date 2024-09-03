@@ -231,7 +231,6 @@ pub struct CycleCounts {
     pub ecrecover_cycles: usize,
     pub sha256_cycles: usize,
     pub secp256v1_verify_cycles: usize,
-    pub code_decommitter_cycles: usize,
 }
 
 impl PartialEq for CycleCounts {

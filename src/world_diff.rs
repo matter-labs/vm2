@@ -37,6 +37,7 @@ pub struct WorldDiff {
     storage_initial_values: BTreeMap<(H160, U256), Option<U256>>,
 
     pub storage_application_cycles: u32,
+    pub decommit_cycles: u32,
 }
 
 #[derive(Debug)]

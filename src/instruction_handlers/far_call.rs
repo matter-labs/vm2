@@ -120,10 +120,9 @@ fn far_call<
             .expect("stipend must not cause overflow");
 
         let new_frame_is_static = IS_STATIC || vm.state.current_frame.is_static;
-        vm.state.cycle_counts.code_decommitter_cycles += program.1;
         vm.push_frame::<M>(
             u256_into_address(destination_address),
-            program.0,
+            program,
             new_frame_gas,
             stipend,
             exception_handler,

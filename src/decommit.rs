@@ -87,7 +87,12 @@ impl WorldDiff {
         code_hash: U256,
     ) -> (Vec<u8>, bool) {
         let is_new = self.decommitted_hashes.insert(code_hash, true) != Some(true);
-        (world.decommit_code(code_hash), is_new)
+        let code = world.decommit_code(code_hash);
+        if is_new {
+            // Decommitter can process two words per cycle
+            self.decommit_cycles += (code.len() as u32 + 63) / 64;
+        }
+        (code, is_new)
     }
 
     pub(crate) fn pay_for_decommit<T, W: World<T>>(
@@ -95,7 +100,7 @@ impl WorldDiff {
         world: &mut W,
         decommit: UnpaidDecommit,
         gas: &mut u32,
-    ) -> Option<(Program<T, W>, usize)> {
+    ) -> Option<Program<T, W>> {
         if decommit.cost > *gas {
             // We intentionally record a decommitment event even if actual decommitment never happens because of an out-of-gas error.
             // This is how the old VM behaves.
@@ -108,13 +113,11 @@ impl WorldDiff {
         *gas -= decommit.cost;
 
         let decommit = world.decommit(decommit.code_key);
-        let decommit_cycles = if is_new {
-            (decommit.code_page().len() + 1) / 2
-        } else {
-            0
-        };
+        if is_new {
+            self.decommit_cycles += (decommit.code_page().len() as u32 + 1) / 2;
+        }
 
-        Some((decommit, decommit_cycles))
+        Some(decommit)
     }
 }
 
