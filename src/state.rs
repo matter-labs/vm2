@@ -10,7 +10,7 @@ use crate::{
 };
 use u256::{H160, U256};
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug)]
 pub struct State<T, W> {
     pub registers: [U256; 16],
     pub(crate) register_pointer_flags: u16,
@@ -143,6 +143,34 @@ impl<T, W> State<T, W> {
 
     pub(crate) fn delete_history(&mut self) {
         self.heaps.delete_history();
+    }
+}
+
+impl<T, W> Clone for State<T, W> {
+    fn clone(&self) -> Self {
+        Self {
+            registers: self.registers,
+            register_pointer_flags: self.register_pointer_flags,
+            flags: self.flags.clone(),
+            current_frame: self.current_frame.clone(),
+            previous_frames: self.previous_frames.clone(),
+            heaps: self.heaps.clone(),
+            transaction_number: self.transaction_number,
+            context_u128: self.context_u128,
+        }
+    }
+}
+
+impl<T, W> PartialEq for State<T, W> {
+    fn eq(&self, other: &Self) -> bool {
+        self.registers == other.registers
+            && self.register_pointer_flags == other.register_pointer_flags
+            && self.flags == other.flags
+            && self.transaction_number == other.transaction_number
+            && self.context_u128 == other.context_u128
+            && self.current_frame == other.current_frame
+            && self.previous_frames == other.previous_frames
+            && self.heaps == other.heaps
     }
 }
 

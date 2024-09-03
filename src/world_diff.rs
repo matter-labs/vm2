@@ -25,7 +25,10 @@ pub struct WorldDiff {
     pubdata_costs: RollbackableLog<i32>,
 
     // The fields below are only rolled back when the whole VM is rolled back.
-    pub(crate) decommitted_hashes: RollbackableSet<U256>,
+    /// Values indicate whether a bytecode was successfully decommitted. When accessing decommitted hashes
+    /// for the execution state, we need to track both successful and failed decommitments; OTOH, only successful ones
+    /// matter when computing decommitment cost.
+    pub(crate) decommitted_hashes: RollbackableMap<U256, bool>,
     read_storage_slots: RollbackableSet<(H160, U256)>,
     written_storage_slots: RollbackableSet<(H160, U256)>,
 
@@ -259,7 +262,8 @@ impl WorldDiff {
         self.l2_to_l1_logs.logs_after(snapshot.l2_to_l1_logs)
     }
 
-    /// Returns hashes of decommitted contract bytecodes in no particular order.
+    /// Returns hashes of decommitted contract bytecodes in no particular order. Note that this includes
+    /// failed (out-of-gas) decommitments.
     pub fn decommitted_hashes(&self) -> impl Iterator<Item = U256> + '_ {
         self.decommitted_hashes.as_ref().keys().copied()
     }

@@ -10,7 +10,7 @@ use eravm_stable_interface::HeapId;
 use u256::H160;
 use zkevm_opcode_defs::system_params::{NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND};
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub struct Callframe<T, W> {
     pub address: H160,
     pub code_address: H160,
@@ -257,5 +257,30 @@ impl<T, W> Clone for Callframe<T, W> {
             heaps_i_am_keeping_alive: self.heaps_i_am_keeping_alive.clone(),
             world_before_this_frame: self.world_before_this_frame.clone(),
         }
+    }
+}
+
+impl<T, W> PartialEq for Callframe<T, W> {
+    fn eq(&self, other: &Self) -> bool {
+        self.address == other.address
+            && self.code_address == other.code_address
+            && self.caller == other.caller
+            && self.exception_handler == other.exception_handler
+            && self.context_u128 == other.context_u128
+            && self.is_static == other.is_static
+            && self.stack == other.stack
+            && self.sp == other.sp
+            && self.gas == other.gas
+            && self.stipend == other.stipend
+            && self.near_calls == other.near_calls
+            && self.pc == other.pc
+            && self.program == other.program
+            && self.heap == other.heap
+            && self.aux_heap == other.aux_heap
+            && self.heap_size == other.heap_size
+            && self.aux_heap_size == other.aux_heap_size
+            && self.calldata_heap == other.calldata_heap
+            && self.heaps_i_am_keeping_alive == other.heaps_i_am_keeping_alive
+            && self.world_before_this_frame == other.world_before_this_frame
     }
 }
