@@ -1,4 +1,4 @@
-use super::common::instruction_boilerplate;
+use super::common::boilerplate;
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
@@ -19,7 +19,7 @@ fn ptr<T: Tracer, W, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<Op, _, _>(vm, world, tracer, |vm, args, _| {
+    boilerplate::<Op, _, _>(vm, world, tracer, |vm, args| {
         let ((a, a_is_pointer), (b, b_is_pointer)) = if SWAP {
             (
                 Register2::get_with_pointer_flag(args, &mut vm.state),

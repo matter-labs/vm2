@@ -1,11 +1,11 @@
-use super::{common::instruction_boilerplate, HeapInterface};
+use super::{common::boilerplate_t, HeapInterface};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     heap::Heaps,
     instruction::ExecutionStatus,
     Instruction, VirtualMachine,
 };
-use eravm_stable_interface::{opcodes, HeapId, Tracer};
+use eravm_stable_interface::{opcodes, CycleStats, HeapId, Tracer};
 use zk_evm_abstractions::{
     aux::Timestamp,
     precompiles::{
@@ -28,7 +28,7 @@ fn precompile_call<T: Tracer, W>(
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::PrecompileCall, _, _>(vm, world, tracer, |vm, args, _| {
+    boilerplate_t::<opcodes::PrecompileCall, _, _>(vm, world, tracer, |vm, args, tracer| {
         // The user gets to decide how much gas to burn
         // This is safe because system contracts are trusted
         let aux_data = PrecompileAuxData::from_u256(Register2::get(args, &mut vm.state));
@@ -66,20 +66,24 @@ fn precompile_call<T: Tracer, W>(
         let heaps = &mut vm.state.heaps;
         match address_low {
             KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
-                vm.state.cycle_counts.keccak256_cycles +=
-                    keccak256_rounds_function::<_, false>(0, query, heaps).0;
+                tracer.on_extra_prover_cycles(CycleStats::Keccak256(
+                    keccak256_rounds_function::<_, false>(0, query, heaps).0 as u32,
+                ));
             }
             SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
-                vm.state.cycle_counts.sha256_cycles +=
-                    sha256_rounds_function::<_, false>(0, query, heaps).0;
+                tracer.on_extra_prover_cycles(CycleStats::Sha256(
+                    sha256_rounds_function::<_, false>(0, query, heaps).0 as u32,
+                ));
             }
             ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS => {
-                vm.state.cycle_counts.ecrecover_cycles +=
-                    ecrecover_function::<_, false>(0, query, heaps).0;
+                tracer.on_extra_prover_cycles(CycleStats::EcRecover(
+                    ecrecover_function::<_, false>(0, query, heaps).0 as u32,
+                ));
             }
             SECP256R1_VERIFY_PRECOMPILE_ADDRESS => {
-                vm.state.cycle_counts.secp256v1_verify_cycles +=
-                    secp256r1_verify_function::<_, false>(0, query, heaps).0;
+                tracer.on_extra_prover_cycles(CycleStats::Secp256k1Verify(
+                    secp256r1_verify_function::<_, false>(0, query, heaps).0 as u32,
+                ));
             }
             _ => {
                 // A precompile call may be used just to burn gas

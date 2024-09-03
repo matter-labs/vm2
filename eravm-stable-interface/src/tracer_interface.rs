@@ -208,6 +208,19 @@ impl<T: opcodes::TypeLevelReturnType> OpcodeType for opcodes::Ret<T> {
 pub trait Tracer {
     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
     fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
+
+    fn on_extra_prover_cycles(&mut self, _stats: CycleStats) {}
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum CycleStats {
+    Keccak256(u32),
+    Sha256(u32),
+    EcRecover(u32),
+    Secp256k1Verify(u32),
+    Decommit(u32),
+    StorageRead,
+    StorageWrite,
 }
 
 impl Tracer for () {}
@@ -222,6 +235,11 @@ impl<A: Tracer, B: Tracer> Tracer for (A, B) {
     fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S) {
         self.0.after_instruction::<OP, S>(state);
         self.1.after_instruction::<OP, S>(state);
+    }
+
+    fn on_extra_prover_cycles(&mut self, stats: CycleStats) {
+        self.0.on_extra_prover_cycles(stats);
+        self.1.on_extra_prover_cycles(stats);
     }
 }
 

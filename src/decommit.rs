@@ -1,13 +1,15 @@
 use crate::{program::Program, world_diff::WorldDiff, World};
+use eravm_stable_interface::{CycleStats, Tracer};
 use u256::{H160, U256};
 use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
 
 impl WorldDiff {
-    pub(crate) fn decommit<T>(
+    pub(crate) fn decommit<T: Tracer>(
         &mut self,
         world: &mut impl World<T>,
+        tracer: &mut T,
         address: U256,
         default_aa_code_hash: [u8; 32],
         evm_interpreter_code_hash: [u8; 32],
@@ -19,8 +21,12 @@ impl WorldDiff {
         let mut is_evm = false;
 
         let mut code_info = {
-            let code_info =
-                self.read_storage_without_refund(world, deployer_system_contract_address, address);
+            let code_info = self.read_storage_without_refund(
+                world,
+                tracer,
+                deployer_system_contract_address,
+                address,
+            );
             let mut code_info_bytes = [0; 32];
             code_info.to_big_endian(&mut code_info_bytes);
 
@@ -81,23 +87,25 @@ impl WorldDiff {
     /// Returns the decommitted contract code and a flag set to `true` if this is a fresh decommit (i.e.,
     /// the code wasn't decommitted previously in the same VM run).
     #[doc(hidden)] // should be used for testing purposes only; can break VM operation otherwise
-    pub fn decommit_opcode<T>(
+    pub fn decommit_opcode<T: Tracer>(
         &mut self,
         world: &mut impl World<T>,
+        tracer: &mut T,
         code_hash: U256,
     ) -> (Vec<u8>, bool) {
         let is_new = self.decommitted_hashes.insert(code_hash, true) != Some(true);
         let code = world.decommit_code(code_hash);
         if is_new {
             // Decommitter can process two words per cycle
-            self.decommit_cycles += (code.len() as u32 + 63) / 64;
+            tracer.on_extra_prover_cycles(CycleStats::Decommit((code.len() as u32 + 63) / 64));
         }
         (code, is_new)
     }
 
-    pub(crate) fn pay_for_decommit<T, W: World<T>>(
+    pub(crate) fn pay_for_decommit<T: Tracer, W: World<T>>(
         &mut self,
         world: &mut W,
+        tracer: &mut T,
         decommit: UnpaidDecommit,
         gas: &mut u32,
     ) -> Option<Program<T, W>> {
@@ -114,7 +122,9 @@ impl WorldDiff {
 
         let decommit = world.decommit(decommit.code_key);
         if is_new {
-            self.decommit_cycles += (decommit.code_page().len() as u32 + 1) / 2;
+            tracer.on_extra_prover_cycles(CycleStats::Decommit(
+                (decommit.code_page().len() as u32 + 1) / 2,
+            ));
         }
 
         Some(decommit)

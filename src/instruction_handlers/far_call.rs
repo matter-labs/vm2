@@ -1,5 +1,5 @@
 use super::{
-    common::instruction_boilerplate_ext,
+    common::boilerplate_wt,
     heap_access::grow_heap,
     ret::{panic_from_failed_far_call, RETURN_COST},
     AuxHeap, Heap,
@@ -43,7 +43,7 @@ fn far_call<
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate_ext::<FarCall<M>, _, _>(vm, world, tracer, |vm, args, tracer, world| {
+    boilerplate_wt::<FarCall<M>, _, _>(vm, world, tracer, |vm, args, world, tracer| {
         let (raw_abi, raw_abi_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
 
         let address_mask: U256 = U256::MAX >> (256 - 160);
@@ -65,6 +65,7 @@ fn far_call<
         let failing_part = (|| {
             let decommit_result = vm.world_diff.decommit(
                 world,
+                tracer,
                 destination_address,
                 vm.settings.default_aa_code_hash,
                 vm.settings.evm_interpreter_code_hash,
@@ -92,6 +93,7 @@ fn far_call<
             let (unpaid_decommit, is_evm) = decommit_result?;
             let program = vm.world_diff.pay_for_decommit(
                 world,
+                tracer,
                 unpaid_decommit,
                 &mut vm.state.current_frame.gas,
             )?;
@@ -107,7 +109,7 @@ fn far_call<
         let Some((calldata, program, is_evm_interpreter)) = failing_part else {
             vm.state.current_frame.gas += new_frame_gas.saturating_sub(RETURN_COST);
             panic_from_failed_far_call(vm, tracer, exception_handler);
-            return ExecutionStatus::Running;
+            return;
         };
 
         let stipend = if is_evm_interpreter {
@@ -152,8 +154,6 @@ fn far_call<
             | u8::from(abi.is_constructor_call);
 
         vm.state.registers[2] = call_type.into();
-
-        ExecutionStatus::Running
     })
 }
 

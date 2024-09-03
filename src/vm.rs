@@ -16,9 +16,6 @@ use eravm_stable_interface::opcodes::TypeLevelCallingMode;
 use eravm_stable_interface::{CallingMode, HeapId, Tracer};
 use u256::H160;
 
-pub(crate) const STORAGE_READ_STORAGE_APPLICATION_CYCLES: u32 = 1;
-pub(crate) const STORAGE_WRITE_STORAGE_APPLICATION_CYCLES: u32 = 2;
-
 #[derive(Debug)]
 pub struct Settings {
     pub default_aa_code_hash: [u8; 32],

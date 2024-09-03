@@ -28,8 +28,6 @@ pub struct State<T, W> {
     pub transaction_number: u16,
 
     pub(crate) context_u128: u128,
-
-    pub cycle_counts: CycleCounts,
 }
 
 impl<T, W> State<T, W> {
@@ -77,7 +75,6 @@ impl<T, W> State<T, W> {
 
             transaction_number: 0,
             context_u128: 0,
-            cycle_counts: CycleCounts::default(),
         }
     }
 
@@ -160,7 +157,6 @@ impl<T, W> Clone for State<T, W> {
             heaps: self.heaps.clone(),
             transaction_number: self.transaction_number,
             context_u128: self.context_u128,
-            cycle_counts: self.cycle_counts.clone(),
         }
     }
 }
@@ -226,12 +222,4 @@ pub(crate) struct StateSnapshot {
     bootloader_heap_snapshot: (usize, usize),
     transaction_number: u16,
     context_u128: u128,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct CycleCounts {
-    pub keccak256_cycles: usize,
-    pub ecrecover_cycles: usize,
-    pub sha256_cycles: usize,
-    pub secp256v1_verify_cycles: usize,
 }
