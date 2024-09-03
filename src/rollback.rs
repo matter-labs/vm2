@@ -93,7 +93,7 @@ impl<K: Ord> Rollback for RollbackableSet<K> {
     }
 
     fn rollback(&mut self, snapshot: Self::Snapshot) {
-        for k in self.old_entries.drain(snapshot..).rev() {
+        for k in self.old_entries.drain(snapshot..) {
             self.map.remove(&k);
         }
     }
