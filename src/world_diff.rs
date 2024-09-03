@@ -4,6 +4,7 @@ use crate::{
     rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackablePod, RollbackableSet},
     StorageInterface,
 };
+use eravm_stable_interface::{CycleStats, Tracer};
 use u256::{H160, U256};
 use zkevm_opcode_defs::system_params::{
     STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST, STORAGE_ACCESS_WARM_READ_COST,
@@ -72,10 +73,11 @@ impl WorldDiff {
     pub(crate) fn read_storage(
         &mut self,
         world: &mut impl StorageInterface,
+        tracer: &mut impl Tracer,
         contract: H160,
         key: U256,
     ) -> (U256, u32) {
-        let (value, refund) = self.read_storage_inner(world, contract, key);
+        let (value, refund) = self.read_storage_inner(world, tracer, contract, key);
         self.storage_refunds.push(refund);
         (value, refund)
     }
@@ -86,15 +88,17 @@ impl WorldDiff {
     pub(crate) fn read_storage_without_refund(
         &mut self,
         world: &mut impl StorageInterface,
+        tracer: &mut impl Tracer,
         contract: H160,
         key: U256,
     ) -> U256 {
-        self.read_storage_inner(world, contract, key).0
+        self.read_storage_inner(world, tracer, contract, key).0
     }
 
     fn read_storage_inner(
         &mut self,
         world: &mut impl StorageInterface,
+        tracer: &mut impl Tracer,
         contract: H160,
         key: U256,
     ) -> (U256, u32) {
@@ -105,12 +109,14 @@ impl WorldDiff {
             .copied()
             .unwrap_or_else(|| world.read_storage(contract, key).unwrap_or_default());
 
-        let refund = if world.is_free_storage_slot(&contract, &key)
-            || self.read_storage_slots.contains(&(contract, key))
-        {
+        let newly_added = self.read_storage_slots.add((contract, key));
+        if newly_added {
+            tracer.on_extra_prover_cycles(CycleStats::StorageRead);
+        }
+
+        let refund = if !newly_added || world.is_free_storage_slot(&contract, &key) {
             WARM_READ_REFUND
         } else {
-            self.read_storage_slots.add((contract, key));
             0
         };
         self.pubdata_costs.push(0);
@@ -121,6 +127,7 @@ impl WorldDiff {
     pub(crate) fn write_storage(
         &mut self,
         world: &mut impl StorageInterface,
+        tracer: &mut impl Tracer,
         contract: H160,
         key: U256,
         value: U256,
@@ -133,6 +140,11 @@ impl WorldDiff {
             .or_insert_with(|| world.read_storage(contract, key));
 
         if world.is_free_storage_slot(&contract, &key) {
+            if self.written_storage_slots.add((contract, key)) {
+                tracer.on_extra_prover_cycles(CycleStats::StorageWrite);
+            }
+            self.read_storage_slots.add((contract, key));
+
             self.storage_refunds.push(WARM_WRITE_REFUND);
             self.pubdata_costs.push(0);
             return WARM_WRITE_REFUND;
@@ -144,19 +156,14 @@ impl WorldDiff {
             .insert((contract, key), update_cost)
             .unwrap_or(0);
 
-        let refund = if self
-            .written_storage_slots
-            .as_ref()
-            .contains_key(&(contract, key))
-        {
+        let refund = if !self.written_storage_slots.add((contract, key)) {
             WARM_WRITE_REFUND
         } else {
-            self.written_storage_slots.add((contract, key));
+            tracer.on_extra_prover_cycles(CycleStats::StorageWrite);
 
-            if self.read_storage_slots.contains(&(contract, key)) {
+            if !self.read_storage_slots.add((contract, key)) {
                 COLD_WRITE_AFTER_WARM_READ_REFUND
             } else {
-                self.read_storage_slots.add((contract, key));
                 0
             }
         };
@@ -389,7 +396,7 @@ mod tests {
 
             let checkpoint1 = world_diff.snapshot();
             for (key, value) in &first_changes {
-                world_diff.write_storage(&mut NoWorld, key.0, key.1, *value);
+                world_diff.write_storage(&mut NoWorld, &mut (), key.0, key.1, *value);
             }
             assert_eq!(
                 world_diff
@@ -410,7 +417,7 @@ mod tests {
 
             let checkpoint2 = world_diff.snapshot();
             for (key, value) in &second_changes {
-                world_diff.write_storage(&mut NoWorld, key.0, key.1, *value);
+                world_diff.write_storage(&mut NoWorld, &mut (), key.0, key.1, *value);
             }
             assert_eq!(
                 world_diff

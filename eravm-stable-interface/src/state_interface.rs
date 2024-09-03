@@ -4,6 +4,7 @@ pub trait StateInterface {
     fn read_register(&self, register: u8) -> (U256, bool);
     fn set_register(&mut self, register: u8, value: U256, is_pointer: bool);
 
+    fn current_frame(&mut self) -> impl CallframeInterface + '_;
     fn number_of_callframes(&self) -> usize;
     /// zero is the current frame, one is the frame before that etc.
     fn callframe(&mut self, n: usize) -> impl CallframeInterface + '_;
@@ -130,6 +131,10 @@ impl StateInterface for DummyState {
 
     fn set_register(&mut self, _: u8, _: primitive_types::U256, _: bool) {
         unimplemented!()
+    }
+
+    fn current_frame(&mut self) -> impl CallframeInterface + '_ {
+        DummyState
     }
 
     fn number_of_callframes(&self) -> usize {

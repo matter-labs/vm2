@@ -1,4 +1,4 @@
-use super::{common::instruction_boilerplate_ext, far_call::get_far_call_calldata, HeapInterface};
+use super::{common::full_boilerplate, far_call::get_far_call_calldata, HeapInterface};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     callframe::FrameRemnant,
@@ -119,7 +119,7 @@ fn ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate_ext::<opcodes::Ret<RT>, _, _>(vm, world, tracer, |vm, args, _, _| {
+    full_boilerplate::<opcodes::Ret<RT>, _, _>(vm, world, tracer, |vm, args, _, _| {
         naked_ret::<T, W, RT, TO_LABEL>(vm, args)
     })
 }

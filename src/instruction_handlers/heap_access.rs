@@ -1,4 +1,4 @@
-use super::common::{instruction_boilerplate, instruction_boilerplate_ext};
+use super::common::{boilerplate, full_boilerplate};
 use crate::{
     addressing_modes::{
         Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
@@ -64,7 +64,7 @@ fn load<T: Tracer, W, H: HeapFromState, In: Source, const INCREMENT: bool>(
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<H::Read, _, _>(vm, world, tracer, |vm, args, _| {
+    boilerplate::<H::Read, _, _>(vm, world, tracer, |vm, args| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
@@ -107,7 +107,7 @@ fn store<
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate_ext::<H::Write, _, _>(vm, world, tracer, |vm, args, _, _| {
+    full_boilerplate::<H::Write, _, _>(vm, world, tracer, |vm, args, _, _| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
@@ -165,7 +165,7 @@ fn load_pointer<T: Tracer, W, const INCREMENT: bool>(
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::PointerRead, _, _>(vm, world, tracer, |vm, args, _| {
+    boilerplate::<opcodes::PointerRead, _, _>(vm, world, tracer, |vm, args| {
         let (input, input_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
         if !input_is_pointer {
             vm.state.current_frame.pc = &*vm.panic;

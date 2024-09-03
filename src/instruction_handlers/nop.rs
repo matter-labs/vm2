@@ -1,4 +1,4 @@
-use super::common::instruction_boilerplate;
+use super::common::boilerplate;
 use crate::{
     addressing_modes::{destination_stack_address, AdvanceStackPointer, Arguments, Source},
     instruction::ExecutionStatus,
@@ -11,7 +11,7 @@ fn nop<T: Tracer, W>(
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::Nop, _, _>(vm, world, tracer, |vm, args, _| {
+    boilerplate::<opcodes::Nop, _, _>(vm, world, tracer, |vm, args| {
         // nop's addressing modes can move the stack pointer!
         AdvanceStackPointer::get(args, &mut vm.state);
         vm.state.current_frame.sp = vm

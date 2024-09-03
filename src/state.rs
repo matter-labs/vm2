@@ -163,6 +163,8 @@ impl<T, W> Clone for State<T, W> {
 
 impl<T, W> PartialEq for State<T, W> {
     fn eq(&self, other: &Self) -> bool {
+        // does not compare cycle counts to work with tests that
+        // expect no change after a rollback
         self.registers == other.registers
             && self.register_pointer_flags == other.register_pointer_flags
             && self.flags == other.flags

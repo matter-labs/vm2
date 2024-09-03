@@ -1,4 +1,4 @@
-use super::common::instruction_boilerplate;
+use super::common::boilerplate;
 use crate::{
     addressing_modes::{
         AbsoluteStack, Addressable, AdvanceStackPointer, AnyDestination, AnySource, Arguments,
@@ -28,7 +28,7 @@ fn binop<
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<Op, _, _>(vm, world, tracer, |vm, args, _| {
+    boilerplate::<Op, _, _>(vm, world, tracer, |vm, args| {
         let a = In1::get(args, &mut vm.state);
         let b = Register2::get(args, &mut vm.state);
         let (a, b) = if SWAP { (b, a) } else { (a, b) };

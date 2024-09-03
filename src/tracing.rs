@@ -32,6 +32,13 @@ impl<T, W> StateInterface for VirtualMachine<T, W> {
             + 1
     }
 
+    fn current_frame(&mut self) -> impl CallframeInterface + '_ {
+        CallframeWrapper {
+            frame: &mut self.state.current_frame,
+            near_call: None,
+        }
+    }
+
     fn callframe(&mut self, mut n: usize) -> impl CallframeInterface + '_ {
         for far_frame in std::iter::once(&mut self.state.current_frame)
             .chain(self.state.previous_frames.iter_mut().rev())

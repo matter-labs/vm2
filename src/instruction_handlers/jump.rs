@@ -1,4 +1,4 @@
-use super::common::instruction_boilerplate;
+use super::common::boilerplate;
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Destination,
@@ -14,7 +14,7 @@ fn jump<T: Tracer, W, In: Source>(
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    instruction_boilerplate::<opcodes::Jump, _, _>(vm, world, tracer, |vm, args, _| {
+    boilerplate::<opcodes::Jump, _, _>(vm, world, tracer, |vm, args| {
         let target = In::get(args, &mut vm.state).low_u32() as u16;
 
         let next_instruction = vm.state.current_frame.get_pc_as_u16();
