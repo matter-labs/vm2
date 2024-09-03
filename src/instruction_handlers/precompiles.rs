@@ -1,4 +1,4 @@
-use super::{common::boilerplate_t, HeapInterface};
+use super::{common::boilerplate_ext, HeapInterface};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     heap::Heaps,
@@ -28,7 +28,7 @@ fn precompile_call<T: Tracer, W>(
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    boilerplate_t::<opcodes::PrecompileCall, _, _>(vm, world, tracer, |vm, args, tracer| {
+    boilerplate_ext::<opcodes::PrecompileCall, _, _>(vm, world, tracer, |vm, args, _, tracer| {
         // The user gets to decide how much gas to burn
         // This is safe because system contracts are trusted
         let aux_data = PrecompileAuxData::from_u256(Register2::get(args, &mut vm.state));

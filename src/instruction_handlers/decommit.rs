@@ -1,4 +1,4 @@
-use super::common::boilerplate_wt;
+use super::common::boilerplate_ext;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     fat_pointer::FatPointer,
@@ -14,7 +14,7 @@ fn decommit<T: Tracer, W: World<T>>(
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    boilerplate_wt::<opcodes::Decommit, _, _>(vm, world, tracer, |vm, args, world, tracer| {
+    boilerplate_ext::<opcodes::Decommit, _, _>(vm, world, tracer, |vm, args, world, tracer| {
         let code_hash = Register1::get(args, &mut vm.state);
         let extra_cost = Register2::get(args, &mut vm.state).low_u32();
 

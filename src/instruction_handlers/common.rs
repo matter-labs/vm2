@@ -16,33 +16,7 @@ pub(crate) fn boilerplate<Opcode: OpcodeType, T: Tracer, W>(
 }
 
 #[inline(always)]
-pub(crate) fn boilerplate_w<Opcode: OpcodeType, T: Tracer, W>(
-    vm: &mut VirtualMachine<T, W>,
-    world: &mut W,
-    tracer: &mut T,
-    business_logic: impl FnOnce(&mut VirtualMachine<T, W>, &Arguments, &mut W),
-) -> ExecutionStatus {
-    full_boilerplate::<Opcode, T, W>(vm, world, tracer, |vm, args, world, _| {
-        business_logic(vm, args, world);
-        ExecutionStatus::Running
-    })
-}
-
-#[inline(always)]
-pub(crate) fn boilerplate_t<Opcode: OpcodeType, T: Tracer, W>(
-    vm: &mut VirtualMachine<T, W>,
-    world: &mut W,
-    tracer: &mut T,
-    business_logic: impl FnOnce(&mut VirtualMachine<T, W>, &Arguments, &mut T),
-) -> ExecutionStatus {
-    full_boilerplate::<Opcode, T, W>(vm, world, tracer, |vm, args, _, tracer| {
-        business_logic(vm, args, tracer);
-        ExecutionStatus::Running
-    })
-}
-
-#[inline(always)]
-pub(crate) fn boilerplate_wt<Opcode: OpcodeType, T: Tracer, W>(
+pub(crate) fn boilerplate_ext<Opcode: OpcodeType, T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,

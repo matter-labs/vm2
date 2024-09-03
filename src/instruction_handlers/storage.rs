@@ -1,4 +1,4 @@
-use super::common::{boilerplate, boilerplate_wt};
+use super::common::{boilerplate, boilerplate_ext};
 use crate::{
     addressing_modes::{
         Arguments, Destination, Register1, Register2, Source, SLOAD_COST, SSTORE_COST,
@@ -13,7 +13,7 @@ fn sstore<T: Tracer, W: World<T>>(
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    boilerplate_wt::<opcodes::StorageWrite, _, _>(vm, world, tracer, |vm, args, world, tracer| {
+    boilerplate_ext::<opcodes::StorageWrite, _, _>(vm, world, tracer, |vm, args, world, tracer| {
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
 
@@ -45,7 +45,7 @@ fn sload<T: Tracer, W: World<T>>(
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    boilerplate_wt::<opcodes::StorageRead, _, _>(vm, world, tracer, |vm, args, world, tracer| {
+    boilerplate_ext::<opcodes::StorageRead, _, _>(vm, world, tracer, |vm, args, world, tracer| {
         let key = Register1::get(args, &mut vm.state);
 
         let (value, refund) =

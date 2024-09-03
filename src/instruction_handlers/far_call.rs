@@ -1,5 +1,5 @@
 use super::{
-    common::boilerplate_wt,
+    common::boilerplate_ext,
     heap_access::grow_heap,
     ret::{panic_from_failed_far_call, RETURN_COST},
     AuxHeap, Heap,
@@ -43,7 +43,7 @@ fn far_call<
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    boilerplate_wt::<FarCall<M>, _, _>(vm, world, tracer, |vm, args, world, tracer| {
+    boilerplate_ext::<FarCall<M>, _, _>(vm, world, tracer, |vm, args, world, tracer| {
         let (raw_abi, raw_abi_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
 
         let address_mask: U256 = U256::MAX >> (256 - 160);
