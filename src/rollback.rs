@@ -79,10 +79,6 @@ impl<T: Ord + Clone> RollbackableSet<T> {
         }
         !is_new
     }
-
-    pub fn contains(&self, key: &T) -> bool {
-        self.map.contains_key(key)
-    }
 }
 
 impl<K: Ord> Rollback for RollbackableSet<K> {
