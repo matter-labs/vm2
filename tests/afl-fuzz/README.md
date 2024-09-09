@@ -5,7 +5,7 @@ Finds divergences and instructions that put vm2 in an invalid state.
 
 Setup: `cargo install cargo-afl`
 
-Use `sh fuzz.sh` (or customize the command to your liking) to start fuzzing.
+Use `sh fuzz.sh` (or customize the command to your liking) to start fuzzing.
 `show_crash.sh` can be used to quickly run one of the found crashes and display all the necessary information
 for fixing it.
 

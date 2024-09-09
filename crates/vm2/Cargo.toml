@@ -1,5 +1,7 @@
 [package]
 name = "zksync_vm2"
+description = "High-performance rewrite of the out-of-circuit VM for ZKsync Era"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
