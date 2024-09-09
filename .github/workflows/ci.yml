@@ -22,18 +22,25 @@ jobs:
     steps:
       - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac # v4
 
-      - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-          override: true
+          components: rustfmt, clippy, rust-src
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
 
+      - name: Install cargo-afl
+        run: cargo install cargo-afl --version=^0.15 --force
+
       - name: Build project
         run: |
-          cargo build
+          # AFL fuzzing requires a separate command
+          cargo build --workspace --all-targets --exclude zksync_vm2_afl_fuzz
+
+      - name: Build fuzzer
+        run: cargo afl build -p zksync_vm2_afl_fuzz
 
       # Two runs are needed. One for normal VM, another for the mocked version
       - name: Run clippy
@@ -47,6 +54,14 @@ jobs:
         run: |
           cargo fmt --check -- --config imports_granularity=Crate --config group_imports=StdExternalCrate
 
-      - name: Run Tests
+      - name: Run tests
         run: |
           cargo test -p zksync_vm2_interface -p zksync_vm2 --all-targets
+
+      - name: Run doc tests
+        run: cargo test --workspace --doc
+
+      - name: Run fuzzer for a bit
+        run: |
+          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
+          cargo afl fuzz -i tests/afl-fuzz/in -o tests/afl-fuzz/out -V 60 target/debug/zksync_vm2_afl_fuzz
