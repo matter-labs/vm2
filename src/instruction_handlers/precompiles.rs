@@ -1,10 +1,3 @@
-use super::{common::boilerplate_ext, HeapInterface};
-use crate::{
-    addressing_modes::{Arguments, Destination, Register1, Register2, Source},
-    heap::Heaps,
-    instruction::ExecutionStatus,
-    Instruction, VirtualMachine,
-};
 use eravm_stable_interface::{opcodes, CycleStats, HeapId, Tracer};
 use zk_evm_abstractions::{
     aux::Timestamp,
@@ -21,6 +14,14 @@ use zkevm_opcode_defs::{
         SECP256R1_VERIFY_PRECOMPILE_ADDRESS, SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
     },
     PrecompileAuxData, PrecompileCallABI,
+};
+
+use super::{common::boilerplate_ext, HeapInterface};
+use crate::{
+    addressing_modes::{Arguments, Destination, Register1, Register2, Source},
+    heap::Heaps,
+    instruction::ExecutionStatus,
+    Instruction, VirtualMachine,
 };
 
 fn precompile_call<T: Tracer, W>(

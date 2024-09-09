@@ -1,3 +1,9 @@
+use eravm_stable_interface::{
+    opcodes::{PointerAdd, PointerPack, PointerShrink, PointerSub},
+    OpcodeType, Tracer,
+};
+use u256::U256;
+
 use super::common::boilerplate;
 use crate::{
     addressing_modes::{
@@ -8,11 +14,6 @@ use crate::{
     instruction::ExecutionStatus,
     Instruction, VirtualMachine,
 };
-use eravm_stable_interface::{
-    opcodes::{PointerAdd, PointerPack, PointerShrink, PointerSub},
-    OpcodeType, Tracer,
-};
-use u256::U256;
 
 fn ptr<T: Tracer, W, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     vm: &mut VirtualMachine<T, W>,

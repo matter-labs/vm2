@@ -1,10 +1,11 @@
-use crate::{decode::decode, Instruction, World};
+use std::{rc::Rc, sync::Arc};
+
 use arbitrary::Arbitrary;
 use eravm_stable_interface::Tracer;
-use std::{rc::Rc, sync::Arc};
 use u256::U256;
 
 use super::mock_array::MockRead;
+use crate::{decode::decode, Instruction, World};
 
 #[derive(Debug)]
 pub struct Program<T, W> {

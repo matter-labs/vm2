@@ -1,16 +1,17 @@
 #![cfg(not(feature = "single_instruction_test"))]
 
-use eravm_stable_interface::opcodes;
 use std::collections::HashSet;
+
+use eravm_stable_interface::opcodes;
 use u256::{H160, U256};
-use vm2::addressing_modes::{
-    Arguments, CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
-};
-use vm2::instruction_handlers::Heap;
-use vm2::testworld::TestWorld;
 use vm2::{
-    initial_decommit, ExecutionEnd, Instruction, ModeRequirements, Predicate, Program,
-    VirtualMachine,
+    addressing_modes::{
+        Arguments, CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
+    },
+    initial_decommit,
+    instruction_handlers::Heap,
+    testworld::TestWorld,
+    ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, VirtualMachine,
 };
 use zkevm_opcode_defs::ethereum_types::Address;
 

@@ -1,20 +1,17 @@
-use crate::addressing_modes::Arguments;
-use crate::instruction::ExecutionStatus;
-use crate::instruction_handlers::RETURN_COST;
-use crate::state::StateSnapshot;
-use crate::world_diff::ExternalSnapshot;
+use eravm_stable_interface::{opcodes::TypeLevelCallingMode, CallingMode, HeapId, Tracer};
+use u256::H160;
+
 use crate::{
+    addressing_modes::Arguments,
     callframe::{Callframe, FrameRemnant},
     decommit::u256_into_address,
+    instruction::ExecutionStatus,
+    instruction_handlers::RETURN_COST,
     stack::StackPool,
-    state::State,
-    world_diff::{Snapshot, WorldDiff},
-    ExecutionEnd, Program,
+    state::{State, StateSnapshot},
+    world_diff::{ExternalSnapshot, Snapshot, WorldDiff},
+    ExecutionEnd, Instruction, ModeRequirements, Predicate, Program,
 };
-use crate::{Instruction, ModeRequirements, Predicate};
-use eravm_stable_interface::opcodes::TypeLevelCallingMode;
-use eravm_stable_interface::{CallingMode, HeapId, Tracer};
-use u256::H160;
 
 #[derive(Debug)]
 pub struct Settings {

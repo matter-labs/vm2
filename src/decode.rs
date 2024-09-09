@@ -1,3 +1,13 @@
+use eravm_stable_interface::{opcodes, Tracer};
+use zkevm_opcode_defs::{
+    decoding::{EncodingModeProduction, VmEncodingMode},
+    ImmMemHandlerFlags, Opcode,
+    Operand::*,
+    RegOrImmFlags, FAR_CALL_SHARD_FLAG_IDX, FAR_CALL_STATIC_FLAG_IDX, FIRST_MESSAGE_FLAG_IDX,
+    RET_TO_LABEL_BIT_IDX, SET_FLAGS_FLAG_IDX, SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES,
+    SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
+};
+
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
@@ -12,15 +22,6 @@ use crate::{
     jump_to_beginning,
     mode_requirements::ModeRequirements,
     Instruction, Predicate, VirtualMachine, World,
-};
-use eravm_stable_interface::{opcodes, Tracer};
-use zkevm_opcode_defs::{
-    decoding::{EncodingModeProduction, VmEncodingMode},
-    ImmMemHandlerFlags, Opcode,
-    Operand::*,
-    RegOrImmFlags, FAR_CALL_SHARD_FLAG_IDX, FAR_CALL_STATIC_FLAG_IDX, FIRST_MESSAGE_FLAG_IDX,
-    RET_TO_LABEL_BIT_IDX, SET_FLAGS_FLAG_IDX, SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES,
-    SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
 };
 
 pub fn decode_program<T: Tracer, W: World<T>>(

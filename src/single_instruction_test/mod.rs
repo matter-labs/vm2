@@ -5,6 +5,12 @@
 //!
 //! The same kind of mocking in applied to stack memory, the program, the world and callstack.
 
+pub use self::{
+    into_zk_evm::{add_heap_to_zk_evm, vm2_to_zk_evm, NoTracer},
+    universal_state::UniversalVmState,
+    world::MockWorld,
+};
+
 mod callframe;
 pub mod heap;
 mod into_zk_evm;
@@ -17,7 +23,3 @@ mod universal_state;
 mod validation;
 mod vm;
 mod world;
-
-pub use into_zk_evm::{add_heap_to_zk_evm, vm2_to_zk_evm, NoTracer};
-pub use universal_state::UniversalVmState;
-pub use world::MockWorld;

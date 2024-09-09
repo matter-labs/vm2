@@ -1,3 +1,26 @@
+use std::hash::{DefaultHasher, Hash, Hasher};
+
+pub use eravm_stable_interface::{
+    CallframeInterface, CycleStats, HeapId, Opcode, OpcodeType, ReturnType, StateInterface, Tracer,
+};
+use u256::{H160, U256};
+
+// Re-export missing modules if single instruction testing is enabled
+#[cfg(feature = "single_instruction_test")]
+pub(crate) use self::single_instruction_test::{heap, program, stack};
+pub use self::{
+    decommit::{address_into_u256, initial_decommit},
+    heap::FIRST_HEAP,
+    instruction::{jump_to_beginning, ExecutionEnd, Instruction},
+    mode_requirements::ModeRequirements,
+    predication::Predicate,
+    program::Program,
+    state::State,
+    vm::{Settings, VirtualMachine, VmSnapshot as Snapshot},
+    world_diff::{Event, L2ToL1Log, WorldDiff},
+};
+
+// FIXME: revise visibility
 pub mod addressing_modes;
 #[cfg(not(feature = "single_instruction_test"))]
 mod bitset;
@@ -14,6 +37,8 @@ mod predication;
 #[cfg(not(feature = "single_instruction_test"))]
 mod program;
 mod rollback;
+#[cfg(feature = "single_instruction_test")]
+pub mod single_instruction_test;
 #[cfg(not(feature = "single_instruction_test"))]
 mod stack;
 mod state;
@@ -21,34 +46,6 @@ pub mod testworld;
 mod tracing;
 mod vm;
 mod world_diff;
-
-use std::hash::{DefaultHasher, Hash, Hasher};
-use u256::{H160, U256};
-
-pub use decommit::address_into_u256;
-pub use decommit::initial_decommit;
-pub use eravm_stable_interface::{
-    CallframeInterface, CycleStats, HeapId, Opcode, OpcodeType, ReturnType, StateInterface, Tracer,
-};
-pub use heap::FIRST_HEAP;
-pub use instruction::{jump_to_beginning, ExecutionEnd, Instruction};
-pub use mode_requirements::ModeRequirements;
-pub use predication::Predicate;
-pub use program::Program;
-pub use state::State;
-pub use vm::{Settings, VirtualMachine, VmSnapshot as Snapshot};
-pub use world_diff::{Event, L2ToL1Log, WorldDiff};
-
-#[cfg(feature = "single_instruction_test")]
-pub mod single_instruction_test;
-#[cfg(feature = "single_instruction_test")]
-use single_instruction_test::heap;
-#[cfg(feature = "single_instruction_test")]
-use single_instruction_test::program;
-#[cfg(feature = "single_instruction_test")]
-use single_instruction_test::stack;
-#[cfg(feature = "single_instruction_test")]
-pub use zkevm_opcode_defs;
 
 pub trait World<T>: StorageInterface + Sized {
     /// This will be called *every* time a contract is called. Caching and decoding is

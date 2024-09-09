@@ -1,10 +1,11 @@
+use eravm_stable_interface::{opcodes, Tracer};
+
 use super::common::boilerplate;
 use crate::{
     addressing_modes::{destination_stack_address, AdvanceStackPointer, Arguments, Source},
     instruction::ExecutionStatus,
     Instruction, VirtualMachine,
 };
-use eravm_stable_interface::{opcodes, Tracer};
 
 fn nop<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,

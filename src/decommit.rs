@@ -1,9 +1,10 @@
-use crate::{program::Program, world_diff::WorldDiff, World};
 use eravm_stable_interface::{CycleStats, Tracer};
 use u256::{H160, U256};
 use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
+
+use crate::{program::Program, world_diff::WorldDiff, World};
 
 impl WorldDiff {
     pub(crate) fn decommit<T: Tracer>(

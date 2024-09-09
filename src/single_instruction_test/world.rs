@@ -1,8 +1,9 @@
-use super::mock_array::MockRead;
-use crate::{Program, StorageInterface, World};
 use arbitrary::Arbitrary;
 use eravm_stable_interface::Tracer;
 use u256::{H160, U256};
+
+use super::mock_array::MockRead;
+use crate::{Program, StorageInterface, World};
 
 #[derive(Debug, Arbitrary, Clone)]
 pub struct MockWorld {

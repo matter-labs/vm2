@@ -2,8 +2,9 @@ pub use eravm_stable_interface::opcodes::{
     Add, And, Div, Mul, Or, PointerAdd, PointerPack, PointerShrink, PointerSub, RotateLeft,
     RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
 };
-pub use heap_access::{AuxHeap, Heap, HeapInterface};
-pub(crate) use ret::{invalid_instruction, RETURN_COST};
+
+pub use self::heap_access::{AuxHeap, Heap, HeapInterface};
+pub(crate) use self::ret::{invalid_instruction, RETURN_COST};
 
 mod binop;
 mod common;

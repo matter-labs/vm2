@@ -1,3 +1,7 @@
+use eravm_stable_interface::{opcodes, Tracer};
+use u256::U256;
+use zkevm_opcode_defs::{BlobSha256Format, ContractCodeSha256Format, VersionedHashLen32};
+
 use super::common::boilerplate_ext;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
@@ -5,9 +9,6 @@ use crate::{
     instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::{opcodes, Tracer};
-use u256::U256;
-use zkevm_opcode_defs::{BlobSha256Format, ContractCodeSha256Format, VersionedHashLen32};
 
 fn decommit<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,

@@ -82,7 +82,7 @@
 //! }
 //! ```
 
+pub use self::{state_interface::*, tracer_interface::*};
+
 mod state_interface;
 mod tracer_interface;
-pub use state_interface::*;
-pub use tracer_interface::*;

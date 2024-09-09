@@ -1,3 +1,5 @@
+use u256::{H160, U256};
+
 use crate::{
     addressing_modes::Addressable,
     callframe::{Callframe, CallframeSnapshot},
@@ -8,7 +10,6 @@ use crate::{
     stack::Stack,
     world_diff::Snapshot,
 };
-use u256::{H160, U256};
 
 #[derive(Debug)]
 pub struct State<T, W> {

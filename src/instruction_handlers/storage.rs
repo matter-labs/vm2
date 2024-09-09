@@ -1,3 +1,5 @@
+use eravm_stable_interface::{opcodes, Tracer};
+
 use super::common::{boilerplate, boilerplate_ext};
 use crate::{
     addressing_modes::{
@@ -6,7 +8,6 @@ use crate::{
     instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
-use eravm_stable_interface::{opcodes, Tracer};
 
 fn sstore<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,

@@ -1,8 +1,9 @@
+use u256::U256;
+
 use super::{
     mock_array::MockRead, validation::is_valid_tagged_value, vm::arbitrary_register_value,
 };
 use crate::HeapId;
-use u256::U256;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Stack {

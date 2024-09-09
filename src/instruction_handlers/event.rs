@@ -1,3 +1,7 @@
+use eravm_stable_interface::{opcodes, Tracer};
+use u256::H160;
+use zkevm_opcode_defs::ADDRESS_EVENT_WRITER;
+
 use super::common::boilerplate_ext;
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
@@ -5,9 +9,6 @@ use crate::{
     world_diff::{Event, L2ToL1Log},
     Instruction, VirtualMachine,
 };
-use eravm_stable_interface::{opcodes, Tracer};
-use u256::H160;
-use zkevm_opcode_defs::ADDRESS_EVENT_WRITER;
 
 fn event<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,

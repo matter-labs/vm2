@@ -1,3 +1,13 @@
+use eravm_stable_interface::{
+    opcodes::{FarCall, TypeLevelCallingMode},
+    Tracer,
+};
+use u256::U256;
+use zkevm_opcode_defs::{
+    system_params::{EVM_SIMULATOR_STIPEND, MSG_VALUE_SIMULATOR_ADDITIVE_COST},
+    ADDRESS_MSG_VALUE,
+};
+
 use super::{
     common::boilerplate_ext,
     heap_access::grow_heap,
@@ -11,15 +21,6 @@ use crate::{
     instruction::ExecutionStatus,
     predication::Flags,
     Instruction, VirtualMachine, World,
-};
-use eravm_stable_interface::{
-    opcodes::{FarCall, TypeLevelCallingMode},
-    Tracer,
-};
-use u256::U256;
-use zkevm_opcode_defs::{
-    system_params::{EVM_SIMULATOR_STIPEND, MSG_VALUE_SIMULATOR_ADDITIVE_COST},
-    ADDRESS_MSG_VALUE,
 };
 
 /// A call to another contract.

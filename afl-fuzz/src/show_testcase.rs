@@ -1,12 +1,9 @@
+use std::{env, fs};
+
 use differential_fuzzing::VmAndWorld;
 use pretty_assertions::assert_eq;
-use std::env;
-use std::fs;
-use vm2::single_instruction_test::add_heap_to_zk_evm;
-use vm2::single_instruction_test::vm2_to_zk_evm;
-use vm2::single_instruction_test::NoTracer;
-use vm2::single_instruction_test::UniversalVmState;
-use vm2::zkevm_opcode_defs::decoding::{EncodingModeProduction, VmEncodingMode};
+use vm2::single_instruction_test::{add_heap_to_zk_evm, vm2_to_zk_evm, NoTracer, UniversalVmState};
+use zkevm_opcode_defs::decoding::{EncodingModeProduction, VmEncodingMode};
 
 fn main() {
     let filename = env::args()

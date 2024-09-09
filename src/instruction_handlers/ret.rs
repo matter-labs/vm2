@@ -1,3 +1,9 @@
+use eravm_stable_interface::{
+    opcodes::{self, TypeLevelReturnType},
+    ReturnType, Tracer,
+};
+use u256::U256;
+
 use super::{common::full_boilerplate, far_call::get_far_call_calldata, HeapInterface};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
@@ -7,11 +13,6 @@ use crate::{
     predication::Flags,
     Instruction, Predicate, VirtualMachine,
 };
-use eravm_stable_interface::{
-    opcodes::{self, TypeLevelReturnType},
-    ReturnType, Tracer,
-};
-use u256::U256;
 
 fn naked_ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
     vm: &mut VirtualMachine<T, W>,
@@ -181,8 +182,9 @@ pub fn invalid_instruction<'a, T, W>() -> &'a Instruction<T, W> {
 
 pub(crate) const RETURN_COST: u32 = 5;
 
-use super::monomorphization::*;
 use eravm_stable_interface::opcodes::{Normal, Panic, Revert};
+
+use super::monomorphization::*;
 
 impl<T: Tracer, W> Instruction<T, W> {
     pub fn from_ret(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {

@@ -1,13 +1,15 @@
-use crate::{address_into_u256, Program, StorageInterface, World};
-use eravm_stable_interface::Tracer;
 use std::{
     collections::{hash_map::DefaultHasher, BTreeMap},
     hash::{Hash, Hasher},
 };
+
+use eravm_stable_interface::Tracer;
 use u256::U256;
 use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
+
+use crate::{address_into_u256, Program, StorageInterface, World};
 
 #[derive(Debug)]
 pub struct TestWorld<T> {

@@ -1,9 +1,11 @@
-use crate::{bitset::Bitset, fat_pointer::FatPointer, hash_for_debugging};
 use std::{
     alloc::{alloc, alloc_zeroed, Layout},
     fmt,
 };
+
 use u256::U256;
+
+use crate::{bitset::Bitset, fat_pointer::FatPointer, hash_for_debugging};
 
 #[derive(PartialEq)]
 pub struct Stack {

@@ -1,9 +1,5 @@
 use std::sync::Arc;
 
-use super::{stack::Stack, state_to_zk_evm::vm2_state_to_zk_evm_state, MockWorld};
-use crate::{
-    zkevm_opcode_defs::decoding::EncodingModeProduction, StorageInterface, VirtualMachine,
-};
 use eravm_stable_interface::Tracer;
 use u256::U256;
 use zk_evm::{
@@ -16,7 +12,10 @@ use zk_evm::{
     witness_trace::VmWitnessTracer,
 };
 use zk_evm_abstractions::vm::EventSink;
-use zkevm_opcode_defs::TRANSIENT_STORAGE_AUX_BYTE;
+use zkevm_opcode_defs::{decoding::EncodingModeProduction, TRANSIENT_STORAGE_AUX_BYTE};
+
+use super::{stack::Stack, state_to_zk_evm::vm2_state_to_zk_evm_state, MockWorld};
+use crate::{StorageInterface, VirtualMachine};
 
 type ZkEvmState = VmState<
     MockWorldWrapper,

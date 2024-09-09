@@ -1,10 +1,12 @@
-use crate::instruction_handlers::HeapInterface;
-use eravm_stable_interface::HeapId;
 use std::{
     fmt, mem,
     ops::{Index, Range},
 };
+
+use eravm_stable_interface::HeapId;
 use u256::U256;
+
+use crate::instruction_handlers::HeapInterface;
 
 /// Heap page size in bytes.
 const HEAP_PAGE_SIZE: usize = 1 << 12;

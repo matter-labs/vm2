@@ -1,3 +1,10 @@
+use eravm_stable_interface::{
+    opcodes::{self, Caller, CodeAddress, ContextU128, ErgsLeft, This, SP},
+    OpcodeType, Tracer,
+};
+use u256::U256;
+use zkevm_opcode_defs::VmMetaParameters;
+
 use super::common::boilerplate;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Source},
@@ -6,12 +13,6 @@ use crate::{
     state::State,
     Instruction, VirtualMachine,
 };
-use eravm_stable_interface::{
-    opcodes::{self, Caller, CodeAddress, ContextU128, ErgsLeft, This, SP},
-    OpcodeType, Tracer,
-};
-use u256::U256;
-use zkevm_opcode_defs::VmMetaParameters;
 
 fn context<T: Tracer, W, Op: ContextOp>(
     vm: &mut VirtualMachine<T, W>,

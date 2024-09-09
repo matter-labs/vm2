@@ -1,5 +1,6 @@
-use crate::{callframe::Callframe, fat_pointer::FatPointer, State};
 use u256::U256;
+
+use crate::{callframe::Callframe, fat_pointer::FatPointer, State};
 
 pub(crate) fn is_valid_tagged_value((value, is_pointer): (U256, bool)) -> bool {
     if is_pointer {

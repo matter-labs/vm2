@@ -53,8 +53,9 @@ macro_rules! pub_struct {
 }
 
 pub mod opcodes {
-    use super::{CallingMode, ReturnType};
     use std::marker::PhantomData;
+
+    use super::{CallingMode, ReturnType};
 
     forall_simple_opcodes!(pub_struct);
     pub struct FarCall<M: TypeLevelCallingMode>(PhantomData<M>);

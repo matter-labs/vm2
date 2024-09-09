@@ -1,12 +1,14 @@
-use crate::callframe::{Callframe, NearCallFrame};
-use eravm_stable_interface::Tracer;
 use std::iter;
+
+use eravm_stable_interface::Tracer;
 use u256::U256;
 use zk_evm::{
     aux_structures::{MemoryPage, PubdataCost},
     vm_state::{execution_stack::CallStackEntry, Callstack, PrimitiveValue, VmLocalState},
 };
 use zkevm_opcode_defs::decoding::EncodingModeProduction;
+
+use crate::callframe::{Callframe, NearCallFrame};
 
 pub(crate) fn vm2_state_to_zk_evm_state<T: Tracer, W>(
     state: &crate::State<T, W>,

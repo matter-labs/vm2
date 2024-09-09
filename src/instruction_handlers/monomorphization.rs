@@ -59,6 +59,9 @@ macro_rules! parameterize {
     };
 }
 
-pub(crate) use {
-    match_boolean, match_destination, match_reg_imm, match_source, monomorphize, parameterize,
-};
+pub(crate) use match_boolean;
+pub(crate) use match_destination;
+pub(crate) use match_reg_imm;
+pub(crate) use match_source;
+pub(crate) use monomorphize;
+pub(crate) use parameterize;

@@ -1,13 +1,14 @@
-use crate::{hash_for_debugging, Instruction};
 use std::{fmt, sync::Arc};
+
 use u256::U256;
 
-// An internal representation that doesn't need two Arcs would be better
-// but it would also require a lot of unsafe, so I made this wrapper to
-// enable changing the internals later.
+use crate::{hash_for_debugging, Instruction};
 
 /// Cloning this is cheap. It is a handle to memory similar to [`Arc`].
 pub struct Program<T, W> {
+    // An internal representation that doesn't need two Arcs would be better
+    // but it would also require a lot of unsafe, so I made this wrapper to
+    // enable changing the internals later.
     code_page: Arc<[U256]>,
     instructions: Arc<[Instruction<T, W>]>,
 }

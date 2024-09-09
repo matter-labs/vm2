@@ -1,11 +1,13 @@
+use std::cmp::Ordering;
+
+use eravm_stable_interface::*;
+
 use crate::{
     callframe::{Callframe, NearCallFrame},
     decommit::is_kernel,
     predication::{self, Predicate},
     VirtualMachine,
 };
-use eravm_stable_interface::*;
-use std::cmp::Ordering;
 
 impl<T, W> StateInterface for VirtualMachine<T, W> {
     fn read_register(&self, register: u8) -> (u256::U256, bool) {
@@ -359,11 +361,12 @@ impl<T, W> CallframeWrapper<'_, T, W> {
 
 #[cfg(all(test, not(feature = "single_instruction_test")))]
 mod test {
-    use super::*;
-    use crate::{initial_decommit, testworld::TestWorld, Instruction, Program, VirtualMachine};
     use eravm_stable_interface::HeapId;
     use u256::H160;
     use zkevm_opcode_defs::ethereum_types::Address;
+
+    use super::*;
+    use crate::{initial_decommit, testworld::TestWorld, Instruction, Program, VirtualMachine};
 
     #[test]
     fn callframe_picking() {

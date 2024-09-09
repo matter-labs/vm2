@@ -1,6 +1,6 @@
+use std::{cell::Cell, fmt::Debug};
+
 use arbitrary::Arbitrary;
-use std::cell::Cell;
-use std::fmt::Debug;
 
 #[derive(Clone, Debug)]
 pub struct MockRead<I: Copy, T> {

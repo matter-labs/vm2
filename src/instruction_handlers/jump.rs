@@ -1,3 +1,5 @@
+use eravm_stable_interface::{opcodes, Tracer};
+
 use super::common::boilerplate;
 use crate::{
     addressing_modes::{
@@ -7,7 +9,6 @@ use crate::{
     instruction::{ExecutionStatus, Instruction},
     VirtualMachine,
 };
-use eravm_stable_interface::{opcodes, Tracer};
 
 fn jump<T: Tracer, W, In: Source>(
     vm: &mut VirtualMachine<T, W>,

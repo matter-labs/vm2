@@ -45,7 +45,7 @@ jobs:
 
       - name: Check formatting
         run: |
-          cargo fmt --check
+          cargo fmt --check -- --config imports_granularity=Crate --config group_imports=StdExternalCrate
 
       - name: Run Tests
         run: |

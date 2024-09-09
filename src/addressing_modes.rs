@@ -1,9 +1,10 @@
-use crate::{mode_requirements::ModeRequirements, predication::Predicate};
 #[cfg(feature = "arbitrary")]
 use arbitrary::{Arbitrary, Unstructured};
 use enum_dispatch::enum_dispatch;
 use u256::U256;
 use zkevm_opcode_defs::erase_fat_pointer_metadata;
+
+use crate::{mode_requirements::ModeRequirements, predication::Predicate};
 
 pub(crate) trait Source {
     /// Get a word's value for non-pointer operations. (Pointers are erased.)

@@ -1,14 +1,15 @@
 use std::collections::BTreeMap;
 
-use crate::{
-    rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackablePod, RollbackableSet},
-    StorageInterface,
-};
 use eravm_stable_interface::{CycleStats, Tracer};
 use u256::{H160, U256};
 use zkevm_opcode_defs::system_params::{
     STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST, STORAGE_ACCESS_WARM_READ_COST,
     STORAGE_ACCESS_WARM_WRITE_COST,
+};
+
+use crate::{
+    rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackablePod, RollbackableSet},
+    StorageInterface,
 };
 
 /// Pending modifications to the global state that are executed at the end of a block.
@@ -375,8 +376,9 @@ const COLD_WRITE_AFTER_WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use proptest::prelude::*;
+
+    use super::*;
 
     proptest! {
         #[test]

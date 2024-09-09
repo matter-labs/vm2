@@ -1,6 +1,7 @@
+use eravm_stable_interface::{opcodes, OpcodeType, Tracer};
+
 use super::ret::free_panic;
 use crate::{addressing_modes::Arguments, instruction::ExecutionStatus, VirtualMachine};
-use eravm_stable_interface::{opcodes, OpcodeType, Tracer};
 
 #[inline(always)]
 pub(crate) fn boilerplate<Opcode: OpcodeType, T: Tracer, W>(

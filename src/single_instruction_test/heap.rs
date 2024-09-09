@@ -1,9 +1,11 @@
-use super::mock_array::MockRead;
-use crate::instruction_handlers::HeapInterface;
+use std::ops::Index;
+
 use arbitrary::Arbitrary;
 use eravm_stable_interface::HeapId;
-use std::ops::Index;
 use u256::U256;
+
+use super::mock_array::MockRead;
+use crate::instruction_handlers::HeapInterface;
 
 #[derive(Debug, Clone)]
 pub struct Heap {

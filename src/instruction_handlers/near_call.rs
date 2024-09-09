@@ -1,3 +1,5 @@
+use eravm_stable_interface::{opcodes, Tracer};
+
 use super::common::boilerplate;
 use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Source},
@@ -5,7 +7,6 @@ use crate::{
     predication::Flags,
     Instruction, VirtualMachine,
 };
-use eravm_stable_interface::{opcodes, Tracer};
 
 fn near_call<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,

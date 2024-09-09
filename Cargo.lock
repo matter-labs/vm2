@@ -246,6 +246,7 @@ dependencies = [
  "eravm-stable-interface",
  "pretty_assertions",
  "vm2",
+ "zkevm_opcode_defs",
 ]
 
 [[package]]

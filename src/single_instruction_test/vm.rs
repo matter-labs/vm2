@@ -1,13 +1,15 @@
+use std::fmt::Debug;
+
+use arbitrary::Arbitrary;
+use eravm_stable_interface::Tracer;
+use u256::U256;
+
 use super::{heap::Heaps, stack::StackPool};
 use crate::{
     addressing_modes::Arguments, callframe::Callframe, fat_pointer::FatPointer,
     instruction::ExecutionStatus, HeapId, Instruction, ModeRequirements, Predicate, Settings,
     State, VirtualMachine, World,
 };
-use arbitrary::Arbitrary;
-use eravm_stable_interface::Tracer;
-use std::fmt::Debug;
-use u256::U256;
 
 impl<T: Tracer, W> VirtualMachine<T, W> {
     pub fn run_single_instruction(&mut self, world: &mut W, tracer: &mut T) -> ExecutionStatus {

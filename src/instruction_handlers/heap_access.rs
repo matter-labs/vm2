@@ -1,3 +1,8 @@
+use std::ops::Range;
+
+use eravm_stable_interface::{opcodes, OpcodeType, Tracer};
+use u256::U256;
+
 use super::common::{boilerplate, full_boilerplate};
 use crate::{
     addressing_modes::{
@@ -9,10 +14,8 @@ use crate::{
     state::State,
     ExecutionEnd, HeapId, Instruction, VirtualMachine,
 };
-use eravm_stable_interface::{opcodes, OpcodeType, Tracer};
-use std::ops::Range;
-use u256::U256;
 
+// FIXME: reduce visibility
 pub trait HeapInterface {
     fn read_u256(&self, start_address: u32) -> U256;
     fn read_u256_partially(&self, range: Range<u32>) -> U256;

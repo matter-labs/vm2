@@ -1,3 +1,8 @@
+use arbitrary::Arbitrary;
+use eravm_stable_interface::Tracer;
+use u256::H160;
+use zkevm_opcode_defs::EVM_SIMULATOR_STIPEND;
+
 use super::{
     heap::FIRST_AUX_HEAP,
     stack::{Stack, StackPool},
@@ -6,10 +11,6 @@ use crate::{
     callframe::Callframe, decommit::is_kernel, predication::Flags, HeapId, Program, World,
     WorldDiff,
 };
-use arbitrary::Arbitrary;
-use eravm_stable_interface::Tracer;
-use u256::H160;
-use zkevm_opcode_defs::EVM_SIMULATOR_STIPEND;
 
 impl<'a> Arbitrary<'a> for Flags {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {

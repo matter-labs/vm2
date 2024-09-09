@@ -1,3 +1,9 @@
+use eravm_stable_interface::{
+    opcodes::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor},
+    OpcodeType, Tracer,
+};
+use u256::U256;
+
 use super::common::boilerplate;
 use crate::{
     addressing_modes::{
@@ -9,11 +15,6 @@ use crate::{
     predication::Flags,
     VirtualMachine,
 };
-use eravm_stable_interface::{
-    opcodes::{Add, And, Div, Mul, Or, RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor},
-    OpcodeType, Tracer,
-};
-use u256::U256;
 
 fn binop<
     T: Tracer,

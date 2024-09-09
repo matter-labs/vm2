@@ -8,6 +8,7 @@ publish = false
 afl = "0.15"
 arbitrary = "1"
 pretty_assertions = "1.4.0"
+zkevm_opcode_defs = "0.150.0"
 
 [dependencies.vm2]
 path = ".."
