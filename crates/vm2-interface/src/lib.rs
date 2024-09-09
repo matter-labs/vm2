@@ -25,7 +25,10 @@
 //! This is how you would add a new method to StateInterface and a new opcode.
 //!
 //! ```
-//! use zksync_vm2_interface::{StateInterface as StateInterfaceV1, Tracer as TracerV1, opcodes::NearCall};
+//! # use zksync_vm2_interface as zksync_vm2_interface_v1;
+//! use zksync_vm2_interface_v1::{
+//!     StateInterface as StateInterfaceV1, Tracer as TracerV1, opcodes::NearCall,
+//! };
 //!
 //! trait StateInterface: StateInterfaceV1 {
 //!     fn get_some_new_field(&self) -> u32;

@@ -1,4 +1,4 @@
-/// Bitset with 1,024 elements.
+/// Bitset with `1 << 16` elements. Used to store pointer flags for VM [`Stack`](crate::stack::Stack).
 #[derive(Clone, PartialEq, Debug, Hash)]
 pub(crate) struct Bitset([u64; 1 << 10]);
 
