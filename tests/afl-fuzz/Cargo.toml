@@ -1,0 +1,27 @@
+[package]
+name = "zksync_vm2_afl_fuzz"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[dependencies]
+afl.workspace = true
+arbitrary.workspace = true
+pretty_assertions.workspace = true
+zkevm_opcode_defs.workspace = true
+zksync_vm2_interface.workspace = true
+zksync_vm2 = { workspace = true, features = ["single_instruction_test"] }
+
+[[bin]]
+name = "show_testcase"
+path = "src/show_testcase.rs"
+
+[[bin]]
+name = "check_input_size"
+path = "src/check_input_size.rs"

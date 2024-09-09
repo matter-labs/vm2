@@ -1,0 +1,15 @@
+[package]
+name = "zksync_vm2_interface"
+description = "Stable interface for ZKsync VM tracers"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+primitive-types.workspace = true
