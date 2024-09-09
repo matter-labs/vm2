@@ -193,10 +193,12 @@ impl<T: opcodes::TypeLevelReturnType> OpcodeType for opcodes::Ret<T> {
 /// counter has advanced.
 ///
 /// # Examples
+///
 /// Here `FarCallCounter` counts the number of far calls.
 /// ```
-/// use eravm_stable_interface::{Tracer, StateInterface, OpcodeType, Opcode};
+/// # use zksync_vm2_interface::{Tracer, StateInterface, OpcodeType, Opcode};
 /// struct FarCallCounter(usize);
+///
 /// impl Tracer for FarCallCounter {
 ///     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S) {
 ///         match OP::VALUE {
