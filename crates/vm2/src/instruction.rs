@@ -4,6 +4,7 @@ use crate::{
     addressing_modes::Arguments, mode_requirements::ModeRequirements, vm::VirtualMachine, Predicate,
 };
 
+#[doc(hidden)] // should only be used for low-level testing / benchmarking
 pub struct Instruction<T, W> {
     pub(crate) handler: Handler<T, W>,
     pub(crate) arguments: Arguments,
@@ -19,7 +20,9 @@ impl<T, W> fmt::Debug for Instruction<T, W> {
 }
 
 pub(crate) type Handler<T, W> = fn(&mut VirtualMachine<T, W>, &mut W, &mut T) -> ExecutionStatus;
-pub enum ExecutionStatus {
+
+#[derive(Debug)]
+pub(crate) enum ExecutionStatus {
     Running,
     Stopped(ExecutionEnd),
 }
@@ -34,7 +37,7 @@ pub enum ExecutionEnd {
     SuspendedOnHook(u32),
 }
 
-pub fn jump_to_beginning<T, W>() -> Instruction<T, W> {
+pub(crate) fn jump_to_beginning<T, W>() -> Instruction<T, W> {
     Instruction {
         handler: jump_to_beginning_handler,
         arguments: Arguments::new(Predicate::Always, 0, ModeRequirements::none()),

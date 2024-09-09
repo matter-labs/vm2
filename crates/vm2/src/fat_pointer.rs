@@ -1,6 +1,7 @@
 use primitive_types::U256;
 use zksync_vm2_interface::HeapId;
 
+/// Fat pointer to a heap location.
 #[derive(Debug)]
 #[repr(C)]
 pub struct FatPointer {

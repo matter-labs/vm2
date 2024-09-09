@@ -8,11 +8,10 @@ use zksync_vm2::{
         Arguments, CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
     },
     initial_decommit,
-    instruction_handlers::Add,
     testworld::TestWorld,
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
 };
-use zksync_vm2_interface::opcodes;
+use zksync_vm2_interface::opcodes::{self, Add};
 
 const INITIAL_GAS: u32 = 1000;
 

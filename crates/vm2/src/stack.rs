@@ -8,7 +8,7 @@ use primitive_types::U256;
 use crate::{bitset::Bitset, fat_pointer::FatPointer, hash_for_debugging};
 
 #[derive(PartialEq)]
-pub struct Stack {
+pub(crate) struct Stack {
     /// set of slots that may be interpreted as [`FatPointer`].
     pointer_flags: Bitset,
     dirty_areas: u64,

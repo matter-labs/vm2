@@ -324,7 +324,7 @@ fn source_stack_address(args: &Arguments, state: &mut impl Addressable) -> u16 {
     compute_stack_address(state, args.source_registers.register1(), args.immediate1)
 }
 
-pub fn destination_stack_address(args: &Arguments, state: &mut impl Addressable) -> u16 {
+pub(crate) fn destination_stack_address(args: &Arguments, state: &mut impl Addressable) -> u16 {
     compute_stack_address(
         state,
         args.destination_registers.register1(),

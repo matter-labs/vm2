@@ -141,6 +141,7 @@ pub(crate) struct UnpaidDecommit {
 /// May be used to load code when the VM first starts up.
 /// Doesn't check for any errors.
 /// Doesn't cost anything but also doesn't make the code free in future decommits.
+#[doc(hidden)] // should be used only in low-level testing / benches
 pub fn initial_decommit<T, W: World<T>>(world: &mut W, address: H160) -> Program<T, W> {
     let deployer_system_contract_address =
         Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
@@ -157,6 +158,7 @@ pub fn initial_decommit<T, W: World<T>>(world: &mut W, address: H160) -> Program
     world.decommit(code_key)
 }
 
+#[doc(hidden)] // should be used only in low-level testing / benches
 pub fn address_into_u256(address: H160) -> U256 {
     let mut buffer = [0; 32];
     buffer[12..].copy_from_slice(address.as_bytes());

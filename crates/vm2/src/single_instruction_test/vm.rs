@@ -6,14 +6,15 @@ use zksync_vm2_interface::Tracer;
 
 use super::{heap::Heaps, stack::StackPool};
 use crate::{
-    addressing_modes::Arguments, callframe::Callframe, fat_pointer::FatPointer,
-    instruction::ExecutionStatus, HeapId, Instruction, ModeRequirements, Predicate, Settings,
-    State, VirtualMachine, World,
+    addressing_modes::Arguments, callframe::Callframe, fat_pointer::FatPointer, HeapId,
+    Instruction, ModeRequirements, Predicate, Settings, State, VirtualMachine, World,
 };
 
 impl<T: Tracer, W> VirtualMachine<T, W> {
-    pub fn run_single_instruction(&mut self, world: &mut W, tracer: &mut T) -> ExecutionStatus {
-        unsafe { ((*self.state.current_frame.pc).handler)(self, world, tracer) }
+    pub fn run_single_instruction(&mut self, world: &mut W, tracer: &mut T) {
+        unsafe {
+            ((*self.state.current_frame.pc).handler)(self, world, tracer);
+        }
     }
 
     pub fn is_in_valid_state(&self) -> bool {

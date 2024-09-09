@@ -3,8 +3,10 @@ pub use zksync_vm2_interface::opcodes::{
     RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
 };
 
-pub use self::heap_access::{AuxHeap, Heap, HeapInterface};
-pub(crate) use self::ret::{invalid_instruction, RETURN_COST};
+pub(crate) use self::{
+    heap_access::{AuxHeap, Heap},
+    ret::{invalid_instruction, RETURN_COST},
+};
 
 mod binop;
 mod common;

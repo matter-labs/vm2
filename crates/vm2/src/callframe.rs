@@ -22,7 +22,7 @@ pub struct Callframe<T, W> {
     pub is_static: bool,
     pub is_kernel: bool,
 
-    pub stack: Box<Stack>,
+    pub(crate) stack: Box<Stack>,
     pub sp: u16,
 
     pub gas: u32,

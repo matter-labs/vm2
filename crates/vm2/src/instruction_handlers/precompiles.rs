@@ -16,7 +16,7 @@ use zkevm_opcode_defs::{
 };
 use zksync_vm2_interface::{opcodes, CycleStats, HeapId, Tracer};
 
-use super::{common::boilerplate_ext, HeapInterface};
+use super::common::boilerplate_ext;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     heap::Heaps,

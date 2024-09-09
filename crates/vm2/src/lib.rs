@@ -10,8 +10,9 @@ pub use zksync_vm2_interface::{
 pub(crate) use self::single_instruction_test::{heap, program, stack};
 pub use self::{
     decommit::{address_into_u256, initial_decommit},
+    fat_pointer::FatPointer,
     heap::FIRST_HEAP,
-    instruction::{jump_to_beginning, ExecutionEnd, Instruction},
+    instruction::{ExecutionEnd, Instruction},
     mode_requirements::ModeRequirements,
     predication::Predicate,
     program::Program,
@@ -27,11 +28,11 @@ mod bitset;
 mod callframe;
 pub mod decode;
 mod decommit;
-pub mod fat_pointer;
+mod fat_pointer;
 #[cfg(not(feature = "single_instruction_test"))]
 mod heap;
 mod instruction;
-pub mod instruction_handlers;
+mod instruction_handlers;
 mod mode_requirements;
 mod predication;
 #[cfg(not(feature = "single_instruction_test"))]

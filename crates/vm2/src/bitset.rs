@@ -1,5 +1,6 @@
+/// Bitset with 1,024 elements.
 #[derive(Clone, PartialEq, Debug, Hash)]
-pub struct Bitset([u64; 1 << 10]);
+pub(crate) struct Bitset([u64; 1 << 10]);
 
 impl Bitset {
     #[inline(always)]

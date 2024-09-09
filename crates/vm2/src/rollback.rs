@@ -9,7 +9,7 @@ pub(crate) trait Rollback {
 }
 
 #[derive(Default)]
-pub struct RollbackableMap<K: Ord, V> {
+pub(crate) struct RollbackableMap<K: Ord, V> {
     map: BTreeMap<K, V>,
     old_entries: Vec<(K, Option<V>)>,
 }
@@ -64,8 +64,8 @@ impl<K: Ord, V> AsRef<BTreeMap<K, V>> for RollbackableMap<K, V> {
     }
 }
 
-#[derive(Default)]
-pub struct RollbackableSet<K: Ord> {
+#[derive(Debug, Default)]
+pub(crate) struct RollbackableSet<K: Ord> {
     map: BTreeMap<K, ()>,
     old_entries: Vec<K>,
 }
@@ -105,7 +105,8 @@ impl<K: Ord> AsRef<BTreeMap<K, ()>> for RollbackableSet<K> {
     }
 }
 
-pub struct RollbackableLog<T> {
+#[derive(Debug)]
+pub(crate) struct RollbackableLog<T> {
     entries: Vec<T>,
 }
 
@@ -149,7 +150,7 @@ impl<T> AsRef<[T]> for RollbackableLog<T> {
 
 /// Rollbackable Plain Old Data simply stores copies of itself in snapshots.
 #[derive(Default, Copy, Clone)]
-pub struct RollbackablePod<T: Copy>(pub T);
+pub(crate) struct RollbackablePod<T: Copy>(pub T);
 
 impl<T: Copy> Rollback for RollbackablePod<T> {
     type Snapshot = T;

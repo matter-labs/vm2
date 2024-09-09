@@ -1,5 +1,3 @@
-use std::ops::Range;
-
 use primitive_types::U256;
 use zksync_vm2_interface::{opcodes, OpcodeType, Tracer};
 
@@ -15,42 +13,42 @@ use crate::{
     ExecutionEnd, HeapId, Instruction, VirtualMachine,
 };
 
-// FIXME: reduce visibility
-pub trait HeapInterface {
-    fn read_u256(&self, start_address: u32) -> U256;
-    fn read_u256_partially(&self, range: Range<u32>) -> U256;
-    fn read_range_big_endian(&self, range: Range<u32>) -> Vec<u8>;
-}
-
-pub trait HeapFromState {
-    fn get_heap<T, W>(state: &State<T, W>) -> HeapId;
-    fn get_heap_size<T, W>(state: &mut State<T, W>) -> &mut u32;
+pub(crate) trait HeapFromState {
     type Read: OpcodeType;
     type Write: OpcodeType;
+
+    fn get_heap<T, W>(state: &State<T, W>) -> HeapId;
+    fn get_heap_size<T, W>(state: &mut State<T, W>) -> &mut u32;
 }
 
-pub struct Heap;
+pub(crate) struct Heap;
+
 impl HeapFromState for Heap {
+    type Read = opcodes::HeapRead;
+    type Write = opcodes::HeapWrite;
+
     fn get_heap<T, W>(state: &State<T, W>) -> HeapId {
         state.current_frame.heap
     }
+
     fn get_heap_size<T, W>(state: &mut State<T, W>) -> &mut u32 {
         &mut state.current_frame.heap_size
     }
-    type Read = opcodes::HeapRead;
-    type Write = opcodes::HeapWrite;
 }
 
-pub struct AuxHeap;
+pub(crate) struct AuxHeap;
+
 impl HeapFromState for AuxHeap {
+    type Read = opcodes::AuxHeapRead;
+    type Write = opcodes::AuxHeapWrite;
+
     fn get_heap<T, W>(state: &State<T, W>) -> HeapId {
         state.current_frame.aux_heap
     }
+
     fn get_heap_size<T, W>(state: &mut State<T, W>) -> &mut u32 {
         &mut state.current_frame.aux_heap_size
     }
-    type Read = opcodes::AuxHeapRead;
-    type Write = opcodes::AuxHeapWrite;
 }
 
 /// The last address to which 32 can be added without overflow.
@@ -149,7 +147,7 @@ fn store<
 
 /// Pays for more heap space. Doesn't acually grow the heap.
 /// That distinction is necessary because the bootloader gets u32::MAX heap for free.
-pub fn grow_heap<T: Tracer, W, H: HeapFromState>(
+pub(crate) fn grow_heap<T: Tracer, W, H: HeapFromState>(
     state: &mut State<T, W>,
     new_bound: u32,
 ) -> Result<(), ()> {
@@ -201,7 +199,27 @@ use super::monomorphization::*;
 
 impl<T: Tracer, W> Instruction<T, W> {
     #[inline(always)]
-    pub fn from_load<H: HeapFromState>(
+    pub fn from_heap_load(
+        src: RegisterOrImmediate,
+        out: Register1,
+        incremented_out: Option<Register2>,
+        arguments: Arguments,
+    ) -> Self {
+        Self::from_load::<Heap>(src, out, incremented_out, arguments)
+    }
+
+    #[inline(always)]
+    pub fn from_aux_heap_load(
+        src: RegisterOrImmediate,
+        out: Register1,
+        incremented_out: Option<Register2>,
+        arguments: Arguments,
+    ) -> Self {
+        Self::from_load::<AuxHeap>(src, out, incremented_out, arguments)
+    }
+
+    #[inline(always)]
+    fn from_load<H: HeapFromState>(
         src: RegisterOrImmediate,
         out: Register1,
         incremented_out: Option<Register2>,
@@ -221,7 +239,28 @@ impl<T: Tracer, W> Instruction<T, W> {
     }
 
     #[inline(always)]
-    pub fn from_store<H: HeapFromState>(
+    pub fn from_heap_store(
+        src1: RegisterOrImmediate,
+        src2: Register2,
+        incremented_out: Option<Register1>,
+        arguments: Arguments,
+        should_hook: bool,
+    ) -> Self {
+        Self::from_store::<Heap>(src1, src2, incremented_out, arguments, should_hook)
+    }
+
+    #[inline(always)]
+    pub fn from_aux_heap_store(
+        src1: RegisterOrImmediate,
+        src2: Register2,
+        incremented_out: Option<Register1>,
+        arguments: Arguments,
+    ) -> Self {
+        Self::from_store::<AuxHeap>(src1, src2, incremented_out, arguments, false)
+    }
+
+    #[inline(always)]
+    fn from_store<H: HeapFromState>(
         src1: RegisterOrImmediate,
         src2: Register2,
         incremented_out: Option<Register1>,

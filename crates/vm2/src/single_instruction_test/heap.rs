@@ -5,7 +5,6 @@ use primitive_types::U256;
 use zksync_vm2_interface::HeapId;
 
 use super::mock_array::MockRead;
-use crate::instruction_handlers::HeapInterface;
 
 #[derive(Debug, Clone)]
 pub struct Heap {
@@ -22,15 +21,13 @@ impl Heap {
     pub(crate) fn read_byte(&self, _: u32) -> u8 {
         unimplemented!()
     }
-}
 
-impl HeapInterface for Heap {
-    fn read_u256(&self, start_address: u32) -> U256 {
+    pub(crate) fn read_u256(&self, start_address: u32) -> U256 {
         assert!(self.write.is_none());
         U256::from_little_endian(self.read.get(start_address))
     }
 
-    fn read_u256_partially(&self, range: std::ops::Range<u32>) -> U256 {
+    pub(crate) fn read_u256_partially(&self, range: std::ops::Range<u32>) -> U256 {
         assert!(self.write.is_none());
         let mut result = *self.read.get(range.start);
         for byte in &mut result[0..32 - range.len()] {
@@ -39,7 +36,7 @@ impl HeapInterface for Heap {
         U256::from_little_endian(&result)
     }
 
-    fn read_range_big_endian(&self, _: std::ops::Range<u32>) -> Vec<u8> {
+    pub(crate) fn read_range_big_endian(&self, _: std::ops::Range<u32>) -> Vec<u8> {
         // This is wrong, but this method is only used to get the final return value.
         vec![]
     }

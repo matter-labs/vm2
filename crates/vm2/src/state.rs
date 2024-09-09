@@ -11,23 +11,18 @@ use crate::{
     world_diff::Snapshot,
 };
 
+// TODO: reduce visibility once `multivm` uses `StateInterface` APIs
 #[derive(Debug)]
 pub struct State<T, W> {
-    pub registers: [U256; 16],
+    pub(crate) registers: [U256; 16],
     pub(crate) register_pointer_flags: u16,
-
-    pub flags: Flags,
-
+    pub(crate) flags: Flags,
     pub current_frame: Callframe<T, W>,
-
     /// Contains indices to the far call instructions currently being executed.
     /// They are needed to continue execution from the correct spot upon return.
     pub previous_frames: Vec<Callframe<T, W>>,
-
     pub heaps: Heaps,
-
-    pub transaction_number: u16,
-
+    pub(crate) transaction_number: u16,
     pub(crate) context_u128: u128,
 }
 

@@ -6,8 +6,6 @@ use std::{
 use primitive_types::U256;
 use zksync_vm2_interface::HeapId;
 
-use crate::instruction_handlers::HeapInterface;
-
 /// Heap page size in bytes.
 const HEAP_PAGE_SIZE: usize = 1 << 12;
 
@@ -71,6 +69,73 @@ impl Heap {
         Self { pages }
     }
 
+    // TODO: reduce visibility once `multivm` uses `StateInterface` APIs
+    pub fn read_u256(&self, start_address: u32) -> U256 {
+        let (page_idx, offset_in_page) = address_to_page_offset(start_address);
+        let bytes_in_page = HEAP_PAGE_SIZE - offset_in_page;
+
+        if bytes_in_page >= 32 {
+            if let Some(page) = self.page(page_idx) {
+                U256::from_big_endian(&page.0[offset_in_page..offset_in_page + 32])
+            } else {
+                U256::zero()
+            }
+        } else {
+            let mut result = [0u8; 32];
+            if let Some(page) = self.page(page_idx) {
+                for (res, src) in result.iter_mut().zip(&page.0[offset_in_page..]) {
+                    *res = *src;
+                }
+            }
+            if let Some(page) = self.page(page_idx + 1) {
+                for (res, src) in result[bytes_in_page..].iter_mut().zip(&*page.0) {
+                    *res = *src;
+                }
+            }
+            U256::from_big_endian(&result)
+        }
+    }
+
+    pub(crate) fn read_u256_partially(&self, range: Range<u32>) -> U256 {
+        let (page_idx, offset_in_page) = address_to_page_offset(range.start);
+        let length = range.len();
+        let bytes_in_page = length.min(HEAP_PAGE_SIZE - offset_in_page);
+
+        let mut result = [0u8; 32];
+        if let Some(page) = self.page(page_idx) {
+            for (res, src) in result[..bytes_in_page]
+                .iter_mut()
+                .zip(&page.0[offset_in_page..])
+            {
+                *res = *src;
+            }
+        }
+        if let Some(page) = self.page(page_idx + 1) {
+            for (res, src) in result[bytes_in_page..length].iter_mut().zip(&*page.0) {
+                *res = *src;
+            }
+        }
+        U256::from_big_endian(&result)
+    }
+
+    pub fn read_range_big_endian(&self, range: Range<u32>) -> Vec<u8> {
+        let length = range.len();
+
+        let (mut page_idx, mut offset_in_page) = address_to_page_offset(range.start);
+        let mut result = Vec::with_capacity(length);
+        while result.len() < length {
+            let len_in_page = (length - result.len()).min(HEAP_PAGE_SIZE - offset_in_page);
+            if let Some(page) = self.page(page_idx) {
+                result.extend_from_slice(&page.0[offset_in_page..(offset_in_page + len_in_page)]);
+            } else {
+                result.resize(result.len() + len_in_page, 0);
+            }
+            page_idx += 1;
+            offset_in_page = 0;
+        }
+        result
+    }
+
     /// Needed only by tracers
     pub(crate) fn read_byte(&self, address: u32) -> u8 {
         let (page, offset) = address_to_page_offset(address);
@@ -116,74 +181,6 @@ impl Heap {
 fn address_to_page_offset(address: u32) -> (usize, usize) {
     let offset = address as usize;
     (offset >> 12, offset & (HEAP_PAGE_SIZE - 1))
-}
-
-impl HeapInterface for Heap {
-    fn read_u256(&self, start_address: u32) -> U256 {
-        let (page_idx, offset_in_page) = address_to_page_offset(start_address);
-        let bytes_in_page = HEAP_PAGE_SIZE - offset_in_page;
-
-        if bytes_in_page >= 32 {
-            if let Some(page) = self.page(page_idx) {
-                U256::from_big_endian(&page.0[offset_in_page..offset_in_page + 32])
-            } else {
-                U256::zero()
-            }
-        } else {
-            let mut result = [0u8; 32];
-            if let Some(page) = self.page(page_idx) {
-                for (res, src) in result.iter_mut().zip(&page.0[offset_in_page..]) {
-                    *res = *src;
-                }
-            }
-            if let Some(page) = self.page(page_idx + 1) {
-                for (res, src) in result[bytes_in_page..].iter_mut().zip(&*page.0) {
-                    *res = *src;
-                }
-            }
-            U256::from_big_endian(&result)
-        }
-    }
-
-    fn read_u256_partially(&self, range: Range<u32>) -> U256 {
-        let (page_idx, offset_in_page) = address_to_page_offset(range.start);
-        let length = range.len();
-        let bytes_in_page = length.min(HEAP_PAGE_SIZE - offset_in_page);
-
-        let mut result = [0u8; 32];
-        if let Some(page) = self.page(page_idx) {
-            for (res, src) in result[..bytes_in_page]
-                .iter_mut()
-                .zip(&page.0[offset_in_page..])
-            {
-                *res = *src;
-            }
-        }
-        if let Some(page) = self.page(page_idx + 1) {
-            for (res, src) in result[bytes_in_page..length].iter_mut().zip(&*page.0) {
-                *res = *src;
-            }
-        }
-        U256::from_big_endian(&result)
-    }
-
-    fn read_range_big_endian(&self, range: Range<u32>) -> Vec<u8> {
-        let length = range.len();
-
-        let (mut page_idx, mut offset_in_page) = address_to_page_offset(range.start);
-        let mut result = Vec::with_capacity(length);
-        while result.len() < length {
-            let len_in_page = (length - result.len()).min(HEAP_PAGE_SIZE - offset_in_page);
-            if let Some(page) = self.page(page_idx) {
-                result.extend_from_slice(&page.0[offset_in_page..(offset_in_page + len_in_page)]);
-            } else {
-                result.resize(result.len() + len_in_page, 0);
-            }
-            page_idx += 1;
-            offset_in_page = 0;
-        }
-        result
-    }
 }
 
 #[derive(Debug, Clone)]

@@ -4,9 +4,7 @@ use zksync_vm2_interface::{
     ReturnType, Tracer,
 };
 
-use super::{
-    common::full_boilerplate, far_call::get_far_call_calldata, monomorphization::*, HeapInterface,
-};
+use super::{common::full_boilerplate, far_call::get_far_call_calldata, monomorphization::*};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     callframe::FrameRemnant,
