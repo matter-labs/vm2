@@ -1,0 +1,34 @@
+[package]
+name = "zksync_vm2"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+zksync_vm2_interface.workspace = true
+zkevm_opcode_defs.workspace = true
+zk_evm_abstractions.workspace = true
+primitive-types.workspace = true
+enum_dispatch.workspace = true
+
+# Optional dependencies (used for fuzzing)
+arbitrary = { workspace = true, features = ["derive"], optional = true }
+zk_evm = { workspace = true, optional = true }
+anyhow = { workspace = true, optional = true }
+
+[dev-dependencies]
+divan.workspace = true
+proptest.workspace = true
+
+[[bench]]
+name = "nested_near_call"
+harness = false
+
+[features]
+default = []
+single_instruction_test = ["arbitrary", "primitive-types/arbitrary", "zk_evm", "anyhow"]

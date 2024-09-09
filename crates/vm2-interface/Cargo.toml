@@ -1,0 +1,13 @@
+[package]
+name = "zksync_vm2_interface"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+primitive-types.workspace = true
