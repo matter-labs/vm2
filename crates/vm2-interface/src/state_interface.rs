@@ -10,7 +10,13 @@ pub trait StateInterface {
     fn callframe(&mut self, n: usize) -> impl CallframeInterface + '_;
 
     fn read_heap_byte(&self, heap: HeapId, index: u32) -> u8;
+    /// Reads an entire `U256` word in the big-endian order from the specified heap page / `index`
+    /// (which is the index of the most significant byte of the read value).
+    fn read_heap_u256(&self, heap: HeapId, index: u32) -> U256;
     fn write_heap_byte(&mut self, heap: HeapId, index: u32, byte: u8);
+    /// Writes an entire `U256` word in the big-endian order to the specified heap page at the specified `index`
+    /// (which is the index of the most significant byte of the written value).
+    fn write_heap_u256(&mut self, heap: HeapId, index: u32, value: U256);
 
     fn flags(&self) -> Flags;
     fn set_flags(&mut self, flags: Flags);
@@ -135,11 +141,11 @@ pub struct DummyState;
 
 #[cfg(test)]
 impl StateInterface for DummyState {
-    fn read_register(&self, _: u8) -> (primitive_types::U256, bool) {
+    fn read_register(&self, _: u8) -> (U256, bool) {
         unimplemented!()
     }
 
-    fn set_register(&mut self, _: u8, _: primitive_types::U256, _: bool) {
+    fn set_register(&mut self, _: u8, _: U256, _: bool) {
         unimplemented!()
     }
 
@@ -151,23 +157,31 @@ impl StateInterface for DummyState {
         unimplemented!()
     }
 
-    fn callframe(&mut self, _: usize) -> impl crate::CallframeInterface + '_ {
+    fn callframe(&mut self, _: usize) -> impl CallframeInterface + '_ {
         DummyState
     }
 
-    fn read_heap_byte(&self, _: crate::HeapId, _: u32) -> u8 {
+    fn read_heap_byte(&self, _: HeapId, _: u32) -> u8 {
         unimplemented!()
     }
 
-    fn write_heap_byte(&mut self, _: crate::HeapId, _: u32, _: u8) {
+    fn read_heap_u256(&self, _: HeapId, _: u32) -> U256 {
         unimplemented!()
     }
 
-    fn flags(&self) -> crate::Flags {
+    fn write_heap_byte(&mut self, _: HeapId, _: u32, _: u8) {
         unimplemented!()
     }
 
-    fn set_flags(&mut self, _: crate::Flags) {
+    fn write_heap_u256(&mut self, _: HeapId, _: u32, _: U256) {
+        unimplemented!()
+    }
+
+    fn flags(&self) -> Flags {
+        unimplemented!()
+    }
+
+    fn set_flags(&mut self, _: Flags) {
         unimplemented!()
     }
 
@@ -187,42 +201,19 @@ impl StateInterface for DummyState {
         unimplemented!()
     }
 
-    fn get_storage_state(
-        &self,
-    ) -> impl Iterator<
-        Item = (
-            (primitive_types::H160, primitive_types::U256),
-            primitive_types::U256,
-        ),
-    > {
+    fn get_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)> {
         std::iter::empty()
     }
 
-    fn get_transient_storage_state(
-        &self,
-    ) -> impl Iterator<
-        Item = (
-            (primitive_types::H160, primitive_types::U256),
-            primitive_types::U256,
-        ),
-    > {
+    fn get_transient_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)> {
         std::iter::empty()
     }
 
-    fn get_transient_storage(
-        &self,
-        _: primitive_types::H160,
-        _: primitive_types::U256,
-    ) -> primitive_types::U256 {
+    fn get_transient_storage(&self, _: H160, _: U256) -> U256 {
         unimplemented!()
     }
 
-    fn write_transient_storage(
-        &mut self,
-        _: primitive_types::H160,
-        _: primitive_types::U256,
-        _: primitive_types::U256,
-    ) {
+    fn write_transient_storage(&mut self, _: H160, _: U256, _: U256) {
         unimplemented!()
     }
 
@@ -245,27 +236,27 @@ impl StateInterface for DummyState {
 
 #[cfg(test)]
 impl CallframeInterface for DummyState {
-    fn address(&self) -> primitive_types::H160 {
+    fn address(&self) -> H160 {
         unimplemented!()
     }
 
-    fn set_address(&mut self, _: primitive_types::H160) {
+    fn set_address(&mut self, _: H160) {
         unimplemented!()
     }
 
-    fn code_address(&self) -> primitive_types::H160 {
+    fn code_address(&self) -> H160 {
         unimplemented!()
     }
 
-    fn set_code_address(&mut self, _: primitive_types::H160) {
+    fn set_code_address(&mut self, _: H160) {
         unimplemented!()
     }
 
-    fn caller(&self) -> primitive_types::H160 {
+    fn caller(&self) -> H160 {
         unimplemented!()
     }
 
-    fn set_caller(&mut self, _: primitive_types::H160) {
+    fn set_caller(&mut self, _: H160) {
         unimplemented!()
     }
 
@@ -317,11 +308,11 @@ impl CallframeInterface for DummyState {
         unimplemented!()
     }
 
-    fn read_stack(&self, _: u16) -> (primitive_types::U256, bool) {
+    fn read_stack(&self, _: u16) -> (U256, bool) {
         unimplemented!()
     }
 
-    fn write_stack(&mut self, _: u16, _: primitive_types::U256, _: bool) {
+    fn write_stack(&mut self, _: u16, _: U256, _: bool) {
         unimplemented!()
     }
 
@@ -357,7 +348,7 @@ impl CallframeInterface for DummyState {
         unimplemented!()
     }
 
-    fn read_code_page(&self, _: u16) -> primitive_types::U256 {
+    fn read_code_page(&self, _: u16) -> U256 {
         unimplemented!()
     }
 }

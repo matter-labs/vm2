@@ -69,17 +69,15 @@ impl Heap {
         Self { pages }
     }
 
-    fn read_u256_be_bytes(&self, start_address: u32) -> [u8; 32] {
+    pub(crate) fn read_u256(&self, start_address: u32) -> U256 {
         let (page_idx, offset_in_page) = address_to_page_offset(start_address);
         let bytes_in_page = HEAP_PAGE_SIZE - offset_in_page;
 
         if bytes_in_page >= 32 {
             if let Some(page) = self.page(page_idx) {
-                page.0[offset_in_page..offset_in_page + 32]
-                    .try_into()
-                    .unwrap()
+                U256::from_big_endian(&page.0[offset_in_page..offset_in_page + 32])
             } else {
-                [0; 32]
+                U256::zero()
             }
         } else {
             let mut result = [0u8; 32];
@@ -93,12 +91,8 @@ impl Heap {
                     *res = *src;
                 }
             }
-            result
+            U256::from_big_endian(&result)
         }
-    }
-
-    pub(crate) fn read_u256(&self, start_address: u32) -> U256 {
-        U256::from_big_endian(&self.read_u256_be_bytes(start_address))
     }
 
     pub(crate) fn read_u256_partially(&self, range: Range<u32>) -> U256 {
@@ -188,12 +182,18 @@ fn address_to_page_offset(address: u32) -> (usize, usize) {
     (offset >> 12, offset & (HEAP_PAGE_SIZE - 1))
 }
 
+#[derive(Debug, Clone, Copy)]
+enum HeapRollbackItem {
+    U256(U256),
+    Byte(u8),
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Heaps {
     heaps: Vec<Heap>,
     pagepool: PagePool,
-    bootloader_heap_rollback_info: Vec<(u32, u8)>,
-    bootloader_aux_rollback_info: Vec<(u32, u8)>,
+    bootloader_heap_rollback_info: Vec<(u32, HeapRollbackItem)>,
+    bootloader_aux_rollback_info: Vec<(u32, HeapRollbackItem)>,
 }
 
 impl Heaps {
@@ -238,21 +238,13 @@ impl Heaps {
 
     pub fn write_u256(&mut self, heap: HeapId, start_address: u32, value: U256) {
         if heap == HeapId::FIRST {
-            let bytes = self[heap].read_u256_be_bytes(start_address);
-            self.bootloader_heap_rollback_info.extend(
-                bytes
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, byte)| (start_address + i as u32, byte)),
-            );
+            let prev_value = self[heap].read_u256(start_address);
+            self.bootloader_heap_rollback_info
+                .push((start_address, HeapRollbackItem::U256(prev_value)));
         } else if heap == HeapId::FIRST_AUX {
-            let bytes = self[heap].read_u256_be_bytes(start_address);
-            self.bootloader_aux_rollback_info.extend(
-                bytes
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, byte)| (start_address + i as u32, byte)),
-            );
+            let prev_value = self[heap].read_u256(start_address);
+            self.bootloader_aux_rollback_info
+                .push((start_address, HeapRollbackItem::U256(prev_value)));
         }
         self.heaps[heap.as_u32() as usize].write_u256(start_address, value, &mut self.pagepool);
     }
@@ -262,11 +254,11 @@ impl Heaps {
         if heap == HeapId::FIRST {
             let prev_value = self.heaps[heap.as_u32() as usize].read_byte(address);
             self.bootloader_heap_rollback_info
-                .push((address, prev_value));
+                .push((address, HeapRollbackItem::Byte(prev_value)));
         } else if heap == HeapId::FIRST_AUX {
             let prev_value = self.heaps[heap.as_u32() as usize].read_byte(address);
             self.bootloader_aux_rollback_info
-                .push((address, prev_value));
+                .push((address, HeapRollbackItem::Byte(prev_value)));
         }
         Self::write_byte_inner(&mut self.heaps, &mut self.pagepool, heap, address, value);
     }
@@ -293,22 +285,41 @@ impl Heaps {
 
     pub(crate) fn rollback(&mut self, (heap_snap, aux_snap): (usize, usize)) {
         for (address, value) in self.bootloader_heap_rollback_info.drain(heap_snap..).rev() {
-            Self::write_byte_inner(
-                &mut self.heaps,
-                &mut self.pagepool,
-                HeapId::FIRST,
-                address,
-                value,
-            );
+            match value {
+                HeapRollbackItem::U256(value) => {
+                    self.heaps[HeapId::FIRST.as_u32() as usize].write_u256(
+                        address,
+                        value,
+                        &mut self.pagepool,
+                    );
+                }
+                HeapRollbackItem::Byte(byte) => Self::write_byte_inner(
+                    &mut self.heaps,
+                    &mut self.pagepool,
+                    HeapId::FIRST,
+                    address,
+                    byte,
+                ),
+            }
         }
+
         for (address, value) in self.bootloader_aux_rollback_info.drain(aux_snap..).rev() {
-            Self::write_byte_inner(
-                &mut self.heaps,
-                &mut self.pagepool,
-                HeapId::FIRST_AUX,
-                address,
-                value,
-            );
+            match value {
+                HeapRollbackItem::U256(value) => {
+                    self.heaps[HeapId::FIRST_AUX.as_u32() as usize].write_u256(
+                        address,
+                        value,
+                        &mut self.pagepool,
+                    );
+                }
+                HeapRollbackItem::Byte(byte) => Self::write_byte_inner(
+                    &mut self.heaps,
+                    &mut self.pagepool,
+                    HeapId::FIRST_AUX,
+                    address,
+                    byte,
+                ),
+            }
         }
     }
 
@@ -571,7 +582,7 @@ mod tests {
         assert_eq!(heaps[HeapId::FIRST_AUX].read_u256(0), 42.into());
 
         let snapshot = heaps.snapshot();
-        assert_eq!(snapshot, (32, 1));
+        assert_eq!(snapshot, (1, 1));
 
         heaps.write_byte(HeapId::FIRST, 7, 5);
         assert_eq!(
@@ -584,7 +595,7 @@ mod tests {
         heaps.rollback(snapshot);
         assert_eq!(heaps[HeapId::FIRST].read_u256(0), 123_456_789.into());
         assert_eq!(heaps[HeapId::FIRST_AUX].read_u256(0), 42.into());
-        assert_eq!(heaps.bootloader_heap_rollback_info.len(), 32);
+        assert_eq!(heaps.bootloader_heap_rollback_info.len(), 1);
         assert_eq!(heaps.bootloader_aux_rollback_info.len(), 1);
     }
 }
