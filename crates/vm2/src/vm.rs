@@ -1,3 +1,5 @@
+use std::fmt;
+
 use primitive_types::H160;
 use zksync_vm2_interface::{opcodes::TypeLevelCallingMode, CallingMode, HeapId, Tracer};
 
@@ -72,6 +74,14 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
     /// Provides a reference to the [`World`](crate::World) diff accumulated by VM execution so far.
     pub fn world_diff(&self) -> &WorldDiff {
         &self.world_diff
+    }
+
+    /// Provides a mutable reference to the [`World`](crate::World) diff accumulated by VM execution so far.
+    ///
+    /// It is unsound to mutate `WorldDiff` in the middle of VM execution in the general case; thus, this method should only be used in tests.
+    #[doc(hidden)]
+    pub fn world_diff_mut(&mut self) -> &mut WorldDiff {
+        &mut self.world_diff
     }
 
     pub fn run(&mut self, world: &mut W, tracer: &mut T) -> ExecutionEnd {
@@ -247,6 +257,14 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
     pub(crate) fn start_new_tx(&mut self) {
         self.state.transaction_number = self.state.transaction_number.wrapping_add(1);
         self.world_diff.clear_transient_storage()
+    }
+}
+
+impl<T: fmt::Debug, W: fmt::Debug> VirtualMachine<T, W> {
+    /// Dumps an opaque representation of the current VM state.
+    #[doc(hidden)] // should only be used in tests
+    pub fn dump_state(&self) -> impl PartialEq + fmt::Debug {
+        self.state.clone()
     }
 }
 
