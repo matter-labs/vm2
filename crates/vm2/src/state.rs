@@ -1,27 +1,28 @@
 use primitive_types::{H160, U256};
+use zksync_vm2_interface::HeapId;
 
 use crate::{
     addressing_modes::Addressable,
     callframe::{Callframe, CallframeSnapshot},
     fat_pointer::FatPointer,
-    heap::{Heaps, CALLDATA_HEAP, FIRST_AUX_HEAP, FIRST_HEAP},
+    heap::Heaps,
     predication::Flags,
     program::Program,
     stack::Stack,
     world_diff::Snapshot,
 };
 
-// TODO: reduce visibility once `multivm` uses `StateInterface` APIs
+/// State of a [`VirtualMachine`](crate::VirtualMachine).
 #[derive(Debug)]
-pub struct State<T, W> {
+pub(crate) struct State<T, W> {
     pub(crate) registers: [U256; 16],
     pub(crate) register_pointer_flags: u16,
     pub(crate) flags: Flags,
-    pub current_frame: Callframe<T, W>,
+    pub(crate) current_frame: Callframe<T, W>,
     /// Contains indices to the far call instructions currently being executed.
     /// They are needed to continue execution from the correct spot upon return.
-    pub previous_frames: Vec<Callframe<T, W>>,
-    pub heaps: Heaps,
+    pub(crate) previous_frames: Vec<Callframe<T, W>>,
+    pub(crate) heaps: Heaps,
     pub(crate) transaction_number: u16,
     pub(crate) context_u128: u128,
 }
@@ -38,7 +39,7 @@ impl<T, W> State<T, W> {
     ) -> Self {
         let mut registers: [U256; 16] = Default::default();
         registers[1] = FatPointer {
-            memory_page: CALLDATA_HEAP,
+            memory_page: HeapId::FIRST_CALLDATA,
             offset: 0,
             start: 0,
             length: calldata.len() as u32,
@@ -55,9 +56,9 @@ impl<T, W> State<T, W> {
                 caller,
                 program,
                 stack,
-                FIRST_HEAP,
-                FIRST_AUX_HEAP,
-                CALLDATA_HEAP,
+                HeapId::FIRST,
+                HeapId::FIRST_AUX,
+                HeapId::FIRST_CALLDATA,
                 gas,
                 0,
                 0,

@@ -13,26 +13,24 @@ use crate::{
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program,
 };
 
-#[derive(Debug)]
+/// [`VirtualMachine`] settings.
+#[derive(Debug, Clone)]
 pub struct Settings {
     pub default_aa_code_hash: [u8; 32],
     pub evm_interpreter_code_hash: [u8; 32],
-
     /// Writing to this address in the bootloader's heap suspends execution
     pub hook_address: u32,
 }
 
+/// High-performance out-of-circuit ZKsync Era VM.
+#[derive(Debug)]
 pub struct VirtualMachine<T, W> {
-    pub world_diff: WorldDiff,
-
+    pub(crate) world_diff: WorldDiff,
     /// Storing the state in a separate struct is not just cosmetic.
     /// The state couldn't be passed to the world if it was inlined.
-    pub state: State<T, W>,
-
+    pub(crate) state: State<T, W>,
     pub(crate) settings: Settings,
-
     pub(crate) stack_pool: StackPool,
-
     /// Instruction that is jumped to when things go wrong while executing another.
     /// Boxed, so the pointer isn't invalidated by moves.
     pub(crate) panic: Box<Instruction<T, W>>,
@@ -69,6 +67,11 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
                 Arguments::new(Predicate::Always, RETURN_COST, ModeRequirements::none()),
             )),
         }
+    }
+
+    /// Provides a reference to the [`World`](crate::World) diff accumulated by VM execution so far.
+    pub fn world_diff(&self) -> &WorldDiff {
+        &self.world_diff
     }
 
     pub fn run(&mut self, world: &mut W, tracer: &mut T) -> ExecutionEnd {
@@ -119,9 +122,11 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
 
     /// Returns a compact representation of the VM's current state,
     /// including pending side effects like storage changes and emitted events.
-    /// [VirtualMachine::rollback] can be used to return the VM to this state.
+    /// [`Self::rollback()`] can be used to return the VM to this state.
+    ///
     /// # Panics
-    /// Calling this function outside of the initial callframe is not allowed.
+    ///
+    /// Calling this function outside the initial callframe is not allowed.
     pub fn snapshot(&self) -> VmSnapshot {
         assert!(
             self.state.previous_frames.is_empty(),
@@ -134,9 +139,11 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
     }
 
     /// Returns the VM to the state it was in when the snapshot was created.
+    ///
     /// # Panics
-    /// Rolling back snapshots in anything but LIFO order may panic.
-    /// Rolling back outside the initial callframe will panic.
+    ///
+    /// - Rolling back snapshots in anything but LIFO order may panic.
+    /// - Rolling back outside the initial callframe will panic.
     pub fn rollback(&mut self, snapshot: VmSnapshot) {
         assert!(
             self.state.previous_frames.is_empty(),
@@ -243,6 +250,7 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
     }
 }
 
+/// Snapshot of a [`VirtualMachine`].
 #[derive(Debug)]
 pub struct VmSnapshot {
     world_snapshot: ExternalSnapshot,

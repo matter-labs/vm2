@@ -12,7 +12,7 @@ use zksync_vm2::{
     testworld::TestWorld,
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
 };
-use zksync_vm2_interface::opcodes;
+use zksync_vm2_interface::{opcodes, CallframeInterface, StateInterface};
 
 const GAS_TO_PASS: u32 = 10_000;
 const LARGE_BYTECODE_LEN: usize = 10_000;
@@ -132,7 +132,7 @@ fn test() {
     );
 
     let result = vm.run(&mut world, &mut ());
-    let remaining_gas = vm.state.current_frame.gas;
+    let remaining_gas = vm.current_frame().gas();
     assert_eq!(result, ExecutionEnd::SuspendedOnHook(0));
     let expected_decommit_cost = LARGE_BYTECODE_LEN as u32 * 4;
     assert!(
@@ -142,7 +142,7 @@ fn test() {
 
     // Check that the decommitment is not charged when the decommitment happens the second time.
     vm.run(&mut world, &mut ());
-    let new_remaining_gas = vm.state.current_frame.gas;
+    let new_remaining_gas = vm.current_frame().gas();
     assert_eq!(result, ExecutionEnd::SuspendedOnHook(0));
     assert!(
         remaining_gas - new_remaining_gas < expected_decommit_cost,
@@ -170,7 +170,7 @@ fn test_with_initial_out_of_gas_error() {
     let result = vm.run(&mut world, &mut ());
     assert_eq!(result, ExecutionEnd::Reverted(vec![]));
     // Unsuccessful decommit should still be returned in `decommitted_hashes()`
-    let decommitted: HashSet<_> = vm.world_diff.decommitted_hashes().collect();
+    let decommitted: HashSet<_> = vm.world_diff().decommitted_hashes().collect();
     let called_bytecode_hash = world.address_to_hash[&CALLED_ADDRESS.to_low_u64_be().into()];
     assert!(
         decommitted.contains(&called_bytecode_hash),
@@ -178,12 +178,12 @@ fn test_with_initial_out_of_gas_error() {
     );
 
     // Recover the VM and increase the amount of gas passed to the far call.
-    vm.state.current_frame.set_pc_from_u16(0);
-    vm.state.current_frame.gas = 1_000_000;
+    vm.current_frame().set_program_counter(0);
+    vm.current_frame().set_gas(1_000_000);
 
-    let initial_gas = vm.state.current_frame.gas;
+    let initial_gas = vm.current_frame().gas();
     let result = vm.run(&mut world, &mut ());
-    let remaining_gas = vm.state.current_frame.gas;
+    let remaining_gas = vm.current_frame().gas();
     assert_eq!(result, ExecutionEnd::SuspendedOnHook(0));
     let expected_decommit_cost = LARGE_BYTECODE_LEN as u32 * 4;
     assert!(

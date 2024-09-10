@@ -1,6 +1,6 @@
 use primitive_types::U256;
 
-use crate::{callframe::Callframe, fat_pointer::FatPointer, State};
+use crate::{callframe::Callframe, fat_pointer::FatPointer, state::State};
 
 pub(crate) fn is_valid_tagged_value((value, is_pointer): (U256, bool)) -> bool {
     if is_pointer {

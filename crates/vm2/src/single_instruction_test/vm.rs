@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt;
 
 use arbitrary::Arbitrary;
 use primitive_types::U256;
@@ -6,8 +6,8 @@ use zksync_vm2_interface::Tracer;
 
 use super::{heap::Heaps, stack::StackPool};
 use crate::{
-    addressing_modes::Arguments, callframe::Callframe, fat_pointer::FatPointer, HeapId,
-    Instruction, ModeRequirements, Predicate, Settings, State, VirtualMachine, World,
+    addressing_modes::Arguments, callframe::Callframe, fat_pointer::FatPointer, state::State,
+    HeapId, Instruction, ModeRequirements, Predicate, Settings, VirtualMachine, World,
 };
 
 impl<T: Tracer, W> VirtualMachine<T, W> {
@@ -39,6 +39,18 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
     fn current_opcode(&self) -> u64 {
         self.state.current_frame.program.raw_first_instruction & 0x7FF
     }
+
+    /// Returns a raw first instruction in the current call frame.
+    pub fn raw_first_instruction(&self) -> u64 {
+        self.state.current_frame.program.raw_first_instruction
+    }
+}
+
+impl<T: fmt::Debug, W: fmt::Debug> VirtualMachine<T, W> {
+    /// Returns debuggable representation of the current VM state.
+    pub fn dump_state(&self) -> impl fmt::Debug + '_ {
+        &self.state
+    }
 }
 
 impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for VirtualMachine<T, W> {
@@ -52,7 +64,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for VirtualMachine<T, W> {
             let (value, is_pointer) = arbitrary_register_value(
                 u,
                 current_frame.calldata_heap,
-                current_frame.heap.to_u32() - 2,
+                current_frame.heap.as_u32() - 2,
             )?;
             *register = value;
             register_pointer_flags |= (is_pointer as u16) << i;
@@ -132,11 +144,5 @@ impl<'a> Arbitrary<'a> for Settings {
             evm_interpreter_code_hash,
             hook_address: 0, // Doesn't matter; we don't decode in bootloader mode
         })
-    }
-}
-
-impl<T, W> Debug for VirtualMachine<T, W> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "print useful debugging information here!")
     }
 }

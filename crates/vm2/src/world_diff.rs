@@ -14,7 +14,7 @@ use crate::{
 
 /// Pending modifications to the global state that are executed at the end of a block.
 /// In other words, side effects.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct WorldDiff {
     // These are rolled back on revert or panic (and when the whole VM is rolled back).
     storage_changes: RollbackableMap<(H160, U256), U256>,

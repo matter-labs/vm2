@@ -11,7 +11,7 @@ use zksync_vm2::{
     testworld::TestWorld,
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
 };
-use zksync_vm2_interface::opcodes;
+use zksync_vm2_interface::{opcodes, CallframeInterface, StateInterface};
 
 const INITIAL_GAS: u32 = 1000;
 
@@ -117,7 +117,8 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
     );
 
     let result = vm.run(&mut world, &mut ());
-    (result, vm.state.current_frame.gas)
+    let remaining_gas = vm.current_frame().gas();
+    (result, remaining_gas)
 }
 
 #[test]

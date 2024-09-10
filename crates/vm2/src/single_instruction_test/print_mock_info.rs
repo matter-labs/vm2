@@ -1,4 +1,4 @@
-use crate::{callframe::Callframe, State, VirtualMachine};
+use crate::{callframe::Callframe, state::State, VirtualMachine};
 
 impl<T, W> VirtualMachine<T, W> {
     pub fn print_mock_info(&self) {

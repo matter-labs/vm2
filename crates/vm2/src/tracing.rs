@@ -323,6 +323,15 @@ impl<T, W> CallframeInterface for CallframeWrapper<'_, T, W> {
             self.frame.exception_handler
         }
     }
+
+    fn set_exception_handler(&mut self, value: u16) {
+        if let Some(i) = self.near_call {
+            let idx = self.frame.near_calls.len() - i - 1;
+            self.frame.near_calls[idx].exception_handler = value;
+        } else {
+            self.frame.exception_handler = value;
+        }
+    }
 }
 
 impl<T, W> CallframeWrapper<'_, T, W> {

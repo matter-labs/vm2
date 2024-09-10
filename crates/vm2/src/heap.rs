@@ -21,7 +21,7 @@ impl Default for HeapPage {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct Heap {
+pub(crate) struct Heap {
     pages: Vec<Option<HeapPage>>,
 }
 
@@ -184,16 +184,12 @@ fn address_to_page_offset(address: u32) -> (usize, usize) {
 }
 
 #[derive(Debug, Clone)]
-pub struct Heaps {
+pub(crate) struct Heaps {
     heaps: Vec<Heap>,
     pagepool: PagePool,
     bootloader_heap_rollback_info: Vec<(u32, U256)>,
     bootloader_aux_rollback_info: Vec<(u32, U256)>,
 }
-
-pub(crate) const CALLDATA_HEAP: HeapId = HeapId::from_u32_unchecked(1);
-pub const FIRST_HEAP: HeapId = HeapId::from_u32_unchecked(2);
-pub(crate) const FIRST_AUX_HEAP: HeapId = HeapId::from_u32_unchecked(3);
 
 impl Heaps {
     pub(crate) fn new(calldata: &[u8]) -> Self {
@@ -229,27 +225,27 @@ impl Heaps {
     }
 
     pub(crate) fn deallocate(&mut self, heap: HeapId) {
-        let heap = mem::take(&mut self.heaps[heap.to_u32() as usize]);
+        let heap = mem::take(&mut self.heaps[heap.as_u32() as usize]);
         for page in heap.pages.into_iter().flatten() {
             self.pagepool.recycle_page(page);
         }
     }
 
     pub fn write_u256(&mut self, heap: HeapId, start_address: u32, value: U256) {
-        if heap == FIRST_HEAP {
+        if heap == HeapId::FIRST {
             self.bootloader_heap_rollback_info
                 .push((start_address, self[heap].read_u256(start_address)));
-        } else if heap == FIRST_AUX_HEAP {
+        } else if heap == HeapId::FIRST_AUX {
             self.bootloader_aux_rollback_info
                 .push((start_address, self[heap].read_u256(start_address)));
         }
-        self.heaps[heap.to_u32() as usize].write_u256(start_address, value, &mut self.pagepool);
+        self.heaps[heap.as_u32() as usize].write_u256(start_address, value, &mut self.pagepool);
     }
 
     /// Needed only by tracers
     pub(crate) fn write_byte(&mut self, heap: HeapId, address: u32, value: u8) {
         let (page, offset) = address_to_page_offset(address);
-        self.heaps[heap.to_u32() as usize]
+        self.heaps[heap.as_u32() as usize]
             .get_or_insert_page(page, &mut self.pagepool)
             .0[offset] = value;
     }
@@ -263,10 +259,14 @@ impl Heaps {
 
     pub(crate) fn rollback(&mut self, (heap_snap, aux_snap): (usize, usize)) {
         for (address, value) in self.bootloader_heap_rollback_info.drain(heap_snap..).rev() {
-            self.heaps[FIRST_HEAP.to_u32() as usize].write_u256(address, value, &mut self.pagepool);
+            self.heaps[HeapId::FIRST.as_u32() as usize].write_u256(
+                address,
+                value,
+                &mut self.pagepool,
+            );
         }
         for (address, value) in self.bootloader_aux_rollback_info.drain(aux_snap..).rev() {
-            self.heaps[FIRST_AUX_HEAP.to_u32() as usize].write_u256(
+            self.heaps[HeapId::FIRST_AUX.as_u32() as usize].write_u256(
                 address,
                 value,
                 &mut self.pagepool,
@@ -284,7 +284,7 @@ impl Index<HeapId> for Heaps {
     type Output = Heap;
 
     fn index(&self, index: HeapId) -> &Self::Output {
-        &self.heaps[index.to_u32() as usize]
+        &self.heaps[index.as_u32() as usize]
     }
 }
 

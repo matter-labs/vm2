@@ -8,7 +8,7 @@ pub(crate) trait Rollback {
     fn delete_history(&mut self);
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub(crate) struct RollbackableMap<K: Ord, V> {
     map: BTreeMap<K, V>,
     old_entries: Vec<(K, Option<V>)>,
@@ -149,7 +149,7 @@ impl<T> AsRef<[T]> for RollbackableLog<T> {
 }
 
 /// Rollbackable Plain Old Data simply stores copies of itself in snapshots.
-#[derive(Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub(crate) struct RollbackablePod<T: Copy>(pub T);
 
 impl<T: Copy> Rollback for RollbackablePod<T> {

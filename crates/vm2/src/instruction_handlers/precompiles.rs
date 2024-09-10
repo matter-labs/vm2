@@ -41,10 +41,10 @@ fn precompile_call<T: Tracer, W>(
 
         let mut abi = PrecompileCallABI::from_u256(Register1::get(args, &mut vm.state));
         if abi.memory_page_to_read == 0 {
-            abi.memory_page_to_read = vm.state.current_frame.heap.to_u32();
+            abi.memory_page_to_read = vm.state.current_frame.heap.as_u32();
         }
         if abi.memory_page_to_write == 0 {
-            abi.memory_page_to_write = vm.state.current_frame.heap.to_u32();
+            abi.memory_page_to_write = vm.state.current_frame.heap.as_u32();
         }
 
         let query = LogQuery {

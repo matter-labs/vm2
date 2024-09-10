@@ -55,6 +55,7 @@ pub trait CallframeInterface {
     fn set_program_counter(&mut self, value: u16);
 
     fn exception_handler(&self) -> u16;
+    fn set_exception_handler(&mut self, value: u16);
 
     fn is_static(&self) -> bool;
     fn is_kernel(&self) -> bool;
@@ -85,16 +86,25 @@ pub trait CallframeInterface {
     fn read_code_page(&self, slot: u16) -> U256;
 }
 
+/// Identifier of a VM heap page.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct HeapId(u32);
 
 impl HeapId {
+    /// Identifier of the calldata heap page used by the first executed program (i.e., the bootloader).
+    pub const FIRST_CALLDATA: Self = Self(1);
+    /// Identifier of the heap page used by the first executed program (i.e., the bootloader).
+    pub const FIRST: Self = Self(2);
+    /// Identifier of the auxiliary heap page used by the first executed program (i.e., the bootloader)
+    pub const FIRST_AUX: Self = Self(3);
+
     /// Only for dealing with external data structures, never use internally.
+    #[doc(hidden)]
     pub const fn from_u32_unchecked(value: u32) -> Self {
         Self(value)
     }
 
-    pub const fn to_u32(self) -> u32 {
+    pub const fn as_u32(self) -> u32 {
         self.0
     }
 }
@@ -268,6 +278,10 @@ impl CallframeInterface for DummyState {
     }
 
     fn exception_handler(&self) -> u16 {
+        unimplemented!()
+    }
+
+    fn set_exception_handler(&mut self, _: u16) {
         unimplemented!()
     }
 

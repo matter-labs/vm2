@@ -62,7 +62,7 @@ pub fn add_heap_to_zk_evm<T, W>(
             value.reverse();
 
             zk_evm.memory.heap_read = Some(ExpectedHeapValue {
-                heap: heapid.to_u32(),
+                heap: heapid.as_u32(),
                 start_index,
                 value,
             });
@@ -72,7 +72,7 @@ pub fn add_heap_to_zk_evm<T, W>(
             value_u256.to_big_endian(&mut value);
 
             zk_evm.memory.heap_write = Some(ExpectedHeapValue {
-                heap: heapid.to_u32(),
+                heap: heapid.as_u32(),
                 start_index,
                 value,
             });
