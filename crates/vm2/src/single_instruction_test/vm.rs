@@ -1,5 +1,3 @@
-use std::fmt;
-
 use arbitrary::Arbitrary;
 use primitive_types::U256;
 use zksync_vm2_interface::Tracer;
@@ -43,13 +41,6 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
     /// Returns a raw first instruction in the current call frame.
     pub fn raw_first_instruction(&self) -> u64 {
         self.state.current_frame.program.raw_first_instruction
-    }
-}
-
-impl<T: fmt::Debug, W: fmt::Debug> VirtualMachine<T, W> {
-    /// Returns debuggable representation of the current VM state.
-    pub fn dump_state(&self) -> impl fmt::Debug + '_ {
-        &self.state
     }
 }
 
