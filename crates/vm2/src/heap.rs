@@ -69,16 +69,17 @@ impl Heap {
         Self { pages }
     }
 
-    // TODO: reduce visibility once `multivm` uses `StateInterface` APIs
-    pub fn read_u256(&self, start_address: u32) -> U256 {
+    fn read_u256_be_bytes(&self, start_address: u32) -> [u8; 32] {
         let (page_idx, offset_in_page) = address_to_page_offset(start_address);
         let bytes_in_page = HEAP_PAGE_SIZE - offset_in_page;
 
         if bytes_in_page >= 32 {
             if let Some(page) = self.page(page_idx) {
-                U256::from_big_endian(&page.0[offset_in_page..offset_in_page + 32])
+                page.0[offset_in_page..offset_in_page + 32]
+                    .try_into()
+                    .unwrap()
             } else {
-                U256::zero()
+                [0; 32]
             }
         } else {
             let mut result = [0u8; 32];
@@ -92,8 +93,12 @@ impl Heap {
                     *res = *src;
                 }
             }
-            U256::from_big_endian(&result)
+            result
         }
+    }
+
+    pub(crate) fn read_u256(&self, start_address: u32) -> U256 {
+        U256::from_big_endian(&self.read_u256_be_bytes(start_address))
     }
 
     pub(crate) fn read_u256_partially(&self, range: Range<u32>) -> U256 {
@@ -118,7 +123,7 @@ impl Heap {
         U256::from_big_endian(&result)
     }
 
-    pub fn read_range_big_endian(&self, range: Range<u32>) -> Vec<u8> {
+    pub(crate) fn read_range_big_endian(&self, range: Range<u32>) -> Vec<u8> {
         let length = range.len();
 
         let (mut page_idx, mut offset_in_page) = address_to_page_offset(range.start);
@@ -187,8 +192,8 @@ fn address_to_page_offset(address: u32) -> (usize, usize) {
 pub(crate) struct Heaps {
     heaps: Vec<Heap>,
     pagepool: PagePool,
-    bootloader_heap_rollback_info: Vec<(u32, U256)>,
-    bootloader_aux_rollback_info: Vec<(u32, U256)>,
+    bootloader_heap_rollback_info: Vec<(u32, u8)>,
+    bootloader_aux_rollback_info: Vec<(u32, u8)>,
 }
 
 impl Heaps {
@@ -233,20 +238,49 @@ impl Heaps {
 
     pub fn write_u256(&mut self, heap: HeapId, start_address: u32, value: U256) {
         if heap == HeapId::FIRST {
-            self.bootloader_heap_rollback_info
-                .push((start_address, self[heap].read_u256(start_address)));
+            let bytes = self[heap].read_u256_be_bytes(start_address);
+            self.bootloader_heap_rollback_info.extend(
+                bytes
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, byte)| (start_address + i as u32, byte)),
+            );
         } else if heap == HeapId::FIRST_AUX {
-            self.bootloader_aux_rollback_info
-                .push((start_address, self[heap].read_u256(start_address)));
+            let bytes = self[heap].read_u256_be_bytes(start_address);
+            self.bootloader_aux_rollback_info.extend(
+                bytes
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, byte)| (start_address + i as u32, byte)),
+            );
         }
         self.heaps[heap.as_u32() as usize].write_u256(start_address, value, &mut self.pagepool);
     }
 
     /// Needed only by tracers
     pub(crate) fn write_byte(&mut self, heap: HeapId, address: u32, value: u8) {
+        if heap == HeapId::FIRST {
+            let prev_value = self.heaps[heap.as_u32() as usize].read_byte(address);
+            self.bootloader_heap_rollback_info
+                .push((address, prev_value));
+        } else if heap == HeapId::FIRST_AUX {
+            let prev_value = self.heaps[heap.as_u32() as usize].read_byte(address);
+            self.bootloader_aux_rollback_info
+                .push((address, prev_value));
+        }
+        Self::write_byte_inner(&mut self.heaps, &mut self.pagepool, heap, address, value);
+    }
+
+    fn write_byte_inner(
+        heaps: &mut [Heap],
+        pool: &mut PagePool,
+        heap: HeapId,
+        address: u32,
+        value: u8,
+    ) {
         let (page, offset) = address_to_page_offset(address);
-        self.heaps[heap.as_u32() as usize]
-            .get_or_insert_page(page, &mut self.pagepool)
+        heaps[heap.as_u32() as usize]
+            .get_or_insert_page(page, pool)
             .0[offset] = value;
     }
 
@@ -259,17 +293,21 @@ impl Heaps {
 
     pub(crate) fn rollback(&mut self, (heap_snap, aux_snap): (usize, usize)) {
         for (address, value) in self.bootloader_heap_rollback_info.drain(heap_snap..).rev() {
-            self.heaps[HeapId::FIRST.as_u32() as usize].write_u256(
+            Self::write_byte_inner(
+                &mut self.heaps,
+                &mut self.pagepool,
+                HeapId::FIRST,
                 address,
                 value,
-                &mut self.pagepool,
             );
         }
         for (address, value) in self.bootloader_aux_rollback_info.drain(aux_snap..).rev() {
-            self.heaps[HeapId::FIRST_AUX.as_u32() as usize].write_u256(
+            Self::write_byte_inner(
+                &mut self.heaps,
+                &mut self.pagepool,
+                HeapId::FIRST_AUX,
                 address,
                 value,
-                &mut self.pagepool,
             );
         }
     }
@@ -522,5 +560,31 @@ mod tests {
     #[test]
     fn creating_heap_from_bytes_with_recycling() {
         test_creating_heap_from_bytes(&mut populated_pagepool());
+    }
+
+    #[test]
+    fn rolling_back_heaps() {
+        let mut heaps = Heaps::new(b"test");
+        heaps.write_u256(HeapId::FIRST, 0, 123_456_789.into());
+        assert_eq!(heaps[HeapId::FIRST].read_u256(0), 123_456_789.into());
+        heaps.write_byte(HeapId::FIRST_AUX, 31, 42);
+        assert_eq!(heaps[HeapId::FIRST_AUX].read_u256(0), 42.into());
+
+        let snapshot = heaps.snapshot();
+        assert_eq!(snapshot, (32, 1));
+
+        heaps.write_byte(HeapId::FIRST, 7, 5);
+        assert_eq!(
+            heaps[HeapId::FIRST].read_u256(0),
+            U256::from(123_456_789) + (U256::from(5) << 192)
+        );
+        heaps.write_u256(HeapId::FIRST_AUX, 16, U256::MAX);
+        assert_eq!(heaps[HeapId::FIRST_AUX].read_u256(16), U256::MAX);
+
+        heaps.rollback(snapshot);
+        assert_eq!(heaps[HeapId::FIRST].read_u256(0), 123_456_789.into());
+        assert_eq!(heaps[HeapId::FIRST_AUX].read_u256(0), 42.into());
+        assert_eq!(heaps.bootloader_heap_rollback_info.len(), 32);
+        assert_eq!(heaps.bootloader_aux_rollback_info.len(), 1);
     }
 }
