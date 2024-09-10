@@ -32,7 +32,7 @@ fn create_test_world() -> TestWorld<()> {
     let main_program = Program::new(
         vec![
             // 0..=2: Prepare and execute far call
-            Instruction::from_binop::<opcodes::Add>(
+            Instruction::from_add(
                 CodePage(RegisterAndImmediate {
                     immediate: 0,
                     register: r0,
@@ -40,12 +40,11 @@ fn create_test_world() -> TestWorld<()> {
                 .into(),
                 Register2(r0),
                 Register1(r1).into(),
-                (),
                 Arguments::new(Predicate::Always, 6, ModeRequirements::none()),
                 false,
                 false,
             ),
-            Instruction::from_binop::<opcodes::Add>(
+            Instruction::from_add(
                 CodePage(RegisterAndImmediate {
                     immediate: 1,
                     register: r0,
@@ -53,7 +52,6 @@ fn create_test_world() -> TestWorld<()> {
                 .into(),
                 Register2(r0),
                 Register1(r2).into(),
-                (),
                 Arguments::new(Predicate::Always, 6, ModeRequirements::none()),
                 false,
                 false,
@@ -92,11 +90,10 @@ fn create_test_world() -> TestWorld<()> {
 
     let called_program = Program::new(
         vec![
-            Instruction::from_binop::<opcodes::Add>(
+            Instruction::from_add(
                 Register1(r0).into(),
                 Register2(r0),
                 Register1(r0).into(),
-                (),
                 Arguments::new(Predicate::Always, 6, ModeRequirements::none()),
                 false,
                 false,
