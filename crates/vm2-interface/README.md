@@ -1,6 +1,6 @@
 # Stable Interface for ZKsync Era VM
 
-This library provides a stable interface for the EraVM. It defines an interface for tracers that will never change but may be extended.
+This library provides a stable interface for EraVM. It defines an interface for tracers that will never change but may be extended.
 
 ## License
 

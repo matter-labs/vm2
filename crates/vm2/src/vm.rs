@@ -24,12 +24,10 @@ pub struct Settings {
     pub hook_address: u32,
 }
 
-/// High-performance out-of-circuit ZKsync Era VM.
+/// High-performance out-of-circuit EraVM implementation.
 #[derive(Debug)]
 pub struct VirtualMachine<T, W> {
     pub(crate) world_diff: WorldDiff,
-    /// Storing the state in a separate struct is not just cosmetic.
-    /// The state couldn't be passed to the world if it was inlined.
     pub(crate) state: State<T, W>,
     pub(crate) settings: Settings,
     pub(crate) stack_pool: StackPool,

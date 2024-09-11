@@ -1,4 +1,4 @@
-//! Addressing modes supported by the ZKsync Era VM.
+//! Addressing modes supported by EraVM.
 
 #[cfg(feature = "arbitrary")]
 use arbitrary::{Arbitrary, Unstructured};
@@ -87,6 +87,7 @@ impl<T: DestinationWriter> DestinationWriter for Option<T> {
     }
 }
 
+/// Argument provided to an instruction in an EraVM bytecode.
 // It is important for performance that this fits into 8 bytes.
 #[derive(Debug)]
 pub struct Arguments {
@@ -169,13 +170,16 @@ impl Arguments {
     }
 }
 
-/// First register. This addressing mode should only be used when [`Register2`] is used as well.
+/// Register passed as a first instruction argument.
 ///
-/// It must not be used simultaneously with [`AbsoluteStack`] or [`RelativeStack`].
+/// It must not be used simultaneously with [`AbsoluteStack`], [`RelativeStack`], [`AdvanceStackPointer`],
+/// or [`CodePage`].
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub struct Register1(pub Register);
 
-/// Second register.
+/// Register passed as a second instruction argument.
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub struct Register2(pub Register);
 
@@ -238,10 +242,12 @@ impl DestinationWriter for Register2 {
 }
 
 /// Immediate value passed as a first instruction arg.
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub struct Immediate1(pub u16);
 
 /// Immediate value passed as a second instruction arg.
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub struct Immediate2(pub u16);
 
@@ -368,6 +374,7 @@ impl StackAddressing for AbsoluteStack {
 }
 
 /// Relative addressing into stack (relative to the VM stack pointer).
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub struct RelativeStack(pub RegisterAndImmediate);
 
@@ -393,7 +400,7 @@ impl StackAddressing for RelativeStack {
 
 /// Same as [`RelativeStack`], but moves the stack pointer on access (decreases it when reading data;
 /// increases when writing data).
-#[derive(Clone)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub struct AdvanceStackPointer(pub RegisterAndImmediate);
 
@@ -421,6 +428,7 @@ impl StackAddressing for AdvanceStackPointer {
 }
 
 /// Absolute addressing into the code page of the currently executing program.
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub struct CodePage(pub RegisterAndImmediate);
 
@@ -448,7 +456,7 @@ pub struct Register(u8);
 impl Register {
     /// Creates a register with the specified 0-based index.
     pub const fn new(n: u8) -> Self {
-        assert!(n < 16, "Era VM has 16 registers");
+        assert!(n < 16, "EraVM has 16 registers");
         Self(n)
     }
 
@@ -504,6 +512,7 @@ impl PackedRegisters {
 
 /// All supported addressing modes for source arguments.
 #[enum_dispatch(SourceWriter)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub enum AnySource {
     Register1,
@@ -516,6 +525,7 @@ pub enum AnySource {
 
 /// Register or immediate addressing modes required by some VM instructions.
 #[enum_dispatch(SourceWriter)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub enum RegisterOrImmediate {
     Register1,
@@ -540,6 +550,7 @@ impl TryFrom<AnySource> for RegisterOrImmediate {
 
 /// All supported addressing modes for destination arguments.
 #[enum_dispatch(DestinationWriter)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub enum AnyDestination {
     Register1,

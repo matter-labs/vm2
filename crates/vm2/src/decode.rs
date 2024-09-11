@@ -346,7 +346,7 @@ pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> I
                 if let AnySource::AdvanceStackPointer(pop) = src1 {
                     pop
                 } else {
-                    no_sp_movement.clone()
+                    no_sp_movement
                 },
                 if let AnyDestination::AdvanceStackPointer(push) = out {
                     push
