@@ -101,10 +101,6 @@ impl Heaps {
     pub(crate) fn delete_history(&mut self) {
         unimplemented!()
     }
-
-    pub(crate) fn write_byte(&mut self, _: HeapId, _: u32, _: u8) {
-        unimplemented!()
-    }
 }
 
 impl Index<HeapId> for Heaps {

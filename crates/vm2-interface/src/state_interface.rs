@@ -13,7 +13,6 @@ pub trait StateInterface {
     /// Reads an entire `U256` word in the big-endian order from the specified heap page / `index`
     /// (which is the index of the most significant byte of the read value).
     fn read_heap_u256(&self, heap: HeapId, index: u32) -> U256;
-    fn write_heap_byte(&mut self, heap: HeapId, index: u32, byte: u8);
     /// Writes an entire `U256` word in the big-endian order to the specified heap page at the specified `index`
     /// (which is the index of the most significant byte of the written value).
     fn write_heap_u256(&mut self, heap: HeapId, index: u32, value: U256);
@@ -166,10 +165,6 @@ impl StateInterface for DummyState {
     }
 
     fn read_heap_u256(&self, _: HeapId, _: u32) -> U256 {
-        unimplemented!()
-    }
-
-    fn write_heap_byte(&mut self, _: HeapId, _: u32, _: u8) {
         unimplemented!()
     }
 

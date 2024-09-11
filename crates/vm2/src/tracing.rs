@@ -73,10 +73,6 @@ impl<T, W> StateInterface for VirtualMachine<T, W> {
         self.state.heaps[heap].read_u256(index)
     }
 
-    fn write_heap_byte(&mut self, heap: HeapId, index: u32, byte: u8) {
-        self.state.heaps.write_byte(heap, index, byte);
-    }
-
     fn write_heap_u256(&mut self, heap: HeapId, index: u32, value: U256) {
         self.state.heaps.write_u256(heap, index, value);
     }
