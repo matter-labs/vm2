@@ -57,10 +57,6 @@ pub struct Heaps {
     pub(crate) read: MockRead<HeapId, Heap>,
 }
 
-pub(crate) const CALLDATA_HEAP: HeapId = HeapId::from_u32_unchecked(1);
-pub const FIRST_HEAP: HeapId = HeapId::from_u32_unchecked(2);
-pub(crate) const FIRST_AUX_HEAP: HeapId = HeapId::from_u32_unchecked(3);
-
 impl Heaps {
     pub(crate) fn new(_: &[u8]) -> Self {
         unimplemented!("Should use arbitrary heap, not fresh heap in testing.")
@@ -103,10 +99,6 @@ impl Heaps {
     }
 
     pub(crate) fn delete_history(&mut self) {
-        unimplemented!()
-    }
-
-    pub(crate) fn write_byte(&mut self, _: HeapId, _: u32, _: u8) {
         unimplemented!()
     }
 }

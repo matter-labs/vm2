@@ -6,7 +6,7 @@ use zksync_vm2::{
     decode::decode_program, initial_decommit, testworld::TestWorld, ExecutionEnd, Program,
     Settings, VirtualMachine, World,
 };
-use zksync_vm2_interface::Tracer;
+use zksync_vm2_interface::{CallframeInterface, StateInterface, Tracer};
 
 fn program_from_file<T: Tracer, W: World<T>>(filename: &str) -> Program<T, W> {
     let blob = std::fs::read(filename).unwrap();
@@ -50,5 +50,5 @@ fn call_to_invalid_address() {
         vm.run(&mut world, &mut ()),
         ExecutionEnd::Panicked
     ));
-    assert_eq!(vm.state.current_frame.gas, 0);
+    assert_eq!(vm.current_frame().gas(), 0);
 }

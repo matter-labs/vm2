@@ -11,7 +11,7 @@ use zksync_vm2::{
     testworld::TestWorld,
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
 };
-use zksync_vm2_interface::opcodes::{self, Add};
+use zksync_vm2_interface::{opcodes, CallframeInterface, StateInterface};
 
 const INITIAL_GAS: u32 = 1000;
 
@@ -26,7 +26,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
 
     let main_program = Program::new(
         vec![
-            Instruction::from_binop::<Add>(
+            Instruction::from_add(
                 CodePage(RegisterAndImmediate {
                     immediate: 0,
                     register: r0,
@@ -34,12 +34,11 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
                 .into(),
                 Register2(r0),
                 Register1(r1).into(),
-                (),
                 Arguments::new(Predicate::Always, 6, ModeRequirements::none()),
                 false,
                 false,
             ),
-            Instruction::from_binop::<Add>(
+            Instruction::from_add(
                 CodePage(RegisterAndImmediate {
                     immediate: 1,
                     register: r0,
@@ -47,7 +46,6 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
                 .into(),
                 Register2(r0),
                 Register1(r2).into(),
-                (),
                 Arguments::new(Predicate::Always, 6, ModeRequirements::none()),
                 false,
                 false,
@@ -72,11 +70,10 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
 
     let interpreter = Program::new(
         vec![
-            Instruction::from_binop::<Add>(
+            Instruction::from_add(
                 Register1(r0).into(),
                 Register2(r0),
                 Register1(r0).into(),
-                (),
                 Arguments::new(Predicate::Always, 6, ModeRequirements::none()),
                 false,
                 false,
@@ -120,7 +117,8 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
     );
 
     let result = vm.run(&mut world, &mut ());
-    (result, vm.state.current_frame.gas)
+    let remaining_gas = vm.current_frame().gas();
+    (result, remaining_gas)
 }
 
 #[test]

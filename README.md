@@ -1,6 +1,8 @@
-# High-Performance ZKsync Era VM
+# High-Performance ZKsync Era VM (EraVM)
 
-A high-performance rewrite of the out-of-circuit VM for ZKsync Era.
+A high-performance rewrite of the out-of-circuit VM for ZKsync Era (aka EraVM).
+
+See [Era docs](https://github.com/matter-labs/zksync-era/tree/main/docs/specs/zk_evm) for the VM overview and formal specification.
 
 ## Overview
 

@@ -17,13 +17,13 @@ fn main() {
     let VmAndWorld { mut vm, mut world } =
         arbitrary::Unstructured::new(&bytes).arbitrary().unwrap();
 
-    println!("{:?}", vm.state);
+    println!("{:?}", vm.dump_state());
     assert!(vm.is_in_valid_state());
 
     let mut zk_evm = vm2_to_zk_evm(&vm, world.clone());
 
     let (parsed, _) = EncodingModeProduction::parse_preliminary_variant_and_absolute_number(
-        vm.state.current_frame.raw_first_instruction(),
+        vm.raw_first_instruction(),
     );
     println!("{}", parsed);
     vm.run_single_instruction(&mut world, &mut ());

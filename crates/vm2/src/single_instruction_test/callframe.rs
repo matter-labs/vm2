@@ -3,10 +3,7 @@ use primitive_types::H160;
 use zkevm_opcode_defs::EVM_SIMULATOR_STIPEND;
 use zksync_vm2_interface::Tracer;
 
-use super::{
-    heap::FIRST_AUX_HEAP,
-    stack::{Stack, StackPool},
-};
+use super::stack::{Stack, StackPool};
 use crate::{
     callframe::Callframe, decommit::is_kernel, predication::Flags, HeapId, Program, World,
     WorldDiff,
@@ -88,8 +85,8 @@ impl<T: Tracer, W> Callframe<T, W> {
             near_calls: vec![],
             pc: std::ptr::null(),
             program: Program::for_decommit(),
-            heap: FIRST_AUX_HEAP,
-            aux_heap: FIRST_AUX_HEAP,
+            heap: HeapId::FIRST_AUX,
+            aux_heap: HeapId::FIRST_AUX,
             heap_size: 0,
             aux_heap_size: 0,
             calldata_heap: HeapId::from_u32_unchecked(1),

@@ -105,8 +105,8 @@ impl Clone for Box<Stack> {
     }
 }
 
-#[derive(Default)]
-pub struct StackPool {
+#[derive(Debug, Default)]
+pub(crate) struct StackPool {
     stacks: Vec<Box<Stack>>,
 }
 

@@ -4,7 +4,7 @@ use zksync_vm2_interface::{
     OpcodeType, Tracer,
 };
 
-use super::common::boilerplate;
+use super::{common::boilerplate, monomorphization::*};
 use crate::{
     addressing_modes::{
         AbsoluteStack, Addressable, AdvanceStackPointer, AnyDestination, AnySource, Arguments,
@@ -43,7 +43,7 @@ fn binop<
     })
 }
 
-pub trait Binop: OpcodeType {
+pub(crate) trait Binop: OpcodeType {
     type Out2: SecondOutput;
     fn perform(a: &U256, b: &U256) -> (U256, Self::Out2, Flags);
 }
@@ -139,7 +139,8 @@ impl Binop for RotateRight {
     type Out2 = ();
 }
 
-pub trait SecondOutput {
+/// Second output of a binary operation.
+pub(crate) trait SecondOutput {
     type Destination: DestinationWriter;
     fn write(self, args: &Arguments, state: &mut impl Addressable);
 }
@@ -202,11 +203,42 @@ impl Binop for Div {
     type Out2 = U256;
 }
 
-use super::monomorphization::*;
+macro_rules! from_binop {
+    ($name:ident <$binop:ty>) => {
+        #[doc = concat!("Creates `", stringify!($binop), "` instruction with the provided params.")]
+        #[inline(always)]
+        pub fn $name(
+            src1: AnySource,
+            src2: Register2,
+            out: AnyDestination,
+            arguments: Arguments,
+            swap: bool,
+            set_flags: bool,
+        ) -> Self {
+            Self::from_binop::<$binop>(src1, src2, out, (), arguments, swap, set_flags)
+        }
+    };
+
+    ($name:ident <$binop:ty, $out2: ty>) => {
+        #[doc = concat!("Creates `", stringify!($binop), "` instruction with the provided params.")]
+        #[inline(always)]
+        pub fn $name(
+            src1: AnySource,
+            src2: Register2,
+            out: AnyDestination,
+            out2: $out2,
+            arguments: Arguments,
+            swap: bool,
+            set_flags: bool,
+        ) -> Self {
+            Self::from_binop::<$binop>(src1, src2, out, out2, arguments, swap, set_flags)
+        }
+    };
+}
 
 impl<T: Tracer, W> Instruction<T, W> {
     #[inline(always)]
-    pub fn from_binop<Op: Binop>(
+    pub(crate) fn from_binop<Op: Binop>(
         src1: AnySource,
         src2: Register2,
         out: AnyDestination,
@@ -224,4 +256,17 @@ impl<T: Tracer, W> Instruction<T, W> {
                 .write_destination(&out2),
         }
     }
+
+    from_binop!(from_add<Add>);
+    from_binop!(from_sub<Sub>);
+    from_binop!(from_and<And>);
+    from_binop!(from_or<Or>);
+    from_binop!(from_xor<Xor>);
+    from_binop!(from_shift_left<ShiftLeft>);
+    from_binop!(from_shift_right<ShiftRight>);
+    from_binop!(from_rotate_left<RotateLeft>);
+    from_binop!(from_rotate_right<RotateRight>);
+
+    from_binop!(from_mul <Mul, Register2>);
+    from_binop!(from_div <Div, Register2>);
 }

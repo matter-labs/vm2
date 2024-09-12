@@ -4,7 +4,7 @@ use primitive_types::U256;
 
 use crate::{hash_for_debugging, Instruction};
 
-/// Compiled ZKsync Era VM bytecode.
+/// Compiled EraVM bytecode.
 ///
 /// Cloning this is cheap. It is a handle to memory similar to [`Arc`].
 pub struct Program<T, W> {

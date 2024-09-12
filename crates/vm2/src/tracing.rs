@@ -69,8 +69,12 @@ impl<T, W> StateInterface for VirtualMachine<T, W> {
         self.state.heaps[heap].read_byte(index)
     }
 
-    fn write_heap_byte(&mut self, heap: HeapId, index: u32, byte: u8) {
-        self.state.heaps.write_byte(heap, index, byte);
+    fn read_heap_u256(&self, heap: HeapId, index: u32) -> U256 {
+        self.state.heaps[heap].read_u256(index)
+    }
+
+    fn write_heap_u256(&mut self, heap: HeapId, index: u32, value: U256) {
+        self.state.heaps.write_u256(heap, index, value);
     }
 
     fn flags(&self) -> Flags {
@@ -321,6 +325,15 @@ impl<T, W> CallframeInterface for CallframeWrapper<'_, T, W> {
             self.frame.near_calls[self.frame.near_calls.len() - i - 1].exception_handler
         } else {
             self.frame.exception_handler
+        }
+    }
+
+    fn set_exception_handler(&mut self, value: u16) {
+        if let Some(i) = self.near_call {
+            let idx = self.frame.near_calls.len() - i - 1;
+            self.frame.near_calls[idx].exception_handler = value;
+        } else {
+            self.frame.exception_handler = value;
         }
     }
 }

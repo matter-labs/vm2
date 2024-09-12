@@ -11,12 +11,10 @@ pub(crate) use self::single_instruction_test::{heap, program, stack};
 pub use self::{
     decommit::{address_into_u256, initial_decommit},
     fat_pointer::FatPointer,
-    heap::FIRST_HEAP,
     instruction::{ExecutionEnd, Instruction},
     mode_requirements::ModeRequirements,
     predication::Predicate,
     program::Program,
-    state::State,
     vm::{Settings, VirtualMachine, VmSnapshot as Snapshot},
     world_diff::{Event, L2ToL1Log, WorldDiff},
 };

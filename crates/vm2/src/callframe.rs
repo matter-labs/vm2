@@ -12,46 +12,36 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct Callframe<T, W> {
-    pub address: H160,
-    pub code_address: H160,
-    pub caller: H160,
-
-    pub exception_handler: u16,
-    pub context_u128: u128,
-    pub is_static: bool,
-    pub is_kernel: bool,
-
+pub(crate) struct Callframe<T, W> {
+    pub(crate) address: H160,
+    pub(crate) code_address: H160,
+    pub(crate) caller: H160,
+    pub(crate) exception_handler: u16,
+    pub(crate) context_u128: u128,
+    pub(crate) is_static: bool,
+    pub(crate) is_kernel: bool,
     pub(crate) stack: Box<Stack>,
-    pub sp: u16,
-
-    pub gas: u32,
-    pub stipend: u32,
-
+    pub(crate) sp: u16,
+    pub(crate) gas: u32,
+    pub(crate) stipend: u32,
     pub(crate) near_calls: Vec<NearCallFrame>,
-
     pub(crate) pc: *const Instruction<T, W>,
     pub(crate) program: Program<T, W>,
-
-    pub heap: HeapId,
-    pub aux_heap: HeapId,
-
+    pub(crate) heap: HeapId,
+    pub(crate) aux_heap: HeapId,
     /// The amount of heap that has been paid for. This should always be greater
     /// or equal to the actual size of the heap in memory.
-    pub heap_size: u32,
-    pub aux_heap_size: u32,
-
+    pub(crate) heap_size: u32,
+    pub(crate) aux_heap_size: u32,
     /// Returning a pointer to the calldata is illegal because it could result in
     /// the caller's heap being accessible both directly and via the fat pointer.
     /// The problem only occurs if the calldata originates from the caller's heap
     /// but this rule is easy to implement.
     pub(crate) calldata_heap: HeapId,
-
     /// Because of the above rule we know that heaps returned to this frame only
     /// exist to allow this frame to read from them. Therefore we can deallocate
     /// all of them upon return, except possibly one that we pass on.
     pub(crate) heaps_i_am_keeping_alive: Vec<HeapId>,
-
     pub(crate) world_before_this_frame: Snapshot,
 }
 
