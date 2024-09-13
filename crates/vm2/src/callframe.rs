@@ -1,4 +1,4 @@
-use std::mem;
+use std::{mem, ptr};
 
 use primitive_types::H160;
 use zkevm_opcode_defs::system_params::{NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND};
@@ -141,7 +141,7 @@ impl<T: Tracer, W: World<T>> Callframe<T, W> {
         // We cannot use `<*const _>::offset_from` because `self.pc` isn't guaranteed to be allocated within `self.program`
         // (invalid instructions and free panics aren't).
         let offset_in_bytes =
-            self.pc as isize - self.program.instruction(0).unwrap() as *const _ as isize;
+            self.pc as isize - ptr::from_ref(self.program.instruction(0).unwrap()) as isize;
         offset_in_bytes / mem::size_of::<Instruction<T, W>>() as isize
     }
 

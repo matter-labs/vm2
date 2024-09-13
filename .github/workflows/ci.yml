@@ -32,7 +32,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-afl
-        run: cargo install cargo-afl --version=^0.15 --force
+        run: cargo install cargo-afl --version=^0.15 --locked --force
 
       - name: Build project
         run: |

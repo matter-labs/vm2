@@ -20,7 +20,7 @@ pub struct FatPointer {
 #[cfg(target_endian = "little")]
 impl From<&mut U256> for &mut FatPointer {
     fn from(value: &mut U256) -> Self {
-        unsafe { &mut *(value as *mut U256).cast() }
+        unsafe { &mut *ptr::from_mut(value).cast() }
     }
 }
 
