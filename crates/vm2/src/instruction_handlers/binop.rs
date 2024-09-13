@@ -108,7 +108,7 @@ impl Binop for Xor {
 impl Binop for ShiftLeft {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
-        let result = *a << b.low_u32() as u8;
+        let result = *a << (b.low_u32() & 0xff);
         (result, (), Flags::new(false, result.is_zero(), false))
     }
     type Out2 = ();
@@ -117,7 +117,7 @@ impl Binop for ShiftLeft {
 impl Binop for ShiftRight {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
-        let result = *a >> b.low_u32() as u8;
+        let result = *a >> (b.low_u32() & 0xff);
         (result, (), Flags::new(false, result.is_zero(), false))
     }
     type Out2 = ();
@@ -126,8 +126,8 @@ impl Binop for ShiftRight {
 impl Binop for RotateLeft {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
-        let shift = b.low_u32() as u8;
-        let result = *a << shift | *a >> (256 - shift as u16);
+        let shift = b.low_u32() & 0xff;
+        let result = *a << shift | *a >> (256 - shift);
         (result, (), Flags::new(false, result.is_zero(), false))
     }
     type Out2 = ();
@@ -136,8 +136,8 @@ impl Binop for RotateLeft {
 impl Binop for RotateRight {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
-        let shift = b.low_u32() as u8;
-        let result = *a >> shift | *a << (256 - shift as u16);
+        let shift = b.low_u32() & 0xff;
+        let result = *a >> shift | *a << (256 - shift);
         (result, (), Flags::new(false, result.is_zero(), false))
     }
     type Out2 = ();
@@ -193,15 +193,15 @@ impl Binop for Mul {
 
 impl Binop for Div {
     fn perform(a: &U256, b: &U256) -> (U256, Self::Out2, Flags) {
-        if *b != U256::zero() {
+        if b.is_zero() {
+            (U256::zero(), U256::zero(), Flags::new(true, false, false))
+        } else {
             let (quotient, remainder) = a.div_mod(*b);
             (
                 quotient,
                 remainder,
                 Flags::new(false, quotient.is_zero(), remainder.is_zero()),
             )
-        } else {
-            (U256::zero(), U256::zero(), Flags::new(true, false, false))
         }
     }
     type Out2 = U256;
