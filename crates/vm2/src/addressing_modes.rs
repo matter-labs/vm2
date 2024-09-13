@@ -254,6 +254,18 @@ pub struct Immediate1(pub u16);
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub struct Immediate2(pub u16);
 
+impl Immediate1 {
+    pub(crate) fn get_u16(args: &Arguments) -> u16 {
+        args.immediate1
+    }
+}
+
+impl Immediate2 {
+    pub(crate) fn get_u16(args: &Arguments) -> u16 {
+        args.immediate2
+    }
+}
+
 impl Source for Immediate1 {
     fn get(args: &Arguments, _state: &mut impl Addressable) -> U256 {
         U256([args.immediate1.into(), 0, 0, 0])

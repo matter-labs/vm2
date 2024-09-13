@@ -50,7 +50,7 @@ fn far_call<
 
         let address_mask: U256 = U256::MAX >> (256 - 160);
         let destination_address = Register2::get(args, &mut vm.state) & address_mask;
-        let exception_handler = Immediate1::get(args, &mut vm.state).low_u32() as u16;
+        let exception_handler = Immediate1::get_u16(args);
 
         let mut abi = get_far_call_arguments(raw_abi);
         abi.is_constructor_call = abi.is_constructor_call && vm.state.current_frame.is_kernel;
@@ -167,7 +167,8 @@ pub(crate) struct FarCallABI {
     pub(crate) is_system_call: bool,
 }
 
-pub(crate) fn get_far_call_arguments(abi: U256) -> FarCallABI {
+#[allow(clippy::cast_possible_truncation)] // intentional
+fn get_far_call_arguments(abi: U256) -> FarCallABI {
     let gas_to_pass = abi.0[3] as u32;
     let settings = (abi.0[3] >> 32) as u32;
     let [_, shard_id, constructor_call_byte, system_call_byte] = settings.to_le_bytes();
@@ -192,7 +193,7 @@ pub(crate) fn get_far_call_calldata<T: Tracer, W: World<T>>(
 ) -> Option<FatPointer> {
     let mut pointer = FatPointer::from(raw_abi);
 
-    match FatPointerSource::from_abi((raw_abi.0[3] >> 32) as u8) {
+    match FatPointerSource::from_abi((raw_abi.0[3] >> 32) & 0xff) {
         FatPointerSource::ForwardFatPointer => {
             if !is_pointer || pointer.offset > pointer.length || already_failed {
                 return None;
@@ -248,9 +249,8 @@ enum FatPointerTarget {
 }
 
 impl FatPointerSource {
-    pub(crate) const fn from_abi(value: u8) -> Self {
+    const fn from_abi(value: u64) -> Self {
         match value {
-            0 => Self::MakeNewPointer(FatPointerTarget::ToHeap),
             1 => Self::ForwardFatPointer,
             2 => Self::MakeNewPointer(FatPointerTarget::ToAuxHeap),
             _ => Self::MakeNewPointer(FatPointerTarget::ToHeap), // default

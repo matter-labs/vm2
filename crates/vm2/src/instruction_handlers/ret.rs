@@ -36,10 +36,10 @@ where
     }) = vm.state.current_frame.pop_near_call()
     {
         if TO_LABEL {
-            let pc = Immediate1::get(args, &mut vm.state).low_u32() as u16;
+            let pc = Immediate1::get_u16(args);
             vm.state.current_frame.set_pc_from_u16(pc);
         } else if return_type.is_failure() {
-            vm.state.current_frame.set_pc_from_u16(exception_handler)
+            vm.state.current_frame.set_pc_from_u16(exception_handler);
         }
 
         (snapshot, near_call_leftover_gas)

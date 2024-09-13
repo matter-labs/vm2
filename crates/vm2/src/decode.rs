@@ -1,7 +1,7 @@
 use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
     ImmMemHandlerFlags, Opcode,
-    Operand::*,
+    Operand::{Full, RegOnly, RegOrImm},
     RegOrImmFlags, FAR_CALL_SHARD_FLAG_IDX, FAR_CALL_STATIC_FLAG_IDX, FIRST_MESSAGE_FLAG_IDX,
     RET_TO_LABEL_BIT_IDX, SET_FLAGS_FLAG_IDX, SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES,
     SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
@@ -18,7 +18,7 @@ use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
         Immediate1, Immediate2, Register, Register1, Register2, RegisterAndImmediate,
-        RelativeStack, Source, SourceWriter,
+        RelativeStack, SourceWriter,
     },
     instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
@@ -41,15 +41,13 @@ fn unimplemented_handler<T: Tracer, W: World<T>>(
     _: &mut T,
 ) -> ExecutionStatus {
     let variant: Opcode = unsafe {
-        std::mem::transmute(
-            Immediate1::get(&(*vm.state.current_frame.pc).arguments, &mut vm.state).low_u32()
-                as u16,
-        )
+        std::mem::transmute(Immediate1::get_u16(&(*vm.state.current_frame.pc).arguments))
     };
-    eprintln!("Unimplemented instruction: {:?}!", variant);
+    eprintln!("Unimplemented instruction: {variant:?}");
     ExecutionStatus::Stopped(ExecutionEnd::Panicked)
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> Instruction<T, W> {
     let (parsed, _) = EncodingModeProduction::parse_preliminary_variant_and_absolute_number(raw);
 
