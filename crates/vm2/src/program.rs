@@ -94,12 +94,12 @@ impl<T: Tracer, W: World<T>> Program<T, W> {
         }
     }
 
-    // FIXME: check if it's used
-    pub fn instruction(&self, n: u16) -> Option<&Instruction<T, W>> {
+    pub(crate) fn instruction(&self, n: u16) -> Option<&Instruction<T, W>> {
         self.instructions.get::<usize>(n.into())
     }
 
-    pub fn code_page(&self) -> &Arc<[U256]> {
+    /// Returns a reference to the code page of this program.
+    pub fn code_page(&self) -> &[U256] {
         &self.code_page
     }
 }
