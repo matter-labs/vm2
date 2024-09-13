@@ -18,7 +18,7 @@ pub use self::{
     predication::Predicate,
     program::Program,
     vm::{Settings, VirtualMachine},
-    world_diff::WorldDiff,
+    world_diff::{Snapshot, StorageChange, WorldDiff},
 };
 
 pub mod addressing_modes;

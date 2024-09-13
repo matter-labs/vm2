@@ -335,6 +335,8 @@ impl WorldDiff {
     }
 }
 
+/// Opaque snapshot of a [`WorldDiff`] output by its [eponymous method](WorldDiff::snapshot()).
+/// Can be provided to [`WorldDiff::events_after()`] etc. to get data after the snapshot was created.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Snapshot {
     storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
@@ -345,11 +347,14 @@ pub struct Snapshot {
     pubdata: <RollbackablePod<i32> as Rollback>::Snapshot,
 }
 
+/// Change in a single storage slot.
 #[derive(Debug, PartialEq)]
 pub struct StorageChange {
+    /// Value before the slot was written to. `None` if the slot was not written to previously.
     pub before: Option<U256>,
+    /// Value written to the slot.
     pub after: U256,
-    /// `true` if the slot is not set in the World.
+    /// `true` if the slot is not set in the [`World`](crate::World).
     /// A write may be initial even if it isn't the first write to a slot!
     pub is_initial: bool,
 }
