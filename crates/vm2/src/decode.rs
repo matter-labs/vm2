@@ -115,7 +115,7 @@ pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> I
                 src1,
                 src2,
                 out,
-                $snd,
+                &$snd,
                 arguments,
                 parsed.variant.flags[SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES],
                 parsed.variant.flags[SET_FLAGS_FLAG_IDX],

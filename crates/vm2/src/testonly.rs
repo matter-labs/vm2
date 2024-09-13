@@ -22,6 +22,10 @@ pub struct TestWorld<T> {
 
 impl<T: Tracer> TestWorld<T> {
     /// Creates a test world with the provided programs.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the provided `Program`s are malformed.
     pub fn new(contracts: &[(Address, Program<T, Self>)]) -> Self {
         let mut address_to_hash = BTreeMap::new();
         let mut hash_to_contract = BTreeMap::new();
@@ -33,7 +37,9 @@ impl<T: Tracer> TestWorld<T> {
 
             let mut code_info_bytes = [0; 32];
             code_info_bytes[24..].copy_from_slice(&hasher.finish().to_be_bytes());
-            code_info_bytes[2..=3].copy_from_slice(&(code.code_page().len() as u16).to_be_bytes());
+            let code_len = u16::try_from(code.code_page().len())
+                .expect("code length must not exceed u16::MAX");
+            code_info_bytes[2..=3].copy_from_slice(&code_len.to_be_bytes());
             code_info_bytes[0] = 1;
             let hash = U256::from_big_endian(&code_info_bytes);
 
@@ -72,7 +78,7 @@ impl<T: Tracer> World<T> for TestWorld<T> {
 impl<T> StorageInterface for TestWorld<T> {
     fn read_storage(&mut self, contract: H160, key: U256) -> Option<U256> {
         let deployer_system_contract_address =
-            Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
+            Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW.into());
 
         if contract == deployer_system_contract_address {
             Some(
@@ -101,7 +107,7 @@ impl<T> StorageInterface for TestWorld<T> {
 #[doc(hidden)] // should be used only in low-level testing / benches
 pub fn initial_decommit<T: Tracer, W: World<T>>(world: &mut W, address: H160) -> Program<T, W> {
     let deployer_system_contract_address =
-        Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
+        Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW.into());
     let code_info = world
         .read_storage(deployer_system_contract_address, address_into_u256(address))
         .unwrap_or_default();

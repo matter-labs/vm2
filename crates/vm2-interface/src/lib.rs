@@ -15,14 +15,14 @@
 //! With any sane design it would be trivial to take a tracer written for version 1 and
 //! update it to work with version 2. However, then it can no longer be used with VM1.
 //!
-//! This exact thing caused us a lot of trouble when we put many versions of zk_evm in multivm.
+//! This exact thing caused us a lot of trouble when we put many versions of `zk_evm` in `multivm`.
 //!
 //! ## How do I add a new feature to the interface?
 //!
 //! Do not change the existing traits. In fact, you should delete existing code in the new
 //! version that you publish and import it from the previous version instead.
 //!
-//! This is how you would add a new method to StateInterface and a new opcode.
+//! This is how you would add a new method to [`StateInterface`] and a new opcode.
 //!
 //! ```
 //! # use zksync_vm2_interface as zksync_vm2_interface_v1;

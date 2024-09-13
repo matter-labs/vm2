@@ -12,8 +12,8 @@ fn call_to_invalid_address() {
     // Thus, setting the error handler to the call instruction itself should
     // result in an infinite loop.
 
-    let address = Address::from_low_u64_be(0x1234567890abcdef);
-    let bytecode = include_bytes!("bytecodes/call_far").to_vec();
+    let address = Address::from_low_u64_be(0x_1234_5678_90ab_cdef);
+    let bytecode = include_bytes!("bytecodes/call_far");
     let mut world = TestWorld::new(&[(address, Program::new(bytecode, false))]);
     let program = initial_decommit(&mut world, address);
 
@@ -21,7 +21,7 @@ fn call_to_invalid_address() {
         address,
         program,
         Address::zero(),
-        vec![],
+        &[],
         10000,
         Settings {
             default_aa_code_hash: [0; 32],

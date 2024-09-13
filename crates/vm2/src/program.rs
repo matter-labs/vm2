@@ -56,7 +56,8 @@ impl<T, W> fmt::Debug for Program<T, W> {
 
 impl<T: Tracer, W: World<T>> Program<T, W> {
     /// Creates a new program.
-    pub fn new(bytecode: Vec<u8>, enable_hooks: bool) -> Self {
+    #[allow(clippy::missing_panics_doc)] // false positive
+    pub fn new(bytecode: &[u8], enable_hooks: bool) -> Self {
         let instructions = decode_program(
             &bytecode
                 .chunks_exact(8)

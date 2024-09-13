@@ -274,7 +274,7 @@ impl WorldDiff {
         }
     }
 
-    pub(crate) fn rollback(&mut self, snapshot: Snapshot) {
+    pub(crate) fn rollback(&mut self, snapshot: &Snapshot) {
         self.storage_changes.rollback(snapshot.storage_changes);
         self.paid_changes.rollback(snapshot.paid_changes);
         self.events.rollback(snapshot.events);
@@ -304,8 +304,8 @@ impl WorldDiff {
         }
     }
 
-    pub(crate) fn external_rollback(&mut self, snapshot: ExternalSnapshot) {
-        self.rollback(snapshot.internal_snapshot);
+    pub(crate) fn external_rollback(&mut self, snapshot: &ExternalSnapshot) {
+        self.rollback(&snapshot.internal_snapshot);
         self.storage_refunds.rollback(snapshot.storage_refunds);
         self.pubdata_costs.rollback(snapshot.pubdata_costs);
         self.decommitted_hashes
@@ -331,7 +331,7 @@ impl WorldDiff {
     }
 
     pub(crate) fn clear_transient_storage(&mut self) {
-        self.transient_storage_changes = Default::default();
+        self.transient_storage_changes = RollbackableMap::default();
     }
 }
 

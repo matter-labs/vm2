@@ -4,7 +4,11 @@ use zksync_vm2_interface::{
     ReturnType, Tracer,
 };
 
-use super::{common::full_boilerplate, far_call::get_far_call_calldata, monomorphization::*};
+use super::{
+    common::full_boilerplate,
+    far_call::get_far_call_calldata,
+    monomorphization::{match_boolean, monomorphize, parameterize},
+};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     callframe::FrameRemnant,
@@ -84,7 +88,7 @@ where
                     .read_range_big_endian(
                         return_value.start..return_value.start + return_value.length,
                     )
-                    .to_vec();
+                    .clone();
                 if return_type == ReturnType::Revert {
                     ExecutionStatus::Stopped(ExecutionEnd::Reverted(output))
                 } else {
@@ -104,14 +108,14 @@ where
         vm.state.register_pointer_flags = 2;
 
         if return_type.is_failure() {
-            vm.state.current_frame.set_pc_from_u16(exception_handler)
+            vm.state.current_frame.set_pc_from_u16(exception_handler);
         }
 
         (snapshot, leftover_gas)
     };
 
     if return_type.is_failure() {
-        vm.world_diff.rollback(snapshot);
+        vm.world_diff.rollback(&snapshot);
     }
 
     vm.state.flags = Flags::new(return_type == ReturnType::Panic, false, false);

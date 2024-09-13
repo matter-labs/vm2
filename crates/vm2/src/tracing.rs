@@ -1,7 +1,9 @@
 use std::cmp::Ordering;
 
 use primitive_types::{H160, U256};
-use zksync_vm2_interface::*;
+use zksync_vm2_interface::{
+    CallframeInterface, Event, Flags, HeapId, L2ToL1Log, StateInterface, Tracer,
+};
 
 use crate::{
     callframe::{Callframe, NearCallFrame},
@@ -130,7 +132,7 @@ impl<T: Tracer, W: World<T>> StateInterface for VirtualMachine<T, W> {
 
     fn write_transient_storage(&mut self, address: H160, slot: U256, value: U256) {
         self.world_diff
-            .write_transient_storage(address, slot, value)
+            .write_transient_storage(address, slot, value);
     }
 
     fn events(&self) -> impl Iterator<Item = Event> {
@@ -283,6 +285,12 @@ impl<T: Tracer, W: World<T>> CallframeInterface for CallframeWrapper<'_, T, W> {
         }
     }
 
+    // we don't expect the VM to run on 16-bit machines, and sign loss / wrap is checked
+    #[allow(
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap
+    )]
     fn program_counter(&self) -> Option<u16> {
         if let Some(call) = self.near_call_on_top() {
             Some(call.previous_frame_pc)
@@ -357,7 +365,7 @@ impl<T, W> CallframeWrapper<'_, T, W> {
 mod test {
     use primitive_types::H160;
     use zkevm_opcode_defs::ethereum_types::Address;
-    use zksync_vm2_interface::HeapId;
+    use zksync_vm2_interface::opcodes;
 
     use super::*;
     use crate::{
@@ -369,7 +377,7 @@ mod test {
     fn callframe_picking() {
         let program = Program::from_raw(vec![Instruction::from_invalid()], vec![]);
 
-        let address = Address::from_low_u64_be(0x1234567890abcdef);
+        let address = Address::from_low_u64_be(0x_1234_5678_90ab_cdef);
         let mut world = TestWorld::new(&[(address, program)]);
         let program = initial_decommit(&mut world, address);
 
@@ -377,7 +385,7 @@ mod test {
             address,
             program.clone(),
             Address::zero(),
-            vec![],
+            &[],
             1000,
             crate::Settings {
                 default_aa_code_hash: [0; 32],

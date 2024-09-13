@@ -18,9 +18,9 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
     let r1 = Register::new(1);
     let r2 = Register::new(2);
 
-    let ethereum_address = 0xeeeeee;
+    let ethereum_address = 0x_00ee_eeee;
     let mut abi = U256::zero();
-    abi.0[3] = gas_to_pass as u64;
+    abi.0[3] = gas_to_pass.into();
 
     let main_program = Program::from_raw(
         vec![
@@ -85,8 +85,8 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
         vec![],
     );
 
-    let main_address = Address::from_low_u64_be(0xfeddeadbeef);
-    let interpreter_address = Address::from_low_u64_be(0x1234567890abcdef);
+    let main_address = Address::from_low_u64_be(0x_0fed_dead_beef);
+    let interpreter_address = Address::from_low_u64_be(0x_1234_5678_90ab_cdef);
     let mut world = TestWorld::new(&[
         (interpreter_address, interpreter),
         (main_address, main_program),
@@ -105,7 +105,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
         main_address,
         program,
         Address::zero(),
-        vec![],
+        &[],
         INITIAL_GAS,
         Settings {
             default_aa_code_hash: [0; 32],

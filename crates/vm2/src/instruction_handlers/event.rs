@@ -15,7 +15,7 @@ fn event<T: Tracer, W: World<T>>(
     tracer: &mut T,
 ) -> ExecutionStatus {
     boilerplate_ext::<opcodes::Event, _, _>(vm, world, tracer, |vm, args, _, _| {
-        if vm.state.current_frame.address == H160::from_low_u64_be(ADDRESS_EVENT_WRITER as u64) {
+        if vm.state.current_frame.address == H160::from_low_u64_be(ADDRESS_EVENT_WRITER.into()) {
             let key = Register1::get(args, &mut vm.state);
             let value = Register2::get(args, &mut vm.state);
             let is_first = Immediate1::get(args, &mut vm.state).low_u32() == 1;

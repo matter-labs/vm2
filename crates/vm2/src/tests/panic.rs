@@ -29,7 +29,7 @@ proptest! {
 
         let program = Program::from_raw(instructions, vec![]);
 
-        let address = Address::from_low_u64_be(0x1234567890abcdef);
+        let address = Address::from_low_u64_be(0x_1234_5678_90ab_cdef);
         let mut world = TestWorld::new(&[(address, program)]);
         let program = initial_decommit(&mut world, address);
 
@@ -37,7 +37,7 @@ proptest! {
             address,
             program,
             Address::zero(),
-            vec![],
+            &[],
             1000,
             Settings {
                 default_aa_code_hash: [0; 32],

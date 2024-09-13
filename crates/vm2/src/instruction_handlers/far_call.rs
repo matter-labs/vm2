@@ -11,6 +11,7 @@ use zksync_vm2_interface::{
 use super::{
     common::boilerplate_ext,
     heap_access::grow_heap,
+    monomorphization::{match_boolean, monomorphize, parameterize},
     ret::{panic_from_failed_far_call, RETURN_COST},
     AuxHeap, Heap,
 };
@@ -264,8 +265,6 @@ impl FatPointer {
         self.offset = 0;
     }
 }
-
-use super::monomorphization::*;
 
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
     /// Creates a [`FarCall`](FarCall) instruction with the provided mode and params.

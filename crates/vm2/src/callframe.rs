@@ -133,6 +133,7 @@ impl<T: Tracer, W: World<T>> Callframe<T, W> {
     }
 
     // FIXME: can overflow on invalid instruction
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub(crate) fn get_pc_as_u16(&self) -> u16 {
         unsafe { self.pc.offset_from(self.program.instruction(0).unwrap()) as u16 }
     }
@@ -143,7 +144,7 @@ impl<T: Tracer, W: World<T>> Callframe<T, W> {
         self.pc = self
             .program
             .instruction(index)
-            .unwrap_or_else(|| self.program.invalid_instruction())
+            .unwrap_or_else(|| self.program.invalid_instruction());
     }
 
     pub(crate) fn set_invalid_pc(&mut self) {

@@ -120,7 +120,7 @@ fn test() {
         MAIN_ADDRESS,
         main_program,
         Address::zero(),
-        vec![],
+        &[],
         initial_gas,
         Settings {
             default_aa_code_hash: [0; 32],
@@ -132,7 +132,7 @@ fn test() {
     let result = vm.run(&mut world, &mut ());
     let remaining_gas = vm.current_frame().gas();
     assert_eq!(result, ExecutionEnd::SuspendedOnHook(0));
-    let expected_decommit_cost = LARGE_BYTECODE_LEN as u32 * 4;
+    let expected_decommit_cost = u32::try_from(LARGE_BYTECODE_LEN).unwrap() * 4;
     assert!(
         remaining_gas < initial_gas - expected_decommit_cost,
         "{remaining_gas}"
@@ -156,7 +156,7 @@ fn test_with_initial_out_of_gas_error() {
         MAIN_ADDRESS,
         main_program,
         Address::zero(),
-        vec![],
+        &[],
         10_000,
         Settings {
             default_aa_code_hash: [0; 32],
@@ -183,7 +183,7 @@ fn test_with_initial_out_of_gas_error() {
     let result = vm.run(&mut world, &mut ());
     let remaining_gas = vm.current_frame().gas();
     assert_eq!(result, ExecutionEnd::SuspendedOnHook(0));
-    let expected_decommit_cost = LARGE_BYTECODE_LEN as u32 * 4;
+    let expected_decommit_cost = u32::try_from(LARGE_BYTECODE_LEN).unwrap() * 4;
     assert!(
         remaining_gas < initial_gas - expected_decommit_cost,
         "{remaining_gas}"

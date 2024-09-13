@@ -24,7 +24,7 @@ impl Bitset {
 
 #[inline(always)]
 fn slot_and_bit(i: u16) -> (usize, u64) {
-    ((i >> 6) as usize, 1u64 << (i & 0b111111))
+    ((i >> 6) as usize, 1u64 << (i & 0b_0011_1111))
 }
 
 impl Default for Bitset {

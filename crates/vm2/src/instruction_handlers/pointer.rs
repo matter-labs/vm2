@@ -4,7 +4,12 @@ use zksync_vm2_interface::{
     OpcodeType, Tracer,
 };
 
-use super::{common::boilerplate, monomorphization::*};
+use super::{
+    common::boilerplate,
+    monomorphization::{
+        match_boolean, match_destination, match_source, monomorphize, parameterize,
+    },
+};
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,

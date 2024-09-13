@@ -4,7 +4,12 @@ use zksync_vm2_interface::{
     OpcodeType, Tracer,
 };
 
-use super::{common::boilerplate, monomorphization::*};
+use super::{
+    common::boilerplate,
+    monomorphization::{
+        match_boolean, match_destination, match_source, monomorphize, parameterize,
+    },
+};
 use crate::{
     addressing_modes::{
         AbsoluteStack, Addressable, AdvanceStackPointer, AnyDestination, AnySource, Arguments,
@@ -214,7 +219,7 @@ macro_rules! from_binop {
             swap: bool,
             set_flags: bool,
         ) -> Self {
-            Self::from_binop::<$binop>(src1, src2, out, (), arguments, swap, set_flags)
+            Self::from_binop::<$binop>(src1, src2, out, &(), arguments, swap, set_flags)
         }
     };
 
@@ -230,7 +235,7 @@ macro_rules! from_binop {
             swap: bool,
             set_flags: bool,
         ) -> Self {
-            Self::from_binop::<$binop>(src1, src2, out, out2, arguments, swap, set_flags)
+            Self::from_binop::<$binop>(src1, src2, out, &out2, arguments, swap, set_flags)
         }
     };
 }
@@ -242,7 +247,7 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
         src1: AnySource,
         src2: Register2,
         out: AnyDestination,
-        out2: <Op::Out2 as SecondOutput>::Destination,
+        out2: &<Op::Out2 as SecondOutput>::Destination,
         arguments: Arguments,
         swap: bool,
         set_flags: bool,
@@ -253,7 +258,7 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
                 .write_source(&src1)
                 .write_source(&src2)
                 .write_destination(&out)
-                .write_destination(&out2),
+                .write_destination(out2),
         }
     }
 

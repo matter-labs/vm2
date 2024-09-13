@@ -31,7 +31,7 @@ where
 {
     boilerplate::<Op, _, _>(vm, world, tracer, |vm, args| {
         let result = Op::get(&vm.state);
-        Register1::set(args, &mut vm.state, result)
+        Register1::set(args, &mut vm.state, result);
     })
 }
 
@@ -59,7 +59,7 @@ impl ContextOp for CodeAddress {
 
 impl ContextOp for ErgsLeft {
     fn get<T: Tracer, W: World<T>>(state: &State<T, W>) -> U256 {
-        U256([state.current_frame.gas as u64, 0, 0, 0])
+        U256([state.current_frame.gas.into(), 0, 0, 0])
     }
 }
 
@@ -75,6 +75,7 @@ impl ContextOp for SP {
     }
 }
 
+#[allow(clippy::cast_sign_loss)] // intentional
 fn context_meta<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,

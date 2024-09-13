@@ -3,7 +3,7 @@ use zksync_vm2_interface::{opcodes, HeapId, OpcodeType, Tracer};
 
 use super::{
     common::{boilerplate, full_boilerplate},
-    monomorphization::*,
+    monomorphization::{match_boolean, match_reg_imm, monomorphize, parameterize},
 };
 use crate::{
     addressing_modes::{
@@ -100,7 +100,7 @@ where
         Register1::set(args, &mut vm.state, value);
 
         if INCREMENT {
-            Register2::set(args, &mut vm.state, pointer + 32)
+            Register2::set(args, &mut vm.state, pointer + 32);
         }
     })
 }
@@ -142,7 +142,7 @@ where
         vm.state.heaps.write_u256(heap, address, value);
 
         if INCREMENT {
-            Register1::set(args, &mut vm.state, pointer + 32)
+            Register1::set(args, &mut vm.state, pointer + 32);
         }
 
         if HOOKING_ENABLED && address == vm.settings.hook_address {
@@ -154,7 +154,7 @@ where
 }
 
 /// Pays for more heap space. Doesn't acually grow the heap.
-/// That distinction is necessary because the bootloader gets u32::MAX heap for free.
+/// That distinction is necessary because the bootloader gets `u32::MAX` heap for free.
 pub(crate) fn grow_heap<T, W, H>(state: &mut State<T, W>, new_bound: u32) -> Result<(), ()>
 where
     T: Tracer,
@@ -200,7 +200,7 @@ fn load_pointer<T: Tracer, W: World<T>, const INCREMENT: bool>(
 
         if INCREMENT {
             // This addition does not overflow because we checked that the offset is small enough above.
-            Register2::set_fat_ptr(args, &mut vm.state, input + 32)
+            Register2::set_fat_ptr(args, &mut vm.state, input + 32);
         }
     })
 }

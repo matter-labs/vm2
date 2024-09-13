@@ -1,3 +1,5 @@
+#![allow(clippy::zero_sized_map_values)] // FIXME: why?
+
 use std::collections::BTreeMap;
 
 /// A trait for things that can be rolled back to snapshots
@@ -113,7 +115,7 @@ pub(crate) struct RollbackableLog<T> {
 impl<T> Default for RollbackableLog<T> {
     fn default() -> Self {
         Self {
-            entries: Default::default(),
+            entries: Vec::default(),
         }
     }
 }
@@ -126,7 +128,7 @@ impl<T> Rollback for RollbackableLog<T> {
     }
 
     fn rollback(&mut self, snapshot: Self::Snapshot) {
-        self.entries.truncate(snapshot)
+        self.entries.truncate(snapshot);
     }
 
     fn delete_history(&mut self) {}
@@ -134,7 +136,7 @@ impl<T> Rollback for RollbackableLog<T> {
 
 impl<T> RollbackableLog<T> {
     pub(crate) fn push(&mut self, entry: T) {
-        self.entries.push(entry)
+        self.entries.push(entry);
     }
 
     pub(crate) fn logs_after(&self, snapshot: <RollbackableLog<T> as Rollback>::Snapshot) -> &[T] {
@@ -160,7 +162,7 @@ impl<T: Copy> Rollback for RollbackablePod<T> {
     }
 
     fn rollback(&mut self, snapshot: Self::Snapshot) {
-        self.0 = snapshot
+        self.0 = snapshot;
     }
 
     fn delete_history(&mut self) {}

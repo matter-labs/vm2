@@ -45,7 +45,7 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
         address: H160,
         program: Program<T, W>,
         caller: H160,
-        calldata: Vec<u8>,
+        calldata: &[u8],
         gas: u32,
         settings: Settings,
     ) -> Self {
@@ -58,7 +58,7 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
             state: State::new(
                 address,
                 caller,
-                &calldata,
+                calldata,
                 gas,
                 program,
                 world_before_this_frame,
@@ -169,7 +169,7 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
             .snapshot
             .take()
             .expect("`rollback()` called without a snapshot");
-        self.world_diff.external_rollback(snapshot.world_snapshot);
+        self.world_diff.external_rollback(&snapshot.world_snapshot);
         self.state.rollback(snapshot.state_snapshot);
         self.delete_history();
     }
@@ -282,7 +282,7 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
 
     pub(crate) fn start_new_tx(&mut self) {
         self.state.transaction_number = self.state.transaction_number.wrapping_add(1);
-        self.world_diff.clear_transient_storage()
+        self.world_diff.clear_transient_storage();
     }
 }
 

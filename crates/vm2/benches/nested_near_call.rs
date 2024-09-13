@@ -23,7 +23,7 @@ fn nested_near_call(bencher: Bencher) {
         vec![],
     );
 
-    let address = Address::from_low_u64_be(0xabe123ff);
+    let address = Address::from_low_u64_be(0x_abe1_23ff);
 
     bencher.bench(|| {
         let mut world = TestWorld::new(&[(address, program.clone())]);
@@ -32,7 +32,7 @@ fn nested_near_call(bencher: Bencher) {
             address,
             program,
             Address::zero(),
-            vec![],
+            &[],
             10_000_000,
             Settings {
                 default_aa_code_hash: [0; 32],
@@ -70,7 +70,7 @@ fn nested_near_call_with_storage_write(bencher: Bencher) {
         vec![],
     );
 
-    let address = Address::from_low_u64_be(0xabe123ff);
+    let address = Address::from_low_u64_be(0x_abe1_23ff);
 
     bencher.bench(|| {
         let mut world = TestWorld::new(&[(address, program.clone())]);
@@ -79,7 +79,7 @@ fn nested_near_call_with_storage_write(bencher: Bencher) {
             address,
             program,
             Address::zero(),
-            vec![],
+            &[],
             80_000_000,
             Settings {
                 default_aa_code_hash: [0; 32],

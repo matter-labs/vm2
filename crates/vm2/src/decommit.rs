@@ -17,7 +17,7 @@ impl WorldDiff {
         is_constructor_call: bool,
     ) -> Option<(UnpaidDecommit, bool)> {
         let deployer_system_contract_address =
-            Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
+            Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW.into());
 
         let mut is_evm = false;
 
@@ -79,7 +79,7 @@ impl WorldDiff {
             0
         } else {
             let code_length_in_words = u16::from_be_bytes([code_info[2], code_info[3]]);
-            code_length_in_words as u32 * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT
+            u32::from(code_length_in_words) * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT
         };
 
         Some((UnpaidDecommit { cost, code_key }, is_evm))
@@ -98,7 +98,8 @@ impl WorldDiff {
         let code = world.decommit_code(code_hash);
         if is_new {
             // Decommitter can process two words per cycle
-            tracer.on_extra_prover_cycles(CycleStats::Decommit((code.len() as u32 + 63) / 64));
+            let code_len = u32::try_from(code.len()).expect("bytecode length overflow");
+            tracer.on_extra_prover_cycles(CycleStats::Decommit((code_len + 63) / 64));
         }
         (code, is_new)
     }
@@ -123,16 +124,16 @@ impl WorldDiff {
 
         let decommit = world.decommit(decommit.code_key);
         if is_new {
-            tracer.on_extra_prover_cycles(CycleStats::Decommit(
-                (decommit.code_page().len() as u32 + 1) / 2,
-            ));
+            let code_len =
+                u32::try_from(decommit.code_page().len()).expect("bytecode length overflow");
+            tracer.on_extra_prover_cycles(CycleStats::Decommit((code_len + 1) / 2));
         }
 
         Some(decommit)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct UnpaidDecommit {
     cost: u32,
     code_key: U256,
