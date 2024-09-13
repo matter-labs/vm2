@@ -142,7 +142,7 @@ pub(crate) struct UnpaidDecommit {
 /// Doesn't check for any errors.
 /// Doesn't cost anything but also doesn't make the code free in future decommits.
 #[doc(hidden)] // should be used only in low-level testing / benches
-pub fn initial_decommit<T, W: World<T>>(world: &mut W, address: H160) -> Program<T, W> {
+pub fn initial_decommit<T: Tracer, W: World<T>>(world: &mut W, address: H160) -> Program<T, W> {
     let deployer_system_contract_address =
         Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
     let code_info = world

@@ -182,7 +182,7 @@ pub(crate) fn get_far_call_arguments(abi: U256) -> FarCallABI {
 ///
 /// This function needs to be called even if we already know we will panic because
 /// overflowing start + length makes the heap resize even when already panicking.
-pub(crate) fn get_far_call_calldata<T: Tracer, W>(
+pub(crate) fn get_far_call_calldata<T: Tracer, W: World<T>>(
     raw_abi: U256,
     is_pointer: bool,
     vm: &mut VirtualMachine<T, W>,

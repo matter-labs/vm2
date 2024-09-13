@@ -276,9 +276,7 @@ impl WorldDiff {
         self.decommitted_hashes.as_ref().keys().copied()
     }
 
-    /// Get a snapshot for selecting which logs [Self::events_after] & Co output.
-    /// The snapshot can't be used for rolling back the VM because the method for
-    /// that is private. Use [crate::VirtualMachine::snapshot] for that instead.
+    /// Get a snapshot for selecting which logs & co. to output using [`Self::events_after()`] and other methods.
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
             storage_changes: self.storage_changes.snapshot(),

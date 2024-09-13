@@ -27,7 +27,7 @@ fn sstore<T: Tracer, W: World<T>>(
     })
 }
 
-fn sstore_transient<T: Tracer, W>(
+fn sstore_transient<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -60,7 +60,7 @@ fn sload<T: Tracer, W: World<T>>(
     })
 }
 
-fn sload_transient<T: Tracer, W>(
+fn sload_transient<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,

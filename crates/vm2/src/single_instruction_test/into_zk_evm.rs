@@ -15,7 +15,7 @@ use zkevm_opcode_defs::{decoding::EncodingModeProduction, TRANSIENT_STORAGE_AUX_
 use zksync_vm2_interface::Tracer;
 
 use super::{stack::Stack, state_to_zk_evm::vm2_state_to_zk_evm_state, MockWorld};
-use crate::{StorageInterface, VirtualMachine};
+use crate::{StorageInterface, VirtualMachine, World};
 
 type ZkEvmState = VmState<
     MockWorldWrapper,
@@ -28,7 +28,10 @@ type ZkEvmState = VmState<
     EncodingModeProduction,
 >;
 
-pub fn vm2_to_zk_evm<T: Tracer, W>(vm: &VirtualMachine<T, W>, world: MockWorld) -> ZkEvmState {
+pub fn vm2_to_zk_evm<T: Tracer, W: World<T>>(
+    vm: &VirtualMachine<T, W>,
+    world: MockWorld,
+) -> ZkEvmState {
     let mut event_sink = InMemoryEventSink::new();
     event_sink.start_frame(zk_evm::aux_structures::Timestamp(0));
 

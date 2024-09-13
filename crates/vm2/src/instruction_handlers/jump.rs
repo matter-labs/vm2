@@ -1,20 +1,21 @@
 use zksync_vm2_interface::{opcodes, Tracer};
 
-use super::common::boilerplate;
+use super::{common::boilerplate, monomorphization::*};
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Destination,
         Immediate1, Register1, RelativeStack, Source,
     },
     instruction::{ExecutionStatus, Instruction},
-    VirtualMachine,
+    VirtualMachine, World,
 };
 
-fn jump<T: Tracer, W, In: Source>(
-    vm: &mut VirtualMachine<T, W>,
-    world: &mut W,
-    tracer: &mut T,
-) -> ExecutionStatus {
+fn jump<T, W, In>(vm: &mut VirtualMachine<T, W>, world: &mut W, tracer: &mut T) -> ExecutionStatus
+where
+    T: Tracer,
+    W: World<T>,
+    In: Source,
+{
     boilerplate::<opcodes::Jump, _, _>(vm, world, tracer, |vm, args| {
         let target = In::get(args, &mut vm.state).low_u32() as u16;
 
@@ -25,9 +26,7 @@ fn jump<T: Tracer, W, In: Source>(
     })
 }
 
-use super::monomorphization::*;
-
-impl<T: Tracer, W> Instruction<T, W> {
+impl<T: Tracer, W: World<T>> Instruction<T, W> {
     pub fn from_jump(source: AnySource, destination: Register1, arguments: Arguments) -> Self {
         Self {
             handler: monomorphize!(jump [T W] match_source source),

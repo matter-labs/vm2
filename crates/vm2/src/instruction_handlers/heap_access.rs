@@ -1,7 +1,10 @@
 use primitive_types::U256;
 use zksync_vm2_interface::{opcodes, OpcodeType, Tracer};
 
-use super::common::{boilerplate, full_boilerplate};
+use super::{
+    common::{boilerplate, full_boilerplate},
+    monomorphization::*,
+};
 use crate::{
     addressing_modes::{
         Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
@@ -10,7 +13,7 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
     state::State,
-    ExecutionEnd, HeapId, Instruction, VirtualMachine,
+    ExecutionEnd, HeapId, Instruction, VirtualMachine, World,
 };
 
 pub(crate) trait HeapFromState {
@@ -60,11 +63,17 @@ fn bigger_than_last_address(x: U256) -> bool {
     x.0[0] > LAST_ADDRESS.into() || x.0[1] != 0 || x.0[2] != 0 || x.0[3] != 0
 }
 
-fn load<T: Tracer, W, H: HeapFromState, In: Source, const INCREMENT: bool>(
+fn load<T, W, H, In, const INCREMENT: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) -> ExecutionStatus
+where
+    T: Tracer,
+    W: World<T>,
+    H: HeapFromState,
+    In: Source,
+{
     boilerplate::<H::Read, _, _>(vm, world, tracer, |vm, args| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
@@ -96,18 +105,17 @@ fn load<T: Tracer, W, H: HeapFromState, In: Source, const INCREMENT: bool>(
     })
 }
 
-fn store<
-    T: Tracer,
-    W,
-    H: HeapFromState,
-    In: Source,
-    const INCREMENT: bool,
-    const HOOKING_ENABLED: bool,
->(
+fn store<T, W, H, In, const INCREMENT: bool, const HOOKING_ENABLED: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) -> ExecutionStatus
+where
+    T: Tracer,
+    W: World<T>,
+    H: HeapFromState,
+    In: Source,
+{
     full_boilerplate::<H::Write, _, _>(vm, world, tracer, |vm, args, _, _| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
@@ -147,10 +155,12 @@ fn store<
 
 /// Pays for more heap space. Doesn't acually grow the heap.
 /// That distinction is necessary because the bootloader gets u32::MAX heap for free.
-pub(crate) fn grow_heap<T: Tracer, W, H: HeapFromState>(
-    state: &mut State<T, W>,
-    new_bound: u32,
-) -> Result<(), ()> {
+pub(crate) fn grow_heap<T, W, H>(state: &mut State<T, W>, new_bound: u32) -> Result<(), ()>
+where
+    T: Tracer,
+    W: World<T>,
+    H: HeapFromState,
+{
     let already_paid = H::get_heap_size(state);
     if *already_paid < new_bound {
         let to_pay = new_bound - *already_paid;
@@ -161,7 +171,7 @@ pub(crate) fn grow_heap<T: Tracer, W, H: HeapFromState>(
     Ok(())
 }
 
-fn load_pointer<T: Tracer, W, const INCREMENT: bool>(
+fn load_pointer<T: Tracer, W: World<T>, const INCREMENT: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -195,9 +205,7 @@ fn load_pointer<T: Tracer, W, const INCREMENT: bool>(
     })
 }
 
-use super::monomorphization::*;
-
-impl<T: Tracer, W> Instruction<T, W> {
+impl<T: Tracer, W: World<T>> Instruction<T, W> {
     #[inline(always)]
     pub fn from_heap_load(
         src: RegisterOrImmediate,

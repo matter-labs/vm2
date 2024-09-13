@@ -13,22 +13,21 @@ use crate::{
     },
     instruction::{ExecutionStatus, Instruction},
     predication::Flags,
-    VirtualMachine,
+    VirtualMachine, World,
 };
 
-fn binop<
-    T: Tracer,
-    W,
-    Op: Binop,
-    In1: Source,
-    Out: Destination,
-    const SWAP: bool,
-    const SET_FLAGS: bool,
->(
+fn binop<T, W, Op, In1, Out, const SWAP: bool, const SET_FLAGS: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) -> ExecutionStatus
+where
+    T: Tracer,
+    W: World<T>,
+    Op: Binop,
+    In1: Source,
+    Out: Destination,
+{
     boilerplate::<Op, _, _>(vm, world, tracer, |vm, args| {
         let a = In1::get(args, &mut vm.state);
         let b = Register2::get(args, &mut vm.state);
@@ -236,7 +235,7 @@ macro_rules! from_binop {
     };
 }
 
-impl<T: Tracer, W> Instruction<T, W> {
+impl<T: Tracer, W: World<T>> Instruction<T, W> {
     #[inline(always)]
     pub(crate) fn from_binop<Op: Binop>(
         src1: AnySource,

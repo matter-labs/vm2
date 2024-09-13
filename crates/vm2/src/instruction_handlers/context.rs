@@ -11,14 +11,19 @@ use crate::{
     decommit::address_into_u256,
     instruction::ExecutionStatus,
     state::State,
-    Instruction, VirtualMachine,
+    Instruction, VirtualMachine, World,
 };
 
-fn context<T: Tracer, W, Op: ContextOp>(
+fn context<T, W, Op>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) -> ExecutionStatus
+where
+    T: Tracer,
+    W: World<T>,
+    Op: ContextOp,
+{
     boilerplate::<Op, _, _>(vm, world, tracer, |vm, args| {
         let result = Op::get(&vm.state);
         Register1::set(args, &mut vm.state, result)
@@ -65,7 +70,7 @@ impl ContextOp for SP {
     }
 }
 
-fn context_meta<T: Tracer, W>(
+fn context_meta<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -90,7 +95,7 @@ fn context_meta<T: Tracer, W>(
     })
 }
 
-fn set_context_u128<T: Tracer, W>(
+fn set_context_u128<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -101,7 +106,7 @@ fn set_context_u128<T: Tracer, W>(
     })
 }
 
-fn increment_tx_number<T: Tracer, W>(
+fn increment_tx_number<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -111,7 +116,7 @@ fn increment_tx_number<T: Tracer, W>(
     })
 }
 
-fn aux_mutating<T: Tracer, W>(
+fn aux_mutating<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -121,7 +126,7 @@ fn aux_mutating<T: Tracer, W>(
     })
 }
 
-impl<T: Tracer, W> Instruction<T, W> {
+impl<T: Tracer, W: World<T>> Instruction<T, W> {
     fn from_context<Op: ContextOp>(out: Register1, arguments: Arguments) -> Self {
         Self {
             handler: context::<T, W, Op>,
@@ -132,39 +137,48 @@ impl<T: Tracer, W> Instruction<T, W> {
     pub fn from_this(out: Register1, arguments: Arguments) -> Self {
         Self::from_context::<This>(out, arguments)
     }
+
     pub fn from_caller(out: Register1, arguments: Arguments) -> Self {
         Self::from_context::<Caller>(out, arguments)
     }
+
     pub fn from_code_address(out: Register1, arguments: Arguments) -> Self {
         Self::from_context::<CodeAddress>(out, arguments)
     }
+
     pub fn from_ergs_left(out: Register1, arguments: Arguments) -> Self {
         Self::from_context::<ErgsLeft>(out, arguments)
     }
+
     pub fn from_context_u128(out: Register1, arguments: Arguments) -> Self {
         Self::from_context::<ContextU128>(out, arguments)
     }
+
     pub fn from_context_sp(out: Register1, arguments: Arguments) -> Self {
         Self::from_context::<SP>(out, arguments)
     }
+
     pub fn from_context_meta(out: Register1, arguments: Arguments) -> Self {
         Self {
             handler: context_meta,
             arguments: arguments.write_destination(&out),
         }
     }
+
     pub fn from_set_context_u128(src: Register1, arguments: Arguments) -> Self {
         Self {
             handler: set_context_u128,
             arguments: arguments.write_source(&src),
         }
     }
+
     pub fn from_increment_tx_number(arguments: Arguments) -> Self {
         Self {
             handler: increment_tx_number,
             arguments,
         }
     }
+
     pub fn from_aux_mutating(arguments: Arguments) -> Self {
         Self {
             handler: aux_mutating,

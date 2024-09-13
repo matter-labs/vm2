@@ -1,4 +1,7 @@
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::{
+    convert::Infallible,
+    hash::{DefaultHasher, Hash, Hasher},
+};
 
 use primitive_types::{H160, U256};
 pub use zksync_vm2_interface::{
@@ -46,16 +49,11 @@ mod tracing;
 mod vm;
 mod world_diff;
 
-pub trait World<T>: StorageInterface + Sized {
-    /// This will be called *every* time a contract is called. Caching and decoding is
-    /// the world implementor's job.
-    fn decommit(&mut self, hash: U256) -> Program<T, Self>;
-
-    fn decommit_code(&mut self, hash: U256) -> Vec<u8>;
-}
-
+/// VM storage access operations.
 pub trait StorageInterface {
-    /// There is no write_storage; [WorldDiff::get_storage_changes] gives a list of all storage changes.
+    /// Reads the specified slot from the storage.
+    ///
+    /// There is no write counterpart; [`WorldDiff::get_storage_changes()`] gives a list of all storage changes.
     fn read_storage(&mut self, contract: H160, key: U256) -> Option<U256>;
 
     /// Computes the cost of writing a storage slot.
@@ -63,6 +61,38 @@ pub trait StorageInterface {
 
     /// Returns if the storage slot is free both in terms of gas and pubdata.
     fn is_free_storage_slot(&self, contract: &H160, key: &U256) -> bool;
+}
+
+impl StorageInterface for Infallible {
+    fn read_storage(&mut self, _contract: H160, _key: U256) -> Option<U256> {
+        unreachable!("`Infallible` cannot be constructed")
+    }
+
+    fn cost_of_writing_storage(&mut self, _initial_value: Option<U256>, _new_value: U256) -> u32 {
+        unreachable!("`Infallible` cannot be constructed")
+    }
+
+    fn is_free_storage_slot(&self, _contract: &H160, _key: &U256) -> bool {
+        unreachable!("`Infallible` cannot be constructed")
+    }
+}
+
+pub trait World<T: Tracer>: StorageInterface + Sized {
+    /// This will be called *every* time a contract is called. Caching and decoding is
+    /// the world implementor's job.
+    fn decommit(&mut self, hash: U256) -> Program<T, Self>;
+
+    fn decommit_code(&mut self, hash: U256) -> Vec<u8>;
+}
+
+impl<T: Tracer> World<T> for Infallible {
+    fn decommit(&mut self, _hash: U256) -> Program<T, Self> {
+        unreachable!("`Infallible` cannot be constructed")
+    }
+
+    fn decommit_code(&mut self, _hash: U256) -> Vec<u8> {
+        unreachable!("`Infallible` cannot be constructed")
+    }
 }
 
 /// Deterministic (across program runs and machines) hash that can be used for `Debug` implementations

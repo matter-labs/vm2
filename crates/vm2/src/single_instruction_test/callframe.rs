@@ -64,7 +64,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for Callframe<T, W> {
     }
 }
 
-impl<T: Tracer, W> Callframe<T, W> {
+impl<T: Tracer, W: World<T>> Callframe<T, W> {
     pub fn raw_first_instruction(&self) -> u64 {
         self.program.raw_first_instruction
     }

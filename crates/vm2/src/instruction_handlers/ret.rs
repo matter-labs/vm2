@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use primitive_types::U256;
 use zksync_vm2_interface::{
     opcodes::{self, Normal, Panic, Revert, TypeLevelReturnType},
@@ -11,13 +13,18 @@ use crate::{
     instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
     predication::Flags,
-    Instruction, Predicate, VirtualMachine,
+    Instruction, Predicate, VirtualMachine, World,
 };
 
-fn naked_ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
+fn naked_ret<T, W, RT, const TO_LABEL: bool>(
     vm: &mut VirtualMachine<T, W>,
     args: &Arguments,
-) -> ExecutionStatus {
+) -> ExecutionStatus
+where
+    T: Tracer,
+    W: World<T>,
+    RT: TypeLevelReturnType,
+{
     let mut return_type = RT::VALUE;
     let near_call_leftover_gas = vm.state.current_frame.gas;
 
@@ -115,11 +122,16 @@ fn naked_ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
     ExecutionStatus::Running
 }
 
-fn ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
+fn ret<T, W, RT, const TO_LABEL: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) -> ExecutionStatus
+where
+    T: Tracer,
+    W: World<T>,
+    RT: TypeLevelReturnType,
+{
     full_boilerplate::<opcodes::Ret<RT>, _, _>(vm, world, tracer, |vm, args, _, _| {
         naked_ret::<T, W, RT, TO_LABEL>(vm, args)
     })
@@ -134,13 +146,13 @@ fn ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
 /// - the far call stack overflows
 ///
 /// For all other panics, point the instruction pointer at [PANIC] instead.
-pub(crate) fn free_panic<T: Tracer, W>(
+pub(crate) fn free_panic<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     tracer: &mut T,
 ) -> ExecutionStatus {
     tracer.before_instruction::<opcodes::Ret<Panic>, _>(vm);
     // args aren't used for panics unless TO_LABEL
-    let result = naked_ret::<T, W, opcodes::Panic, false>(
+    let result = naked_ret::<T, W, Panic, false>(
         vm,
         &Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
     );
@@ -173,16 +185,16 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
 }
 
 /// Panics, burning all available gas.
-static INVALID_INSTRUCTION: Instruction<(), ()> = Instruction::from_invalid();
+static INVALID_INSTRUCTION: Instruction<(), Infallible> = Instruction::from_invalid();
 
 pub fn invalid_instruction<'a, T, W>() -> &'a Instruction<T, W> {
     // Safety: the handler of an invalid instruction is never read.
-    unsafe { &*(&INVALID_INSTRUCTION as *const Instruction<(), ()>).cast() }
+    unsafe { &*(&INVALID_INSTRUCTION as *const Instruction<_, _>).cast() }
 }
 
 pub(crate) const RETURN_COST: u32 = 5;
 
-impl<T: Tracer, W> Instruction<T, W> {
+impl<T: Tracer, W: World<T>> Instruction<T, W> {
     pub fn from_ret(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         Self {

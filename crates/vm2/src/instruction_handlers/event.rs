@@ -7,10 +7,10 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
     instruction::ExecutionStatus,
     world_diff::{Event, L2ToL1Log},
-    Instruction, VirtualMachine,
+    Instruction, VirtualMachine, World,
 };
 
-fn event<T: Tracer, W>(
+fn event<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -32,7 +32,7 @@ fn event<T: Tracer, W>(
     })
 }
 
-fn l2_to_l1<T: Tracer, W>(
+fn l2_to_l1<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -52,7 +52,7 @@ fn l2_to_l1<T: Tracer, W>(
     })
 }
 
-impl<T: Tracer, W> Instruction<T, W> {
+impl<T: Tracer, W: World<T>> Instruction<T, W> {
     pub fn from_event(
         key: Register1,
         value: Register2,

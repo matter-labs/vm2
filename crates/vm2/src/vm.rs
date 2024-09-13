@@ -37,7 +37,8 @@ pub struct VirtualMachine<T, W> {
     pub(crate) snapshot: Option<VmSnapshot>,
 }
 
-impl<T: Tracer, W> VirtualMachine<T, W> {
+impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
+    /// Creates a new VM instance.
     pub fn new(
         address: H160,
         program: Program<T, W>,

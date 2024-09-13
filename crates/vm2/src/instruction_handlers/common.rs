@@ -1,15 +1,20 @@
 use zksync_vm2_interface::{opcodes, OpcodeType, Tracer};
 
 use super::ret::free_panic;
-use crate::{addressing_modes::Arguments, instruction::ExecutionStatus, VirtualMachine};
+use crate::{addressing_modes::Arguments, instruction::ExecutionStatus, VirtualMachine, World};
 
 #[inline(always)]
-pub(crate) fn boilerplate<Opcode: OpcodeType, T: Tracer, W>(
+pub(crate) fn boilerplate<Opcode, T, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
     business_logic: impl FnOnce(&mut VirtualMachine<T, W>, &Arguments),
-) -> ExecutionStatus {
+) -> ExecutionStatus
+where
+    Opcode: OpcodeType,
+    T: Tracer,
+    W: World<T>,
+{
     full_boilerplate::<Opcode, T, W>(vm, world, tracer, |vm, args, _, _| {
         business_logic(vm, args);
         ExecutionStatus::Running
@@ -17,12 +22,17 @@ pub(crate) fn boilerplate<Opcode: OpcodeType, T: Tracer, W>(
 }
 
 #[inline(always)]
-pub(crate) fn boilerplate_ext<Opcode: OpcodeType, T: Tracer, W>(
+pub(crate) fn boilerplate_ext<Opcode, T, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
     business_logic: impl FnOnce(&mut VirtualMachine<T, W>, &Arguments, &mut W, &mut T),
-) -> ExecutionStatus {
+) -> ExecutionStatus
+where
+    Opcode: OpcodeType,
+    T: Tracer,
+    W: World<T>,
+{
     full_boilerplate::<Opcode, T, W>(vm, world, tracer, |vm, args, world, tracer| {
         business_logic(vm, args, world, tracer);
         ExecutionStatus::Running
@@ -30,7 +40,7 @@ pub(crate) fn boilerplate_ext<Opcode: OpcodeType, T: Tracer, W>(
 }
 
 #[inline(always)]
-pub(crate) fn full_boilerplate<Opcode: OpcodeType, T: Tracer, W>(
+pub(crate) fn full_boilerplate<Opcode, T, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -40,7 +50,12 @@ pub(crate) fn full_boilerplate<Opcode: OpcodeType, T: Tracer, W>(
         &mut W,
         &mut T,
     ) -> ExecutionStatus,
-) -> ExecutionStatus {
+) -> ExecutionStatus
+where
+    Opcode: OpcodeType,
+    T: Tracer,
+    W: World<T>,
+{
     let args = unsafe { &(*vm.state.current_frame.pc).arguments };
 
     if vm.state.use_gas(args.get_static_gas_cost()).is_err()

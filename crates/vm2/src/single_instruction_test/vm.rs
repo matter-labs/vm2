@@ -83,6 +83,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for VirtualMachine<T, W> {
                 None,
                 Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
             )),
+            snapshot: None,
         })
     }
 }

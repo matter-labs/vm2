@@ -4,7 +4,7 @@ use zksync_vm2_interface::{
     OpcodeType, Tracer,
 };
 
-use super::common::boilerplate;
+use super::{common::boilerplate, monomorphization::*};
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
@@ -12,14 +12,21 @@ use crate::{
     },
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
-    Instruction, VirtualMachine,
+    Instruction, VirtualMachine, World,
 };
 
-fn ptr<T: Tracer, W, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
+fn ptr<T, W, Op, In1, Out, const SWAP: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) -> ExecutionStatus
+where
+    T: Tracer,
+    W: World<T>,
+    Op: PtrOp,
+    In1: Source,
+    Out: Destination,
+{
     boilerplate::<Op, _, _>(vm, world, tracer, |vm, args| {
         let ((a, a_is_pointer), (b, b_is_pointer)) = if SWAP {
             (
@@ -102,9 +109,7 @@ impl PtrOp for PointerShrink {
     }
 }
 
-use super::monomorphization::*;
-
-impl<T: Tracer, W> Instruction<T, W> {
+impl<T: Tracer, W: World<T>> Instruction<T, W> {
     #[inline(always)]
     pub fn from_ptr<Op: PtrOp>(
         src1: AnySource,
