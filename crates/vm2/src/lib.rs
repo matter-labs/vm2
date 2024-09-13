@@ -18,11 +18,10 @@ pub use self::{
     mode_requirements::ModeRequirements,
     predication::Predicate,
     program::Program,
-    vm::{Settings, VirtualMachine, VmSnapshot as Snapshot},
+    vm::{Settings, VirtualMachine},
     world_diff::{Event, L2ToL1Log, WorldDiff},
 };
 
-// FIXME: revise visibility
 pub mod addressing_modes;
 #[cfg(not(feature = "single_instruction_test"))]
 mod bitset;

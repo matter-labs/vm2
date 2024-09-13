@@ -294,7 +294,7 @@ impl<T: fmt::Debug, W: fmt::Debug> VirtualMachine<T, W> {
 
 /// Snapshot of a [`VirtualMachine`].
 #[derive(Debug)]
-pub struct VmSnapshot {
+pub(crate) struct VmSnapshot {
     world_snapshot: ExternalSnapshot,
     state_snapshot: StateSnapshot,
 }
