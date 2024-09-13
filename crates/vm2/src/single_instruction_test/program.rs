@@ -50,7 +50,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for Program<T, W> {
 }
 
 impl<T, W> Program<T, W> {
-    pub fn instruction(&self, n: u16) -> Option<&Instruction<T, W>> {
+    pub(crate) fn instruction(&self, n: u16) -> Option<&Instruction<T, W>> {
         if n == 0 {
             Some(&self.first_instruction.get(n).as_ref()[0])
         } else {
@@ -60,6 +60,10 @@ impl<T, W> Program<T, W> {
                 .as_ref()
                 .map(|x| &x[0])
         }
+    }
+
+    pub(crate) fn invalid_instruction(&self) -> &Instruction<T, W> {
+        &self.first_instruction.value_read[1]
     }
 
     pub fn code_page(&self) -> &Arc<[U256]> {

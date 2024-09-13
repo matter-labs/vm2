@@ -1,6 +1,6 @@
 pub(crate) use self::{
     heap_access::{AuxHeap, Heap},
-    ret::{invalid_instruction, RETURN_COST},
+    ret::RETURN_COST,
 };
 
 mod binop;

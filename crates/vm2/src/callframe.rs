@@ -4,7 +4,6 @@ use zksync_vm2_interface::{HeapId, Tracer};
 
 use crate::{
     decommit::is_kernel,
-    instruction_handlers::invalid_instruction,
     program::Program,
     stack::{Stack, StackSnapshot},
     world_diff::Snapshot,
@@ -133,6 +132,7 @@ impl<T: Tracer, W: World<T>> Callframe<T, W> {
         })
     }
 
+    // FIXME: can overflow on invalid instruction
     pub(crate) fn get_pc_as_u16(&self) -> u16 {
         unsafe { self.pc.offset_from(self.program.instruction(0).unwrap()) as u16 }
     }
@@ -143,7 +143,11 @@ impl<T: Tracer, W: World<T>> Callframe<T, W> {
         self.pc = self
             .program
             .instruction(index)
-            .unwrap_or(invalid_instruction())
+            .unwrap_or_else(|| self.program.invalid_instruction())
+    }
+
+    pub fn set_invalid_pc(&mut self) {
+        self.pc = self.program.invalid_instruction();
     }
 
     /// The total amount of gas in this frame, including gas currently inaccessible because of a near call.

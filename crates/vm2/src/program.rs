@@ -4,7 +4,10 @@ use primitive_types::U256;
 use zksync_vm2_interface::Tracer;
 
 use crate::{
-    addressing_modes::Arguments, decode::decode, hash_for_debugging, instruction::ExecutionStatus,
+    addressing_modes::{Arguments, INVALID_INSTRUCTION_COST},
+    decode::decode,
+    hash_for_debugging,
+    instruction::ExecutionStatus,
     Instruction, ModeRequirements, Predicate, VirtualMachine, World,
 };
 
@@ -86,8 +89,17 @@ impl<T: Tracer, W: World<T>> Program<T, W> {
         }
     }
 
+    /// Constructs a program from the provided instructions.
+    ///
+    /// This will insert a last invalid instruction if necessary to maintain `Program` invariants.
     #[doc(hidden)] // should only be used in low-level tests / benchmarks
-    pub fn from_raw(instructions: Vec<Instruction<T, W>>, code_page: Vec<U256>) -> Self {
+    pub fn from_raw(mut instructions: Vec<Instruction<T, W>>, code_page: Vec<U256>) -> Self {
+        if instructions.last().map_or(true, |instr| {
+            instr.arguments.get_static_gas_cost() != INVALID_INSTRUCTION_COST
+        }) {
+            instructions.push(Instruction::from_invalid());
+        }
+
         Self {
             instructions: instructions.into(),
             code_page: code_page.into(),
@@ -102,13 +114,18 @@ impl<T: Tracer, W: World<T>> Program<T, W> {
     pub fn code_page(&self) -> &[U256] {
         &self.code_page
     }
+
+    pub(crate) fn invalid_instruction(&self) -> &Instruction<T, W> {
+        // `unwrap()` is safe (unless the program is constructed manually); the last
+        self.instructions.last().unwrap()
+    }
 }
 
 // This implementation compares pointers instead of programs.
 //
 // That works well enough for the tests that this is written for.
 // I don't want to implement PartialEq for Instruction because
-// comparing function pointers can work in suprising ways.
+// comparing function pointers can work in surprising ways.
 impl<T, W> PartialEq for Program<T, W> {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.code_page, &other.code_page)
@@ -138,13 +155,14 @@ fn decode_program<T: Tracer, W: World<T>>(
     raw: &[u64],
     is_bootloader: bool,
 ) -> Vec<Instruction<T, W>> {
+    let should_wrap = raw.len() >= 1 << 16;
+
+    // Always insert invalid instruction at the end (unreachable in the case of long programs) so that
+    // it's possible to set `callframe.pc` without introducing UB.
     raw.iter()
         .take(1 << 16)
         .map(|i| decode(*i, is_bootloader))
-        .chain(std::iter::once(if raw.len() >= 1 << 16 {
-            jump_to_beginning()
-        } else {
-            Instruction::from_invalid()
-        }))
+        .chain(should_wrap.then(jump_to_beginning))
+        .chain([Instruction::from_invalid()])
         .collect()
 }
