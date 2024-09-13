@@ -1,5 +1,8 @@
 # High-Performance ZKsync Era VM (EraVM)
 
+[![Build Status](https://github.com/matter-labs/vm2/actions/workflows/ci.yml/badge.svg)](https://github.com/matter-labs/vm2/actions)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue)](https://github.com/matter-labs/vm2#license)
+
 A high-performance rewrite of the out-of-circuit VM for ZKsync Era (aka EraVM).
 
 See [Era docs](https://github.com/matter-labs/zksync-era/tree/main/docs/specs/zk_evm) for the VM overview and formal specification.
