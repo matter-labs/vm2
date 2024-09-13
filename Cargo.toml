@@ -38,3 +38,9 @@ zk_evm = { git = "https://github.com/matter-labs/era-zk_evm.git", rev = "b7caa02
 # Dependencies within the workspace
 zksync_vm2_interface = { version = "0.1.0", path = "crates/vm2-interface" }
 zksync_vm2 = { version = "0.1.0", path = "crates/vm2" }
+
+[workspace.lints.rust]
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"

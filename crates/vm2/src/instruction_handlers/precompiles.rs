@@ -82,7 +82,7 @@ fn precompile_call<T: Tracer, W: World<T>>(
                 ));
             }
             SECP256R1_VERIFY_PRECOMPILE_ADDRESS => {
-                tracer.on_extra_prover_cycles(CycleStats::Secp256k1Verify(
+                tracer.on_extra_prover_cycles(CycleStats::Secp256r1Verify(
                     secp256r1_verify_function::<_, false>(0, query, heaps).0 as u32,
                 ));
             }
