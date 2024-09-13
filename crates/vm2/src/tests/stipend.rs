@@ -1,17 +1,16 @@
-#![cfg(not(feature = "single_instruction_test"))]
-
 use primitive_types::U256;
 use zkevm_opcode_defs::ethereum_types::Address;
-use zksync_vm2::{
+use zksync_vm2_interface::{opcodes, CallframeInterface, StateInterface};
+
+use crate::{
     address_into_u256,
     addressing_modes::{
         Arguments, CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
     },
     initial_decommit,
-    testworld::TestWorld,
+    testonly::TestWorld,
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
 };
-use zksync_vm2_interface::{opcodes, CallframeInterface, StateInterface};
 
 const INITIAL_GAS: u32 = 1000;
 

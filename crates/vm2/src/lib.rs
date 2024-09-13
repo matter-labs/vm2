@@ -40,7 +40,9 @@ pub mod single_instruction_test;
 #[cfg(not(feature = "single_instruction_test"))]
 mod stack;
 mod state;
-pub mod testworld;
+pub mod testonly;
+#[cfg(all(test, not(feature = "single_instruction_test")))]
+mod tests;
 mod tracing;
 mod vm;
 mod world_diff;

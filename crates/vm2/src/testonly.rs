@@ -1,3 +1,5 @@
+//! Test-only tools for EraVM.
+
 use std::{
     collections::{hash_map::DefaultHasher, BTreeMap},
     hash::{Hash, Hasher},
@@ -11,6 +13,7 @@ use zksync_vm2_interface::Tracer;
 
 use crate::{address_into_u256, Program, StorageInterface, World};
 
+/// Test [`World`] implementation.
 #[derive(Debug)]
 pub struct TestWorld<T> {
     pub address_to_hash: BTreeMap<U256, U256>,

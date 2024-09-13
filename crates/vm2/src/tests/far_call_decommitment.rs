@@ -1,18 +1,17 @@
-#![cfg(not(feature = "single_instruction_test"))]
-
 use std::collections::HashSet;
 
 use primitive_types::{H160, U256};
 use zkevm_opcode_defs::ethereum_types::Address;
-use zksync_vm2::{
+use zksync_vm2_interface::{opcodes, CallframeInterface, StateInterface};
+
+use crate::{
     addressing_modes::{
         Arguments, CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
     },
     initial_decommit,
-    testworld::TestWorld,
+    testonly::TestWorld,
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
 };
-use zksync_vm2_interface::{opcodes, CallframeInterface, StateInterface};
 
 const GAS_TO_PASS: u32 = 10_000;
 const LARGE_BYTECODE_LEN: usize = 10_000;

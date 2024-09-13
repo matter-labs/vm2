@@ -1,15 +1,9 @@
-#![cfg(not(feature = "single_instruction_test"))]
-
 use zkevm_opcode_defs::ethereum_types::Address;
-use zksync_vm2::{
-    initial_decommit, testworld::TestWorld, ExecutionEnd, Program, Settings, VirtualMachine, World,
-};
-use zksync_vm2_interface::{CallframeInterface, StateInterface, Tracer};
+use zksync_vm2_interface::{CallframeInterface, StateInterface};
 
-fn program_from_file<T: Tracer, W: World<T>>(filename: &str) -> Program<T, W> {
-    let blob = std::fs::read(filename).unwrap();
-    Program::new(blob, false)
-}
+use crate::{
+    initial_decommit, testonly::TestWorld, ExecutionEnd, Program, Settings, VirtualMachine,
+};
 
 #[test]
 fn call_to_invalid_address() {
@@ -18,7 +12,8 @@ fn call_to_invalid_address() {
     // result in an infinite loop.
 
     let address = Address::from_low_u64_be(0x1234567890abcdef);
-    let mut world = TestWorld::new(&[(address, program_from_file("tests/bytecodes/call_far"))]);
+    let bytecode = include_bytes!("bytecodes/call_far").to_vec();
+    let mut world = TestWorld::new(&[(address, Program::new(bytecode, false))]);
     let program = initial_decommit(&mut world, address);
 
     let mut vm = VirtualMachine::new(

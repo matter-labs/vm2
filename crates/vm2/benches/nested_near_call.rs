@@ -3,7 +3,7 @@ use zkevm_opcode_defs::ethereum_types::Address;
 use zksync_vm2::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register, Register1, Register2},
     initial_decommit,
-    testworld::TestWorld,
+    testonly::TestWorld,
     Instruction, ModeRequirements,
     Predicate::Always,
     Program, Settings, VirtualMachine,

@@ -1,11 +1,10 @@
-#![cfg(not(feature = "single_instruction_test"))]
-
 use proptest::prelude::*;
 use zkevm_opcode_defs::ethereum_types::Address;
-use zksync_vm2::{
+
+use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register, Register1},
     initial_decommit,
-    testworld::TestWorld,
+    testonly::TestWorld,
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
 };
 

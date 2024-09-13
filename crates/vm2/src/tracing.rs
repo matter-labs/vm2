@@ -373,7 +373,7 @@ mod test {
     use zksync_vm2_interface::HeapId;
 
     use super::*;
-    use crate::{initial_decommit, testworld::TestWorld, Instruction, Program, VirtualMachine};
+    use crate::{initial_decommit, testonly::TestWorld, Instruction, Program, VirtualMachine};
 
     #[test]
     fn callframe_picking() {
