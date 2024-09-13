@@ -19,6 +19,7 @@ const NUMBER_OF_DIRTY_AREAS: usize = 64;
 const DIRTY_AREA_SIZE: usize = (1 << 16) / NUMBER_OF_DIRTY_AREAS;
 
 impl Stack {
+    #[allow(clippy::cast_ptr_alignment)] // aligned per `Stack` layout
     pub(crate) fn new() -> Box<Self> {
         unsafe { Box::from_raw(alloc_zeroed(Layout::new::<Stack>()).cast::<Stack>()) }
     }
@@ -39,14 +40,14 @@ impl Stack {
     fn zero(&mut self) {
         for i in 0..NUMBER_OF_DIRTY_AREAS {
             if self.dirty_areas & (1 << i) != 0 {
-                for slot in self.slots[i * DIRTY_AREA_SIZE..(i + 1) * DIRTY_AREA_SIZE].iter_mut() {
+                for slot in &mut self.slots[i * DIRTY_AREA_SIZE..(i + 1) * DIRTY_AREA_SIZE] {
                     *slot = U256::zero();
                 }
             }
         }
 
         self.dirty_areas = 0;
-        self.pointer_flags = Default::default();
+        self.pointer_flags = Bitset::default();
     }
 
     #[inline(always)]
@@ -112,13 +113,10 @@ pub(crate) struct StackPool {
 
 impl StackPool {
     pub(crate) fn get(&mut self) -> Box<Stack> {
-        self.stacks
-            .pop()
-            .map(|mut s| {
-                s.zero();
-                s
-            })
-            .unwrap_or_else(Stack::new)
+        self.stacks.pop().map_or_else(Stack::new, |mut s| {
+            s.zero();
+            s
+        })
     }
 
     pub(crate) fn recycle(&mut self, stack: Box<Stack>) {

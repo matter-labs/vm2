@@ -136,22 +136,25 @@ impl WorldDiff {
             .insert((contract, key), update_cost)
             .unwrap_or(0);
 
-        let refund = if !self.written_storage_slots.add((contract, key)) {
-            WARM_WRITE_REFUND
-        } else {
+        let refund = if self.written_storage_slots.add((contract, key)) {
             tracer.on_extra_prover_cycles(CycleStats::StorageWrite);
 
-            if !self.read_storage_slots.add((contract, key)) {
-                COLD_WRITE_AFTER_WARM_READ_REFUND
-            } else {
+            if self.read_storage_slots.add((contract, key)) {
                 0
+            } else {
+                COLD_WRITE_AFTER_WARM_READ_REFUND
             }
+        } else {
+            WARM_WRITE_REFUND
         };
 
-        let pubdata_cost = (update_cost as i32) - (prepaid as i32);
-        self.pubdata.0 += pubdata_cost;
-        self.storage_refunds.push(refund);
-        self.pubdata_costs.push(pubdata_cost);
+        #[allow(clippy::cast_possible_wrap)]
+        {
+            let pubdata_cost = (update_cost as i32) - (prepaid as i32);
+            self.pubdata.0 += pubdata_cost;
+            self.storage_refunds.push(refund);
+            self.pubdata_costs.push(pubdata_cost);
+        }
         refund
     }
 
@@ -436,10 +439,10 @@ mod tests {
                 .collect::<BTreeMap<_, _>>();
             for (key, value) in second_changes {
                 let initial = initial_values.get(&key).copied();
-                if initial.unwrap_or_default() != value {
-                    combined.insert(key, (initial, value));
-                } else {
+                if initial.unwrap_or_default() == value {
                     combined.remove(&key);
+                } else {
+                    combined.insert(key, (initial, value));
                 }
             }
 

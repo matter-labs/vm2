@@ -1,3 +1,5 @@
+use std::ptr;
+
 use primitive_types::U256;
 use zksync_vm2_interface::HeapId;
 
@@ -26,7 +28,7 @@ impl From<&mut U256> for &mut FatPointer {
 impl From<U256> for FatPointer {
     fn from(value: U256) -> Self {
         unsafe {
-            let ptr: *const FatPointer = (&value as *const U256).cast();
+            let ptr: *const FatPointer = ptr::addr_of!(value).cast();
             ptr.read()
         }
     }

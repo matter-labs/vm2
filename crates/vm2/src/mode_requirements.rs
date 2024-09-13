@@ -1,5 +1,5 @@
 /// Requirements for the VM execution mode that can be placed by instructions.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct ModeRequirements(pub(crate) u8);
 
 impl ModeRequirements {
@@ -13,8 +13,8 @@ impl ModeRequirements {
         Self::new(false, false)
     }
 
-    pub(crate) fn met(&self, is_kernel: bool, is_static: bool) -> bool {
-        let enabled_modes = (is_kernel as u8) | ((!is_static as u8) << 1);
+    pub(crate) fn met(self, is_kernel: bool, is_static: bool) -> bool {
+        let enabled_modes = u8::from(is_kernel) | (u8::from(!is_static) << 1);
         enabled_modes & self.0 == self.0
     }
 }

@@ -138,7 +138,7 @@ impl Heap {
     /// Needed only by tracers
     pub(crate) fn read_byte(&self, address: u32) -> u8 {
         let (page, offset) = address_to_page_offset(address);
-        self.page(page).map(|page| page.0[offset]).unwrap_or(0)
+        self.page(page).map_or(0, |page| page.0[offset])
     }
 
     fn page(&self, idx: usize) -> Option<&HeapPage> {
@@ -184,7 +184,7 @@ fn address_to_page_offset(address: u32) -> (usize, usize) {
 
 #[derive(Debug, Clone)]
 pub(crate) struct Heaps {
-    heaps: Vec<Heap>,
+    inner: Vec<Heap>,
     pagepool: PagePool,
     bootloader_heap_rollback_info: Vec<(u32, U256)>,
     bootloader_aux_rollback_info: Vec<(u32, U256)>,
@@ -196,7 +196,7 @@ impl Heaps {
         // means the current heap in precompile calls
         let mut pagepool = PagePool::default();
         Self {
-            heaps: vec![
+            inner: vec![
                 Heap::default(),
                 Heap::from_bytes(calldata, &mut pagepool),
                 Heap::default(),
@@ -217,14 +217,15 @@ impl Heaps {
     }
 
     fn allocate_inner(&mut self, memory: &[u8]) -> HeapId {
-        let id = HeapId::from_u32_unchecked(self.heaps.len() as u32);
-        self.heaps
+        let id = u32::try_from(self.inner.len()).expect("heap ID overflow");
+        let id = HeapId::from_u32_unchecked(id);
+        self.inner
             .push(Heap::from_bytes(memory, &mut self.pagepool));
         id
     }
 
     pub(crate) fn deallocate(&mut self, heap: HeapId) {
-        let heap = mem::take(&mut self.heaps[heap.as_u32() as usize]);
+        let heap = mem::take(&mut self.inner[heap.as_u32() as usize]);
         for page in heap.pages.into_iter().flatten() {
             self.pagepool.recycle_page(page);
         }
@@ -240,7 +241,7 @@ impl Heaps {
             self.bootloader_aux_rollback_info
                 .push((start_address, prev_value));
         }
-        self.heaps[heap.as_u32() as usize].write_u256(start_address, value, &mut self.pagepool);
+        self.inner[heap.as_u32() as usize].write_u256(start_address, value, &mut self.pagepool);
     }
 
     pub(crate) fn snapshot(&self) -> (usize, usize) {
@@ -252,7 +253,7 @@ impl Heaps {
 
     pub(crate) fn rollback(&mut self, (heap_snap, aux_snap): (usize, usize)) {
         for (address, value) in self.bootloader_heap_rollback_info.drain(heap_snap..).rev() {
-            self.heaps[HeapId::FIRST.as_u32() as usize].write_u256(
+            self.inner[HeapId::FIRST.as_u32() as usize].write_u256(
                 address,
                 value,
                 &mut self.pagepool,
@@ -260,7 +261,7 @@ impl Heaps {
         }
 
         for (address, value) in self.bootloader_aux_rollback_info.drain(aux_snap..).rev() {
-            self.heaps[HeapId::FIRST_AUX.as_u32() as usize].write_u256(
+            self.inner[HeapId::FIRST_AUX.as_u32() as usize].write_u256(
                 address,
                 value,
                 &mut self.pagepool,
@@ -278,7 +279,7 @@ impl Index<HeapId> for Heaps {
     type Output = Heap;
 
     fn index(&self, index: HeapId) -> &Self::Output {
-        &self.heaps[index.as_u32() as usize]
+        &self.inner[index.as_u32() as usize]
     }
 }
 
@@ -286,9 +287,9 @@ impl Index<HeapId> for Heaps {
 // we allow additional empty heaps at the end of `Heaps`.
 impl PartialEq for Heaps {
     fn eq(&self, other: &Self) -> bool {
-        for i in 0..self.heaps.len().max(other.heaps.len()) {
-            if self.heaps.get(i).unwrap_or(&Heap::default())
-                != other.heaps.get(i).unwrap_or(&Heap::default())
+        for i in 0..self.inner.len().max(other.inner.len()) {
+            if self.inner.get(i).unwrap_or(&Heap::default())
+                != other.inner.get(i).unwrap_or(&Heap::default())
             {
                 return false;
             }
@@ -329,6 +330,7 @@ impl PagePool {
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation)]
 mod tests {
     use super::*;
 

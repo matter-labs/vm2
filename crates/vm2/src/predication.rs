@@ -8,16 +8,17 @@ pub(crate) struct Flags(u8);
 
 impl Flags {
     pub(crate) fn new(lt_of: bool, eq: bool, gt: bool) -> Self {
-        Flags(lt_of as u8 | ((eq as u8) << 1) | ((gt as u8) << 2) | ALWAYS_BIT)
+        Flags(u8::from(lt_of) | (u8::from(eq) << 1) | (u8::from(gt) << 2) | ALWAYS_BIT)
     }
 }
 
 /// Predicate for an instruction. Encoded so that comparing it to flags is efficient.
-#[derive(Copy, Clone, Debug, Hash)]
+#[derive(Copy, Clone, Debug, Default, Hash)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[repr(u8)]
 pub enum Predicate {
     /// Always execute the associated instruction.
+    #[default]
     Always = ALWAYS_BIT,
     /// Execute the associated instruction if the "greater than" execution flag is set.
     IfGT = GT_BIT,
@@ -37,15 +38,9 @@ pub enum Predicate {
 
 impl Predicate {
     #[inline(always)]
-    pub(crate) fn satisfied(&self, flags: &Flags) -> bool {
-        let bits = *self as u8;
+    pub(crate) fn satisfied(self, flags: &Flags) -> bool {
+        let bits = self as u8;
         bits & flags.0 != 0 && (bits >> 4) & flags.0 == 0
-    }
-}
-
-impl Default for Predicate {
-    fn default() -> Self {
-        Self::Always
     }
 }
 
