@@ -13,6 +13,7 @@ pub struct Stack {
     pointer_tag_written: bool,
 }
 
+#[allow(clippy::unused_self)] // to align signatures with real implementation
 impl Stack {
     pub(crate) fn new_arbitrary(
         u: &mut arbitrary::Unstructured,

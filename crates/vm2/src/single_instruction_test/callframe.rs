@@ -24,6 +24,8 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for Callframe<T, W> {
         // zk_evm considers smaller pages to be older
         // vm2 doesn't care about the order
         // but the calldata heap must be different from the heap and aux heap
+        #[allow(clippy::range_minus_one)]
+        // cannot use exclusive range because of `int_in_range()` signature
         let calldata_heap = HeapId::from_u32_unchecked(u.int_in_range(0..=base_page - 1)?);
 
         let program: Program<T, W> = u.arbitrary()?;

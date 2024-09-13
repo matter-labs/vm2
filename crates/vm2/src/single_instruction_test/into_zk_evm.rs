@@ -124,7 +124,7 @@ impl Memory for MockMemory {
     ) -> zk_evm::aux_structures::MemoryQuery {
         match query.location.memory_type {
             MemoryType::Stack => {
-                let slot = query.location.index.0 as u16;
+                let slot = u16::try_from(query.location.index.0).unwrap();
                 if query.rw_flag {
                     self.stack.set(slot, query.value);
                     if query.value_is_pointer {
@@ -177,7 +177,7 @@ impl Memory for MockMemory {
         query.value = self
             .code_page
             .get(query.location.index.0 as usize)
-            .cloned()
+            .copied()
             .unwrap_or_default();
         query
     }

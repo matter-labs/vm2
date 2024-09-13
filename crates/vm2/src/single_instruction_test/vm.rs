@@ -5,7 +5,7 @@ use zksync_vm2_interface::{HeapId, Tracer};
 use super::{heap::Heaps, stack::StackPool};
 use crate::{
     addressing_modes::Arguments, callframe::Callframe, fat_pointer::FatPointer, state::State,
-    Instruction, ModeRequirements, Predicate, Settings, VirtualMachine, World,
+    Instruction, ModeRequirements, Predicate, Settings, VirtualMachine, World, WorldDiff,
 };
 
 impl<T: Tracer, W> VirtualMachine<T, W> {
@@ -58,7 +58,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for VirtualMachine<T, W> {
                 current_frame.heap.as_u32() - 2,
             )?;
             *register = value;
-            register_pointer_flags |= (is_pointer as u16) << i;
+            register_pointer_flags |= u16::from(is_pointer) << i;
         }
 
         let heaps = Heaps::from_id(current_frame.heap, u)?;
@@ -77,7 +77,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for VirtualMachine<T, W> {
                 context_u128: u.arbitrary()?,
             },
             settings: u.arbitrary()?,
-            world_diff: Default::default(),
+            world_diff: WorldDiff::default(),
             stack_pool: StackPool {},
             panic: Box::new(Instruction::from_panic(
                 None,
@@ -90,7 +90,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for VirtualMachine<T, W> {
 
 /// Generates a pointer or non-pointer value.
 /// The pointers always point to the calldata heap or a heap larger than the base page.
-/// This is because heap < base_page in zk_evm means the same as heap == calldata_heap in vm2.
+/// This is because `heap < base_page` in `zk_evm` means the same as `heap == calldata_heap` in vm2.
 pub(crate) fn arbitrary_register_value(
     u: &mut arbitrary::Unstructured,
     calldata_heap: HeapId,

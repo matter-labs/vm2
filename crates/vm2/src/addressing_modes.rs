@@ -507,6 +507,7 @@ impl Register {
 
 #[cfg(feature = "arbitrary")]
 impl<'a> Arbitrary<'a> for Register {
+    #[allow(clippy::cast_possible_truncation)] // false positive: the value is <16
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self, arbitrary::Error> {
         Ok(Register(u.choose_index(16)? as u8))
     }

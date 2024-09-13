@@ -16,8 +16,8 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
 
 impl<T: Tracer, W: World<T>> State<T, W> {
     pub(crate) fn print_mock_info(&self) {
-        if let Some((heapid, heap)) = self.heaps.read.read_that_happened() {
-            println!("Heap: {:?}", heapid);
+        if let Some((heap_id, heap)) = self.heaps.read.read_that_happened() {
+            println!("Heap: {heap_id:?}");
             if let Some((address, value)) = heap.read.read_that_happened() {
                 println!("  {value:?} read from {address:?}");
             }
