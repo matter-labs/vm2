@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use primitive_types::U256;
 use zksync_vm2_interface::{
     opcodes::{self, Normal, Panic, Revert, TypeLevelReturnType},
@@ -81,7 +83,7 @@ where
 
             // But to continue execution would be nonsensical and can cause UB because there
             // is no next instruction after a panic arising from some other instruction.
-            vm.state.current_frame.set_invalid_pc();
+            vm.state.current_frame.pc = invalid_instruction();
 
             return if let Some(return_value) = return_value_or_panic {
                 let output = vm.state.heaps[return_value.memory_page]
@@ -180,6 +182,14 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W: World<T>>(
     vm.state.current_frame.set_pc_from_u16(exception_handler);
 
     tracer.after_instruction::<opcodes::Ret<Panic>, _>(vm);
+}
+
+/// Panics, burning all available gas.
+static INVALID_INSTRUCTION: Instruction<(), Infallible> = Instruction::from_invalid();
+
+pub(crate) fn invalid_instruction<'a, T, W>() -> &'a Instruction<T, W> {
+    // Safety: the handler of an invalid instruction is never read.
+    unsafe { &*std::ptr::addr_of!(INVALID_INSTRUCTION).cast() }
 }
 
 pub(crate) const RETURN_COST: u32 = 5;

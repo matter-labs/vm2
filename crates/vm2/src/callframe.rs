@@ -4,6 +4,7 @@ use zksync_vm2_interface::{HeapId, Tracer};
 
 use crate::{
     decommit::is_kernel,
+    instruction_handlers::invalid_instruction,
     program::Program,
     stack::{Stack, StackSnapshot},
     world_diff::Snapshot,
@@ -144,11 +145,7 @@ impl<T: Tracer, W: World<T>> Callframe<T, W> {
         self.pc = self
             .program
             .instruction(index)
-            .unwrap_or_else(|| self.program.invalid_instruction());
-    }
-
-    pub(crate) fn set_invalid_pc(&mut self) {
-        self.pc = self.program.invalid_instruction();
+            .unwrap_or_else(invalid_instruction);
     }
 
     /// The total amount of gas in this frame, including gas currently inaccessible because of a near call.
