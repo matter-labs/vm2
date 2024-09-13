@@ -17,7 +17,7 @@ pub struct TestWorld<T> {
     pub hash_to_contract: BTreeMap<U256, Program<T, Self>>,
 }
 
-impl<T> TestWorld<T> {
+impl<T: Tracer> TestWorld<T> {
     pub fn new(contracts: &[(Address, Program<T, Self>)]) -> Self {
         let mut address_to_hash = BTreeMap::new();
         let mut hash_to_contract = BTreeMap::new();

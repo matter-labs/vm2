@@ -24,7 +24,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
     let mut abi = U256::zero();
     abi.0[3] = gas_to_pass as u64;
 
-    let main_program = Program::new(
+    let main_program = Program::from_raw(
         vec![
             Instruction::from_add(
                 CodePage(RegisterAndImmediate {
@@ -68,7 +68,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
         vec![abi, ethereum_address.into()],
     );
 
-    let interpreter = Program::new(
+    let interpreter = Program::from_raw(
         vec![
             Instruction::from_add(
                 Register1(r0).into(),

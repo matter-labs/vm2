@@ -7,10 +7,10 @@ use crate::{
     callframe::{Callframe, NearCallFrame},
     decommit::is_kernel,
     predication::{self, Predicate},
-    VirtualMachine,
+    VirtualMachine, World,
 };
 
-impl<T, W> StateInterface for VirtualMachine<T, W> {
+impl<T: Tracer, W: World<T>> StateInterface for VirtualMachine<T, W> {
     fn read_register(&self, register: u8) -> (U256, bool) {
         (
             self.state.registers[register as usize],
@@ -168,7 +168,7 @@ struct CallframeWrapper<'a, T, W> {
     near_call: Option<usize>,
 }
 
-impl<T, W> CallframeInterface for CallframeWrapper<'_, T, W> {
+impl<T: Tracer, W: World<T>> CallframeInterface for CallframeWrapper<'_, T, W> {
     fn address(&self) -> H160 {
         self.frame.address
     }
@@ -377,7 +377,7 @@ mod test {
 
     #[test]
     fn callframe_picking() {
-        let program = Program::new(vec![Instruction::from_invalid()], vec![]);
+        let program = Program::from_raw(vec![Instruction::from_invalid()], vec![]);
 
         let address = Address::from_low_u64_be(0x1234567890abcdef);
         let mut world = TestWorld::new(&[(address, program)]);

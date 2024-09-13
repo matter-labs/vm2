@@ -1,6 +1,6 @@
 use primitive_types::H160;
 use zkevm_opcode_defs::system_params::{NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND};
-use zksync_vm2_interface::HeapId;
+use zksync_vm2_interface::{HeapId, Tracer};
 
 use crate::{
     decommit::is_kernel,
@@ -8,7 +8,7 @@ use crate::{
     program::Program,
     stack::{Stack, StackSnapshot},
     world_diff::Snapshot,
-    Instruction,
+    Instruction, World,
 };
 
 #[derive(Debug)]
@@ -54,7 +54,7 @@ pub(crate) struct NearCallFrame {
     world_before_this_frame: Snapshot,
 }
 
-impl<T, W> Callframe<T, W> {
+impl<T: Tracer, W: World<T>> Callframe<T, W> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         address: H160,

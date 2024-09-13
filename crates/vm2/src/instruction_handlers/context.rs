@@ -31,41 +31,41 @@ where
 }
 
 trait ContextOp: OpcodeType {
-    fn get<T, W>(state: &State<T, W>) -> U256;
+    fn get<T: Tracer, W: World<T>>(state: &State<T, W>) -> U256;
 }
 
 impl ContextOp for This {
-    fn get<T, W>(state: &State<T, W>) -> U256 {
+    fn get<T: Tracer, W: World<T>>(state: &State<T, W>) -> U256 {
         address_into_u256(state.current_frame.address)
     }
 }
 
 impl ContextOp for Caller {
-    fn get<T, W>(state: &State<T, W>) -> U256 {
+    fn get<T: Tracer, W: World<T>>(state: &State<T, W>) -> U256 {
         address_into_u256(state.current_frame.caller)
     }
 }
 
 impl ContextOp for CodeAddress {
-    fn get<T, W>(state: &State<T, W>) -> U256 {
+    fn get<T: Tracer, W: World<T>>(state: &State<T, W>) -> U256 {
         address_into_u256(state.current_frame.code_address)
     }
 }
 
 impl ContextOp for ErgsLeft {
-    fn get<T, W>(state: &State<T, W>) -> U256 {
+    fn get<T: Tracer, W: World<T>>(state: &State<T, W>) -> U256 {
         U256([state.current_frame.gas as u64, 0, 0, 0])
     }
 }
 
 impl ContextOp for ContextU128 {
-    fn get<T, W>(state: &State<T, W>) -> U256 {
+    fn get<T: Tracer, W: World<T>>(state: &State<T, W>) -> U256 {
         state.get_context_u128().into()
     }
 }
 
 impl ContextOp for SP {
-    fn get<T, W>(state: &State<T, W>) -> U256 {
+    fn get<T: Tracer, W: World<T>>(state: &State<T, W>) -> U256 {
         state.current_frame.sp.into()
     }
 }

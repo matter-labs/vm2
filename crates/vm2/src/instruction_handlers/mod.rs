@@ -1,8 +1,3 @@
-pub use zksync_vm2_interface::opcodes::{
-    Add, And, Div, Mul, Or, PointerAdd, PointerPack, PointerShrink, PointerSub, RotateLeft,
-    RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
-};
-
 pub(crate) use self::{
     heap_access::{AuxHeap, Heap},
     ret::{invalid_instruction, RETURN_COST},

@@ -29,7 +29,7 @@ proptest! {
             ));
         }
 
-        let program = Program::new(instructions, vec![]);
+        let program = Program::from_raw(instructions, vec![]);
 
         let address = Address::from_low_u64_be(0x1234567890abcdef);
         let mut world = TestWorld::new(&[(address, program)]);

@@ -162,7 +162,7 @@ pub(crate) fn free_panic<T: Tracer, W: World<T>>(
 
 /// Formally, a far call pushes a new frame and returns from it immediately if it panics.
 /// This function instead panics without popping a frame to save on allocation.
-pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
+pub(crate) fn panic_from_failed_far_call<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     tracer: &mut T,
     exception_handler: u16,
@@ -171,14 +171,10 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
 
     // Gas is already subtracted in the far call code.
     // No need to roll back, as no changes are made in this "frame".
-
     vm.state.set_context_u128(0);
-
     vm.state.registers = [U256::zero(); 16];
     vm.state.register_pointer_flags = 2;
-
     vm.state.flags = Flags::new(true, false, false);
-
     vm.state.current_frame.set_pc_from_u16(exception_handler);
 
     tracer.after_instruction::<opcodes::Ret<Panic>, _>(vm);

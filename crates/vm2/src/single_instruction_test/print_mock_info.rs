@@ -1,6 +1,8 @@
-use crate::{callframe::Callframe, state::State, VirtualMachine};
+use zksync_vm2_interface::Tracer;
 
-impl<T, W> VirtualMachine<T, W> {
+use crate::{callframe::Callframe, state::State, VirtualMachine, World};
+
+impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
     pub fn print_mock_info(&self) {
         self.state.print_mock_info();
         println!("Events: {:?}", self.world_diff.events());
@@ -12,7 +14,7 @@ impl<T, W> VirtualMachine<T, W> {
     }
 }
 
-impl<T, W> State<T, W> {
+impl<T: Tracer, W: World<T>> State<T, W> {
     pub fn print_mock_info(&self) {
         if let Some((heapid, heap)) = self.heaps.read.read_that_happened() {
             println!("Heap: {:?}", heapid);

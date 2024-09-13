@@ -29,7 +29,7 @@ fn create_test_world() -> TestWorld<()> {
     let mut abi = U256::zero();
     abi.0[3] = GAS_TO_PASS.into();
 
-    let main_program = Program::new(
+    let main_program = Program::from_raw(
         vec![
             // 0..=2: Prepare and execute far call
             Instruction::from_add(
@@ -88,7 +88,7 @@ fn create_test_world() -> TestWorld<()> {
         vec![abi, CALLED_ADDRESS.to_low_u64_be().into()],
     );
 
-    let called_program = Program::new(
+    let called_program = Program::from_raw(
         vec![
             Instruction::from_add(
                 Register1(r0).into(),

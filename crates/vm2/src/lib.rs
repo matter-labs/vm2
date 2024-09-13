@@ -26,7 +26,7 @@ pub mod addressing_modes;
 #[cfg(not(feature = "single_instruction_test"))]
 mod bitset;
 mod callframe;
-pub mod decode;
+mod decode;
 mod decommit;
 mod fat_pointer;
 #[cfg(not(feature = "single_instruction_test"))]

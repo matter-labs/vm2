@@ -1,27 +1,14 @@
 #![cfg(not(feature = "single_instruction_test"))]
 
-use primitive_types::U256;
 use zkevm_opcode_defs::ethereum_types::Address;
 use zksync_vm2::{
-    decode::decode_program, initial_decommit, testworld::TestWorld, ExecutionEnd, Program,
-    Settings, VirtualMachine, World,
+    initial_decommit, testworld::TestWorld, ExecutionEnd, Program, Settings, VirtualMachine, World,
 };
 use zksync_vm2_interface::{CallframeInterface, StateInterface, Tracer};
 
 fn program_from_file<T: Tracer, W: World<T>>(filename: &str) -> Program<T, W> {
     let blob = std::fs::read(filename).unwrap();
-    Program::new(
-        decode_program(
-            &blob
-                .chunks_exact(8)
-                .map(|chunk| u64::from_be_bytes(chunk.try_into().unwrap()))
-                .collect::<Vec<_>>(),
-            false,
-        ),
-        blob.chunks_exact(32)
-            .map(U256::from_big_endian)
-            .collect::<Vec<_>>(),
-    )
+    Program::new(blob, false)
 }
 
 #[test]

@@ -6,7 +6,13 @@ use zkevm_opcode_defs::{
     RET_TO_LABEL_BIT_IDX, SET_FLAGS_FLAG_IDX, SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES,
     SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
 };
-use zksync_vm2_interface::{opcodes, Tracer};
+use zksync_vm2_interface::{
+    opcodes::{
+        self, Add, And, Div, Mul, Or, PointerAdd, PointerPack, PointerShrink, PointerSub,
+        RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
+    },
+    Tracer,
+};
 
 use crate::{
     addressing_modes::{
@@ -14,31 +20,12 @@ use crate::{
         Immediate1, Immediate2, Register, Register1, Register2, RegisterAndImmediate,
         RelativeStack, Source, SourceWriter,
     },
-    instruction::{jump_to_beginning, ExecutionEnd, ExecutionStatus},
-    instruction_handlers::{
-        Add, And, Div, Mul, Or, PointerAdd, PointerPack, PointerShrink, PointerSub, RotateLeft,
-        RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
-    },
+    instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
     Instruction, Predicate, VirtualMachine, World,
 };
 
-pub fn decode_program<T: Tracer, W: World<T>>(
-    raw: &[u64],
-    is_bootloader: bool,
-) -> Vec<Instruction<T, W>> {
-    raw.iter()
-        .take(1 << 16)
-        .map(|i| decode(*i, is_bootloader))
-        .chain(std::iter::once(if raw.len() >= 1 << 16 {
-            jump_to_beginning()
-        } else {
-            Instruction::from_invalid()
-        }))
-        .collect()
-}
-
-fn unimplemented_instruction<T, W>(variant: Opcode) -> Instruction<T, W> {
+fn unimplemented_instruction<T: Tracer, W: World<T>>(variant: Opcode) -> Instruction<T, W> {
     let mut arguments = Arguments::new(Predicate::Always, 0, ModeRequirements::none());
     let variant_as_number: u16 = unsafe { std::mem::transmute(variant) };
     Immediate1(variant_as_number).write_source(&mut arguments);
@@ -48,7 +35,7 @@ fn unimplemented_instruction<T, W>(variant: Opcode) -> Instruction<T, W> {
     }
 }
 
-fn unimplemented_handler<T, W>(
+fn unimplemented_handler<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     _: &mut W,
     _: &mut T,

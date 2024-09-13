@@ -11,7 +11,7 @@ use zksync_vm2::{
 
 #[divan::bench]
 fn nested_near_call(bencher: Bencher) {
-    let program = Program::new(
+    let program = Program::from_raw(
         vec![Instruction::from_near_call(
             // zero means pass all gas
             Register1(Register::new(0)),
@@ -46,7 +46,7 @@ fn nested_near_call(bencher: Bencher) {
 
 #[divan::bench]
 fn nested_near_call_with_storage_write(bencher: Bencher) {
-    let program = Program::new(
+    let program = Program::from_raw(
         vec![
             Instruction::from_ergs_left(
                 Register1(Register::new(1)),
