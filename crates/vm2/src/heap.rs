@@ -230,7 +230,7 @@ impl Heaps {
         }
     }
 
-    pub fn write_u256(&mut self, heap: HeapId, start_address: u32, value: U256) {
+    pub(crate) fn write_u256(&mut self, heap: HeapId, start_address: u32, value: U256) {
         if heap == HeapId::FIRST {
             let prev_value = self[heap].read_u256(start_address);
             self.bootloader_heap_rollback_info

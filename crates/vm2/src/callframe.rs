@@ -139,14 +139,14 @@ impl<T: Tracer, W: World<T>> Callframe<T, W> {
 
     /// Sets the next instruction to execute to the instruction at the given index.
     /// If the index is out of bounds, the invalid instruction is used.
-    pub fn set_pc_from_u16(&mut self, index: u16) {
+    pub(crate) fn set_pc_from_u16(&mut self, index: u16) {
         self.pc = self
             .program
             .instruction(index)
             .unwrap_or_else(|| self.program.invalid_instruction())
     }
 
-    pub fn set_invalid_pc(&mut self) {
+    pub(crate) fn set_invalid_pc(&mut self) {
         self.pc = self.program.invalid_instruction();
     }
 

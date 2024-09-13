@@ -18,7 +18,9 @@ use crate::{
 /// [`VirtualMachine`] settings.
 #[derive(Debug, Clone)]
 pub struct Settings {
+    /// Bytecode hash of the default account abstraction contract.
     pub default_aa_code_hash: [u8; 32],
+    /// Bytecode hash of the EVM interpreter.
     pub evm_interpreter_code_hash: [u8; 32],
     /// Writing to this address in the bootloader's heap suspends execution
     pub hook_address: u32,

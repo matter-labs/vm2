@@ -5,7 +5,7 @@ use zkevm_opcode_defs::system_params::{
     STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST, STORAGE_ACCESS_WARM_READ_COST,
     STORAGE_ACCESS_WARM_WRITE_COST,
 };
-use zksync_vm2_interface::{CycleStats, Tracer};
+use zksync_vm2_interface::{CycleStats, Event, L2ToL1Log, Tracer};
 
 use crate::{
     rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackablePod, RollbackableSet},
@@ -39,34 +39,13 @@ pub struct WorldDiff {
 }
 
 #[derive(Debug)]
-pub struct ExternalSnapshot {
+pub(crate) struct ExternalSnapshot {
     internal_snapshot: Snapshot,
     pub(crate) decommitted_hashes: <RollbackableMap<U256, ()> as Rollback>::Snapshot,
     read_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
     written_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
     storage_refunds: <RollbackableLog<u32> as Rollback>::Snapshot,
     pubdata_costs: <RollbackableLog<i32> as Rollback>::Snapshot,
-}
-
-/// There is no address field because nobody is interested in events that don't come
-/// from the event writer, so we simply do not record events coming frome anywhere else.
-#[derive(Clone, PartialEq, Debug)]
-pub struct Event {
-    pub key: U256,
-    pub value: U256,
-    pub is_first: bool,
-    pub shard_id: u8,
-    pub tx_number: u16,
-}
-
-#[derive(Debug)]
-pub struct L2ToL1Log {
-    pub key: U256,
-    pub value: U256,
-    pub is_service: bool,
-    pub address: H160,
-    pub shard_id: u8,
-    pub tx_number: u16,
 }
 
 impl WorldDiff {
@@ -176,22 +155,25 @@ impl WorldDiff {
         refund
     }
 
-    pub fn pubdata(&self) -> i32 {
+    pub(crate) fn pubdata(&self) -> i32 {
         self.pubdata.0
     }
 
+    /// Returns recorded refunds for all storage operations.
     pub fn storage_refunds(&self) -> &[u32] {
         self.storage_refunds.as_ref()
     }
 
+    /// Returns recorded pubdata costs for all storage operations.
     pub fn pubdata_costs(&self) -> &[i32] {
         self.pubdata_costs.as_ref()
     }
 
-    pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
+    pub(crate) fn get_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
         self.storage_changes.as_ref()
     }
 
+    /// Gets changes for all touched storage slots.
     pub fn get_storage_changes(
         &self,
     ) -> impl Iterator<Item = ((H160, U256), (Option<U256>, U256))> + '_ {
@@ -207,6 +189,7 @@ impl WorldDiff {
             })
     }
 
+    /// Gets changes for storage slots touched after the specified `snapshot` was created.
     pub fn get_storage_changes_after(
         &self,
         snapshot: &Snapshot,
@@ -242,7 +225,7 @@ impl WorldDiff {
             .insert((contract, key), value);
     }
 
-    pub fn get_transient_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
+    pub(crate) fn get_transient_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
         self.transient_storage_changes.as_ref()
     }
 
@@ -250,10 +233,11 @@ impl WorldDiff {
         self.events.push(event);
     }
 
-    pub fn events(&self) -> &[Event] {
+    pub(crate) fn events(&self) -> &[Event] {
         self.events.as_ref()
     }
 
+    /// Returns events emitted after the specified `snapshot` was created.
     pub fn events_after(&self, snapshot: &Snapshot) -> &[Event] {
         self.events.logs_after(snapshot.events)
     }
@@ -262,10 +246,11 @@ impl WorldDiff {
         self.l2_to_l1_logs.push(log);
     }
 
-    pub fn l2_to_l1_logs(&self) -> &[L2ToL1Log] {
+    pub(crate) fn l2_to_l1_logs(&self) -> &[L2ToL1Log] {
         self.l2_to_l1_logs.as_ref()
     }
 
+    /// Returns L2-to-L1 logs emitted after the specified `snapshot` was created.
     pub fn l2_to_l1_logs_after(&self, snapshot: &Snapshot) -> &[L2ToL1Log] {
         self.l2_to_l1_logs.logs_after(snapshot.l2_to_l1_logs)
     }

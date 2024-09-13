@@ -111,7 +111,7 @@ pub(crate) struct StackPool {
 }
 
 impl StackPool {
-    pub fn get(&mut self) -> Box<Stack> {
+    pub(crate) fn get(&mut self) -> Box<Stack> {
         self.stacks
             .pop()
             .map(|mut s| {
@@ -121,7 +121,7 @@ impl StackPool {
             .unwrap_or_else(Stack::new)
     }
 
-    pub fn recycle(&mut self, stack: Box<Stack>) {
+    pub(crate) fn recycle(&mut self, stack: Box<Stack>) {
         self.stacks.push(stack);
     }
 }

@@ -61,7 +61,7 @@ pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> I
         zkevm_opcode_defs::Condition::Ge => crate::Predicate::IfGE,
         zkevm_opcode_defs::Condition::Le => crate::Predicate::IfLE,
         zkevm_opcode_defs::Condition::Ne => crate::Predicate::IfNotEQ,
-        zkevm_opcode_defs::Condition::GtOrLt => crate::Predicate::IfGtOrLT,
+        zkevm_opcode_defs::Condition::GtOrLt => crate::Predicate::IfGTOrLT,
     };
     let arguments = Arguments::new(
         predicate,

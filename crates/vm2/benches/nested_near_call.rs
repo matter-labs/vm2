@@ -1,3 +1,5 @@
+//! Low-level benchmarks.
+
 use divan::{black_box, Bencher};
 use zkevm_opcode_defs::ethereum_types::Address;
 use zksync_vm2::{

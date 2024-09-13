@@ -1,12 +1,11 @@
 use primitive_types::H160;
 use zkevm_opcode_defs::ADDRESS_EVENT_WRITER;
-use zksync_vm2_interface::{opcodes, Tracer};
+use zksync_vm2_interface::{opcodes, Event, L2ToL1Log, Tracer};
 
 use super::common::boilerplate_ext;
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
     instruction::ExecutionStatus,
-    world_diff::{Event, L2ToL1Log},
     Instruction, VirtualMachine, World,
 };
 

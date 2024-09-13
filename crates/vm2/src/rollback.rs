@@ -15,7 +15,7 @@ pub(crate) struct RollbackableMap<K: Ord, V> {
 }
 
 impl<K: Ord + Clone, V: Clone> RollbackableMap<K, V> {
-    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+    pub(crate) fn insert(&mut self, key: K, value: V) -> Option<V> {
         let old_value = self.map.insert(key.clone(), value);
         self.old_entries.push((key, old_value.clone()));
         old_value
@@ -72,7 +72,7 @@ pub(crate) struct RollbackableSet<K: Ord> {
 
 impl<T: Ord + Clone> RollbackableSet<T> {
     /// Adds `key` to the set and returns if it was added (not present earlier).
-    pub fn add(&mut self, key: T) -> bool {
+    pub(crate) fn add(&mut self, key: T) -> bool {
         let is_new = self.map.insert(key.clone(), ()).is_none();
         if is_new {
             self.old_entries.push(key);
@@ -133,7 +133,7 @@ impl<T> Rollback for RollbackableLog<T> {
 }
 
 impl<T> RollbackableLog<T> {
-    pub fn push(&mut self, entry: T) {
+    pub(crate) fn push(&mut self, entry: T) {
         self.entries.push(entry)
     }
 
@@ -150,7 +150,7 @@ impl<T> AsRef<[T]> for RollbackableLog<T> {
 
 /// Rollbackable Plain Old Data simply stores copies of itself in snapshots.
 #[derive(Debug, Default, Copy, Clone)]
-pub(crate) struct RollbackablePod<T: Copy>(pub T);
+pub(crate) struct RollbackablePod<T: Copy>(pub(crate) T);
 
 impl<T: Copy> Rollback for RollbackablePod<T> {
     type Snapshot = T;

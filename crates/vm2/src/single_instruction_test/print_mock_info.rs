@@ -15,7 +15,7 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
 }
 
 impl<T: Tracer, W: World<T>> State<T, W> {
-    pub fn print_mock_info(&self) {
+    pub(crate) fn print_mock_info(&self) {
         if let Some((heapid, heap)) = self.heaps.read.read_that_happened() {
             println!("Heap: {:?}", heapid);
             if let Some((address, value)) = heap.read.read_that_happened() {
@@ -37,7 +37,7 @@ impl<T: Tracer, W: World<T>> State<T, W> {
 }
 
 impl<T, W> Callframe<T, W> {
-    pub fn print_mock_info(&self) {
+    pub(crate) fn print_mock_info(&self) {
         if let Some((address, (value, tag))) = self.stack.read_that_happened() {
             println!("  {value:?} (is_pointer: {tag}) read from stack address {address}",);
         }

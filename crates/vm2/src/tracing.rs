@@ -134,24 +134,11 @@ impl<T: Tracer, W: World<T>> StateInterface for VirtualMachine<T, W> {
     }
 
     fn events(&self) -> impl Iterator<Item = Event> {
-        self.world_diff.events().iter().map(|event| Event {
-            key: event.key,
-            value: event.value,
-            is_first: event.is_first,
-            shard_id: event.shard_id,
-            tx_number: event.tx_number,
-        })
+        self.world_diff.events().iter().copied()
     }
 
     fn l2_to_l1_logs(&self) -> impl Iterator<Item = L2ToL1Log> {
-        self.world_diff.l2_to_l1_logs().iter().map(|log| L2ToL1Log {
-            address: log.address,
-            key: log.key,
-            value: log.value,
-            is_service: log.is_service,
-            shard_id: log.shard_id,
-            tx_number: log.tx_number,
-        })
+        self.world_diff.l2_to_l1_logs().iter().copied()
     }
 
     fn pubdata(&self) -> i32 {

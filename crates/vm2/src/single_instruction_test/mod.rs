@@ -5,6 +5,8 @@
 //!
 //! The same kind of mocking in applied to stack memory, the program, the world and callstack.
 
+#![allow(missing_docs)]
+
 pub use self::{
     into_zk_evm::{add_heap_to_zk_evm, vm2_to_zk_evm, NoTracer},
     universal_state::UniversalVmState,

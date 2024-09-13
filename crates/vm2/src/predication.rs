@@ -4,32 +4,40 @@ const GT_BIT: u8 = 1 << 2;
 const ALWAYS_BIT: u8 = 1 << 3;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Flags(u8);
+pub(crate) struct Flags(u8);
 
 impl Flags {
-    pub fn new(lt_of: bool, eq: bool, gt: bool) -> Self {
+    pub(crate) fn new(lt_of: bool, eq: bool, gt: bool) -> Self {
         Flags(lt_of as u8 | ((eq as u8) << 1) | ((gt as u8) << 2) | ALWAYS_BIT)
     }
 }
 
-/// Predicate encoded so that comparing it to flags is efficient
+/// Predicate for an instruction. Encoded so that comparing it to flags is efficient.
 #[derive(Copy, Clone, Debug, Hash)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[repr(u8)]
 pub enum Predicate {
+    /// Always execute the associated instruction.
     Always = ALWAYS_BIT,
+    /// Execute the associated instruction if the "greater than" execution flag is set.
     IfGT = GT_BIT,
+    /// Execute the associated instruction if the "equal" execution flag is set.
     IfEQ = EQ_BIT,
+    /// Execute the associated instruction if the "less than" execution flag is set.
     IfLT = LT_BIT,
+    /// Execute the associated instruction if either of "greater than" or "equal" execution flags are set.
     IfGE = GT_BIT | EQ_BIT,
+    /// Execute the associated instruction if either of "less than" or "equal" execution flags are set.
     IfLE = LT_BIT | EQ_BIT,
+    /// Execute the associated instruction if the "equal" execution flag is not set.
     IfNotEQ = EQ_BIT << 4 | ALWAYS_BIT,
-    IfGtOrLT = GT_BIT | LT_BIT,
+    /// Execute the associated instruction if either of "less than" or "greater than" execution flags are set.
+    IfGTOrLT = GT_BIT | LT_BIT,
 }
 
 impl Predicate {
     #[inline(always)]
-    pub fn satisfied(&self, flags: &Flags) -> bool {
+    pub(crate) fn satisfied(&self, flags: &Flags) -> bool {
         let bits = *self as u8;
         bits & flags.0 != 0 && (bits >> 4) & flags.0 == 0
     }

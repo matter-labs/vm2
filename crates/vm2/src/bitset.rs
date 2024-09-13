@@ -4,19 +4,19 @@ pub(crate) struct Bitset([u64; 1 << 10]);
 
 impl Bitset {
     #[inline(always)]
-    pub fn get(&self, i: u16) -> bool {
+    pub(crate) fn get(&self, i: u16) -> bool {
         let (slot, bit) = slot_and_bit(i);
         self.0[slot] & bit != 0
     }
 
     #[inline(always)]
-    pub fn set(&mut self, i: u16) {
+    pub(crate) fn set(&mut self, i: u16) {
         let (slot, bit) = slot_and_bit(i);
         self.0[slot] |= bit;
     }
 
     #[inline(always)]
-    pub fn clear(&mut self, i: u16) {
+    pub(crate) fn clear(&mut self, i: u16) {
         let (slot, bit) = slot_and_bit(i);
         self.0[slot] &= !bit;
     }

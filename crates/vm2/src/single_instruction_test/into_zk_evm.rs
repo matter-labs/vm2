@@ -94,7 +94,7 @@ pub struct MockMemory {
 // One arbitrary heap value is not enough for zk_evm
 // because it reads two U256s to read one U256.
 #[derive(Debug, Copy, Clone)]
-pub struct ExpectedHeapValue {
+pub(crate) struct ExpectedHeapValue {
     heap: u32,
     start_index: u32,
     value: [u8; 32],
@@ -199,10 +199,7 @@ impl Storage for MockWorldWrapper {
         &mut self,
         _: u32,
         mut query: zk_evm::aux_structures::LogQuery,
-    ) -> (
-        zk_evm::aux_structures::LogQuery,
-        zk_evm::aux_structures::PubdataCost,
-    ) {
+    ) -> (zk_evm::aux_structures::LogQuery, PubdataCost) {
         if query.rw_flag {
             (query, PubdataCost(0))
         } else {
@@ -237,12 +234,12 @@ impl DecommittmentProcessor for MockDecommitter {
         Ok(partial_query)
     }
 
-    fn decommit_into_memory<M: zk_evm::abstractions::Memory>(
+    fn decommit_into_memory<M: Memory>(
         &mut self,
         _: u32,
         _partial_query: zk_evm::aux_structures::DecommittmentQuery,
         _memory: &mut M,
-    ) -> anyhow::Result<Option<Vec<zk_evm::ethereum_types::U256>>> {
+    ) -> anyhow::Result<Option<Vec<U256>>> {
         Ok(None)
     }
 }
@@ -289,7 +286,7 @@ impl tracing::Tracer for NoTracer {
 pub struct NoOracle;
 
 impl PrecompilesProcessor for NoOracle {
-    fn execute_precompile<M: zk_evm::abstractions::Memory>(
+    fn execute_precompile<M: Memory>(
         &mut self,
         _: u32,
         _: zk_evm::aux_structures::LogQuery,
@@ -336,7 +333,7 @@ impl VmWitnessTracer<8, EncodingModeProduction> for NoOracle {
         &mut self,
         _: u32,
         _: zk_evm::aux_structures::LogQuery,
-        _: zk_evm::aux_structures::PubdataCost,
+        _: PubdataCost,
     ) {
     }
 
@@ -347,7 +344,7 @@ impl VmWitnessTracer<8, EncodingModeProduction> for NoOracle {
         &mut self,
         _: u32,
         _: zk_evm::aux_structures::DecommittmentQuery,
-        _: Vec<zk_evm::ethereum_types::U256>,
+        _: Vec<U256>,
     ) {
     }
 

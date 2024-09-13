@@ -174,7 +174,7 @@ impl HeapId {
 ///
 /// There is no address field because nobody is interested in events that don't come
 /// from the event writer, so we simply do not record events coming from anywhere else.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Event {
     /// Event key.
     pub key: U256,
@@ -189,7 +189,7 @@ pub struct Event {
 }
 
 /// L2-to-L1 log emitted by EraVM.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct L2ToL1Log {
     /// Log key.
     pub key: U256,

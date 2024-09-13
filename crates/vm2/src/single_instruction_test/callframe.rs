@@ -65,11 +65,11 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for Callframe<T, W> {
 }
 
 impl<T: Tracer, W: World<T>> Callframe<T, W> {
-    pub fn raw_first_instruction(&self) -> u64 {
+    pub(crate) fn raw_first_instruction(&self) -> u64 {
         self.program.raw_first_instruction
     }
 
-    pub fn dummy() -> Self {
+    pub(crate) fn dummy() -> Self {
         Self {
             address: H160::zero(),
             code_address: H160::zero(),

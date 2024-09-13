@@ -27,6 +27,9 @@ anyhow = { workspace = true, optional = true }
 divan.workspace = true
 proptest.workspace = true
 
+[lints]
+workspace = true
+
 [[bench]]
 name = "nested_near_call"
 harness = false

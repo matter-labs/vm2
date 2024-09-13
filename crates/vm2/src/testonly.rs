@@ -16,11 +16,12 @@ use crate::{address_into_u256, Program, StorageInterface, World};
 /// Test [`World`] implementation.
 #[derive(Debug)]
 pub struct TestWorld<T> {
-    pub address_to_hash: BTreeMap<U256, U256>,
-    pub hash_to_contract: BTreeMap<U256, Program<T, Self>>,
+    pub(crate) address_to_hash: BTreeMap<U256, U256>,
+    pub(crate) hash_to_contract: BTreeMap<U256, Program<T, Self>>,
 }
 
 impl<T: Tracer> TestWorld<T> {
+    /// Creates a test world with the provided programs.
     pub fn new(contracts: &[(Address, Program<T, Self>)]) -> Self {
         let mut address_to_hash = BTreeMap::new();
         let mut hash_to_contract = BTreeMap::new();

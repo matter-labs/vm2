@@ -87,7 +87,7 @@ impl<T: DestinationWriter> DestinationWriter for Option<T> {
     }
 }
 
-/// Argument provided to an instruction in an EraVM bytecode.
+/// Arguments provided to an instruction in an EraVM bytecode.
 // It is important for performance that this fits into 8 bytes.
 #[derive(Debug)]
 pub struct Arguments {
@@ -105,6 +105,7 @@ pub(crate) const SLOAD_COST: u32 = 2008;
 pub(crate) const INVALID_INSTRUCTION_COST: u32 = 4294967295;
 
 impl Arguments {
+    /// Creates arguments from the provided info.
     pub const fn new(
         predicate: Predicate,
         gas_cost: u32,
@@ -280,7 +281,9 @@ impl SourceWriter for Immediate2 {
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub struct RegisterAndImmediate {
+    /// Immediate value.
     pub immediate: u16,
+    /// Register spec.
     pub register: Register,
 }
 
@@ -510,16 +513,22 @@ impl PackedRegisters {
     }
 }
 
-/// All supported addressing modes for source arguments.
+/// All supported addressing modes for the first source argument.
 #[enum_dispatch(SourceWriter)]
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub enum AnySource {
+    /// Register mode.
     Register1,
+    /// Immediate mode.
     Immediate1,
+    /// Absolute stack addressing.
     AbsoluteStack,
+    /// Relative stack addressing.
     RelativeStack,
+    /// Relative stack addressing that updates the stack pointer on access.
     AdvanceStackPointer,
+    /// Addressing into the code page of the executing contract.
     CodePage,
 }
 
@@ -528,7 +537,9 @@ pub enum AnySource {
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub enum RegisterOrImmediate {
+    /// Register mode.
     Register1,
+    /// Immediate mode.
     Immediate1,
 }
 
@@ -548,13 +559,17 @@ impl TryFrom<AnySource> for RegisterOrImmediate {
     }
 }
 
-/// All supported addressing modes for destination arguments.
+/// All supported addressing modes for the first destination argument.
 #[enum_dispatch(DestinationWriter)]
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub enum AnyDestination {
+    /// Register mode.
     Register1,
+    /// Absolute stack addressing.
     AbsoluteStack,
+    /// Relative stack addressing.
     RelativeStack,
+    /// Relative stack addressing that updates the stack pointer on access.
     AdvanceStackPointer,
 }

@@ -158,11 +158,12 @@ fn far_call<
     })
 }
 
+#[derive(Debug)]
 pub(crate) struct FarCallABI {
-    pub gas_to_pass: u32,
-    pub shard_id: u8,
-    pub is_constructor_call: bool,
-    pub is_system_call: bool,
+    pub(crate) gas_to_pass: u32,
+    pub(crate) shard_id: u8,
+    pub(crate) is_constructor_call: bool,
+    pub(crate) is_system_call: bool,
 }
 
 pub(crate) fn get_far_call_arguments(abi: U256) -> FarCallABI {
@@ -204,11 +205,11 @@ pub(crate) fn get_far_call_calldata<T: Tracer, W: World<T>>(
                     return None;
                 }
                 match target {
-                    ToHeap => {
+                    FatPointerTarget::ToHeap => {
                         grow_heap::<_, _, Heap>(&mut vm.state, bound).ok()?;
                         pointer.memory_page = vm.state.current_frame.heap;
                     }
-                    ToAuxHeap => {
+                    FatPointerTarget::ToAuxHeap => {
                         grow_heap::<_, _, AuxHeap>(&mut vm.state, bound).ok()?;
                         pointer.memory_page = vm.state.current_frame.aux_heap;
                     }
@@ -218,10 +219,10 @@ pub(crate) fn get_far_call_calldata<T: Tracer, W: World<T>>(
                 // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
                 let bound = u32::MAX;
                 match target {
-                    ToHeap => {
+                    FatPointerTarget::ToHeap => {
                         grow_heap::<_, _, Heap>(&mut vm.state, bound).ok()?;
                     }
-                    ToAuxHeap => {
+                    FatPointerTarget::ToAuxHeap => {
                         grow_heap::<_, _, AuxHeap>(&mut vm.state, bound).ok()?;
                     }
                 }
@@ -233,23 +234,25 @@ pub(crate) fn get_far_call_calldata<T: Tracer, W: World<T>>(
     Some(pointer)
 }
 
+#[derive(Debug)]
 enum FatPointerSource {
     MakeNewPointer(FatPointerTarget),
     ForwardFatPointer,
 }
+
+#[derive(Debug)]
 enum FatPointerTarget {
     ToHeap,
     ToAuxHeap,
 }
-use FatPointerTarget::*;
 
 impl FatPointerSource {
-    pub const fn from_abi(value: u8) -> Self {
+    pub(crate) const fn from_abi(value: u8) -> Self {
         match value {
-            0 => Self::MakeNewPointer(ToHeap),
+            0 => Self::MakeNewPointer(FatPointerTarget::ToHeap),
             1 => Self::ForwardFatPointer,
-            2 => Self::MakeNewPointer(ToAuxHeap),
-            _ => Self::MakeNewPointer(ToHeap), // default
+            2 => Self::MakeNewPointer(FatPointerTarget::ToAuxHeap),
+            _ => Self::MakeNewPointer(FatPointerTarget::ToHeap), // default
         }
     }
 }

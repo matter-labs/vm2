@@ -1,8 +1,13 @@
+//! # High-Performance ZKsync Era VM
+//!
+//! This crate provides high-performance [`VirtualMachine`] for ZKsync Era.
+
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use primitive_types::{H160, U256};
 pub use zksync_vm2_interface::{
-    CallframeInterface, CycleStats, HeapId, Opcode, OpcodeType, ReturnType, StateInterface, Tracer,
+    CallframeInterface, CycleStats, Event, HeapId, L2ToL1Log, Opcode, OpcodeType, ReturnType,
+    StateInterface, Tracer,
 };
 
 // Re-export missing modules if single instruction testing is enabled
@@ -16,7 +21,7 @@ pub use self::{
     predication::Predicate,
     program::Program,
     vm::{Settings, VirtualMachine},
-    world_diff::{Event, L2ToL1Log, WorldDiff},
+    world_diff::WorldDiff,
 };
 
 pub mod addressing_modes;
@@ -61,11 +66,16 @@ pub trait StorageInterface {
     fn is_free_storage_slot(&self, contract: &H160, key: &U256) -> bool;
 }
 
+/// Encapsulates VM interaction with the external world. This includes VM storage and decomitting (loading) bytecodes
+/// for execution.
 pub trait World<T: Tracer>: StorageInterface + Sized {
-    /// This will be called *every* time a contract is called. Caching and decoding is
+    /// Loads a bytecode with the specified hash.
+    ///
+    /// This method will be called *every* time a contract is called. Caching and decoding is
     /// the world implementor's job.
     fn decommit(&mut self, hash: U256) -> Program<T, Self>;
 
+    /// Loads bytecode bytes for the `decommit` opcode.
     fn decommit_code(&mut self, hash: U256) -> Vec<u8>;
 }
 
