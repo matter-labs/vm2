@@ -295,11 +295,7 @@ impl<T: Tracer, W: World<T>> CallframeInterface for CallframeWrapper<'_, T, W> {
         if let Some(call) = self.near_call_on_top() {
             Some(call.previous_frame_pc)
         } else {
-            let offset = unsafe {
-                self.frame
-                    .pc
-                    .offset_from(self.frame.program.instruction(0).unwrap())
-            };
+            let offset = self.frame.get_raw_pc();
             if offset < 0
                 || offset > u16::MAX as isize
                 || self.frame.program.instruction(offset as u16).is_none()

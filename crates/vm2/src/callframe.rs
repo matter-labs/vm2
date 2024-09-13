@@ -1,3 +1,5 @@
+use std::mem;
+
 use primitive_types::H160;
 use zkevm_opcode_defs::system_params::{NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND};
 use zksync_vm2_interface::{HeapId, Tracer};
@@ -133,10 +135,20 @@ impl<T: Tracer, W: World<T>> Callframe<T, W> {
         })
     }
 
-    // FIXME: can overflow on invalid instruction
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    /// Gets a raw inferred program counter. This value can be garbage if the frame is on an invalid instruction or free panic.
+    #[allow(clippy::cast_possible_wrap)] // false positive: `Instruction` isn't that large
+    pub(crate) fn get_raw_pc(&self) -> isize {
+        // We cannot use `<*const _>::offset_from` because `self.pc` isn't guaranteed to be allocated within `self.program`
+        // (invalid instructions and free panics aren't).
+        let offset_in_bytes =
+            self.pc as isize - self.program.instruction(0).unwrap() as *const _ as isize;
+        offset_in_bytes / mem::size_of::<Instruction<T, W>>() as isize
+    }
+
+    // FIXME: can overflow / underflow on invalid instruction / free panic
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
     pub(crate) fn get_pc_as_u16(&self) -> u16 {
-        unsafe { self.pc.offset_from(self.program.instruction(0).unwrap()) as u16 }
+        self.get_raw_pc() as u16
     }
 
     /// Sets the next instruction to execute to the instruction at the given index.
