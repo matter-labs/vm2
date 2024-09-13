@@ -204,7 +204,7 @@ impl Binop for Div {
 
 macro_rules! from_binop {
     ($name:ident <$binop:ty>) => {
-        #[doc = concat!("Creates `", stringify!($binop), "` instruction with the provided params.")]
+        #[doc = concat!("Creates [`", stringify!($binop), "`] instruction with the provided params.")]
         #[inline(always)]
         pub fn $name(
             src1: AnySource,
@@ -219,7 +219,7 @@ macro_rules! from_binop {
     };
 
     ($name:ident <$binop:ty, $out2: ty>) => {
-        #[doc = concat!("Creates `", stringify!($binop), "` instruction with the provided params.")]
+        #[doc = concat!("Creates [`", stringify!($binop), "`] instruction with the provided params.")]
         #[inline(always)]
         pub fn $name(
             src1: AnySource,
@@ -235,6 +235,7 @@ macro_rules! from_binop {
     };
 }
 
+/// Instructions for binary operations.
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
     #[inline(always)]
     pub(crate) fn from_binop<Op: Binop>(

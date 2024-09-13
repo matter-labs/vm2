@@ -2,7 +2,8 @@ use zkevm_opcode_defs::ethereum_types::Address;
 use zksync_vm2_interface::{CallframeInterface, StateInterface};
 
 use crate::{
-    initial_decommit, testonly::TestWorld, ExecutionEnd, Program, Settings, VirtualMachine,
+    testonly::{initial_decommit, TestWorld},
+    ExecutionEnd, Program, Settings, VirtualMachine,
 };
 
 #[test]

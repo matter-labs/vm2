@@ -2,7 +2,10 @@ use std::fmt;
 
 use crate::{addressing_modes::Arguments, vm::VirtualMachine};
 
-#[doc(hidden)] // should only be used for low-level testing / benchmarking
+/// Single EraVM instruction (an opcode + [`Arguments`]).
+///
+/// Managing instructions is warranted for low-level tests; prefer using [`Program`](crate::Program)s to decode instructions
+/// from EraVM bytecodes.
 pub struct Instruction<T, W> {
     pub(crate) handler: Handler<T, W>,
     pub(crate) arguments: Arguments,

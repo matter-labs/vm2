@@ -131,6 +131,7 @@ impl Memory for Heaps {
 }
 
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
+    /// Creates a [`PrecompileCall`](opcodes::PrecompileCall) instruction with the provided params.
     pub fn from_precompile_call(
         abi: Register1,
         burn: Register2,

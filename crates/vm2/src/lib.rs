@@ -5,16 +5,13 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use primitive_types::{H160, U256};
-pub use zksync_vm2_interface::{
-    CallframeInterface, CycleStats, Event, HeapId, L2ToL1Log, Opcode, OpcodeType, ReturnType,
-    StateInterface, Tracer,
-};
+pub use zksync_vm2_interface as interface;
+use zksync_vm2_interface::Tracer;
 
 // Re-export missing modules if single instruction testing is enabled
 #[cfg(feature = "single_instruction_test")]
 pub(crate) use self::single_instruction_test::{heap, program, stack};
 pub use self::{
-    decommit::{address_into_u256, initial_decommit},
     fat_pointer::FatPointer,
     instruction::{ExecutionEnd, Instruction},
     mode_requirements::ModeRequirements,

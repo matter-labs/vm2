@@ -268,6 +268,7 @@ impl FatPointer {
 use super::monomorphization::*;
 
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
+    /// Creates a [`FarCall`](FarCall) instruction with the provided mode and params.
     pub fn from_far_call<M: TypeLevelCallingMode>(
         src1: Register1,
         src2: Register2,

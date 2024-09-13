@@ -52,6 +52,7 @@ fn l2_to_l1<T: Tracer, W: World<T>>(
 }
 
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
+    /// Creates an [`Event`](opcodes::Event) instruction with the provided params.
     pub fn from_event(
         key: Register1,
         value: Register2,
@@ -67,6 +68,7 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
         }
     }
 
+    /// Creates an [`L2ToL1Message`](opcodes::L2ToL1Message) instruction with the provided params.
     pub fn from_l2_to_l1_message(
         key: Register1,
         value: Register2,

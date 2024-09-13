@@ -1,4 +1,4 @@
-use primitive_types::U256;
+use primitive_types::{H160, U256};
 use zkevm_opcode_defs::VmMetaParameters;
 use zksync_vm2_interface::{
     opcodes::{self, Caller, CodeAddress, ContextU128, ErgsLeft, This, SP},
@@ -8,11 +8,16 @@ use zksync_vm2_interface::{
 use super::common::boilerplate;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Source},
-    decommit::address_into_u256,
     instruction::ExecutionStatus,
     state::State,
     Instruction, VirtualMachine, World,
 };
+
+pub(crate) fn address_into_u256(address: H160) -> U256 {
+    let mut buffer = [0; 32];
+    buffer[12..].copy_from_slice(address.as_bytes());
+    U256::from_big_endian(&buffer)
+}
 
 fn context<T, W, Op>(
     vm: &mut VirtualMachine<T, W>,
@@ -126,6 +131,7 @@ fn aux_mutating<T: Tracer, W: World<T>>(
     })
 }
 
+/// Context-related instructions.
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
     fn from_context<Op: ContextOp>(out: Register1, arguments: Arguments) -> Self {
         Self {
@@ -134,30 +140,37 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
         }
     }
 
+    /// Creates a [`This`] instruction with the provided params.
     pub fn from_this(out: Register1, arguments: Arguments) -> Self {
         Self::from_context::<This>(out, arguments)
     }
 
+    /// Creates a [`Caller`] instruction with the provided params.
     pub fn from_caller(out: Register1, arguments: Arguments) -> Self {
         Self::from_context::<Caller>(out, arguments)
     }
 
+    /// Creates a [`CodeAddress`] instruction with the provided params.
     pub fn from_code_address(out: Register1, arguments: Arguments) -> Self {
         Self::from_context::<CodeAddress>(out, arguments)
     }
 
+    /// Creates an [`ErgsLeft`] instruction with the provided params.
     pub fn from_ergs_left(out: Register1, arguments: Arguments) -> Self {
         Self::from_context::<ErgsLeft>(out, arguments)
     }
 
+    /// Creates a [`ContextU128`] instruction with the provided params.
     pub fn from_context_u128(out: Register1, arguments: Arguments) -> Self {
         Self::from_context::<ContextU128>(out, arguments)
     }
 
+    /// Creates an [`SP`] instruction with the provided params.
     pub fn from_context_sp(out: Register1, arguments: Arguments) -> Self {
         Self::from_context::<SP>(out, arguments)
     }
 
+    /// Creates a [`ContextMeta`](opcodes::ContextMeta) instruction with the provided params.
     pub fn from_context_meta(out: Register1, arguments: Arguments) -> Self {
         Self {
             handler: context_meta,
@@ -165,6 +178,7 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
         }
     }
 
+    /// Creates a [`SetContextU128`](opcodes::SetContextU128) instruction with the provided params.
     pub fn from_set_context_u128(src: Register1, arguments: Arguments) -> Self {
         Self {
             handler: set_context_u128,
@@ -172,6 +186,7 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
         }
     }
 
+    /// Creates an [`IncrementTxNumber`](opcodes::IncrementTxNumber) instruction with the provided params.
     pub fn from_increment_tx_number(arguments: Arguments) -> Self {
         Self {
             handler: increment_tx_number,
@@ -179,6 +194,7 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
         }
     }
 
+    /// Creates an [`AuxMutating0`](opcodes::AuxMutating0) instruction with the provided params.
     pub fn from_aux_mutating(arguments: Arguments) -> Self {
         Self {
             handler: aux_mutating,

@@ -169,7 +169,8 @@ impl WorldDiff {
         self.pubdata_costs.as_ref()
     }
 
-    pub(crate) fn get_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
+    #[doc(hidden)] // duplicates `StateInterface::get_storage_state()`, but we use random access in some places
+    pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
         self.storage_changes.as_ref()
     }
 

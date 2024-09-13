@@ -8,8 +8,7 @@ use crate::{
     addressing_modes::{
         Arguments, CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
     },
-    initial_decommit,
-    testonly::TestWorld,
+    testonly::{initial_decommit, TestWorld},
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
 };
 
@@ -64,7 +63,7 @@ fn create_test_world() -> TestWorld<()> {
                 Arguments::new(Predicate::Always, 200, ModeRequirements::none()),
             ),
             // 3: Hook (0)
-            Instruction::from_heap_store(
+            Instruction::from_heap_write(
                 Register1(r0).into(),
                 Register2(r0),
                 None,

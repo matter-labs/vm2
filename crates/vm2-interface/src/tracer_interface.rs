@@ -176,7 +176,7 @@ pub enum Opcode {
     TransientStorageWrite,
 }
 
-/// All supported calling modes for [`FarCall`] opcode.
+/// All supported calling modes for [`FarCall`](opcodes::FarCall) opcode.
 #[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub enum CallingMode {
     /// Normal calling mode.
@@ -187,7 +187,7 @@ pub enum CallingMode {
     Mimic,
 }
 
-/// All supported return types for the [`Ret`] opcode.
+/// All supported return types for the [`Ret`](opcodes::Ret) opcode.
 #[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub enum ReturnType {
     /// Normal return.
@@ -229,16 +229,17 @@ impl<T: opcodes::TypeLevelReturnType> OpcodeType for opcodes::Ret<T> {
     const VALUE: Opcode = Opcode::Ret(T::VALUE);
 }
 
-/// Implement this for a type that holds the state of your tracer.
+/// EraVM instruction tracer.
 ///
-/// [Tracer::before_instruction] is called just before the actual instruction is executed.
-/// If the instruction is skipped, `before_instruction` will be called with [Nop](opcodes::Nop).
-/// [Tracer::after_instruction] is called once the instruction is executed and the program
+/// [`Self::before_instruction()`] is called just before the actual instruction is executed.
+/// If the instruction is skipped, `before_instruction` will be called with [`Nop`](opcodes::Nop).
+/// [`Self::after_instruction()`] is called once the instruction is executed and the program
 /// counter has advanced.
 ///
 /// # Examples
 ///
 /// Here `FarCallCounter` counts the number of far calls.
+///
 /// ```
 /// # use zksync_vm2_interface::{Tracer, StateInterface, OpcodeType, Opcode};
 /// struct FarCallCounter(usize);

@@ -53,6 +53,7 @@ fn decommit<T: Tracer, W: World<T>>(
 }
 
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
+    /// Creates a [`Decommit`](opcodes::Decommit) instruction with the provided params.
     pub fn from_decommit(
         abi: Register1,
         burn: Register2,

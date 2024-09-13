@@ -1,4 +1,5 @@
 pub(crate) use self::{
+    context::address_into_u256,
     heap_access::{AuxHeap, Heap},
     ret::RETURN_COST,
 };

@@ -180,7 +180,9 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W: World<T>>(
 
 pub(crate) const RETURN_COST: u32 = 5;
 
+/// Variations of [`Ret`](opcodes::Ret) instructions.
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
+    /// Creates a normal [`Ret`](opcodes::Ret) instruction with the provided params.
     pub fn from_ret(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         Self {
@@ -188,6 +190,8 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
+
+    /// Creates a revert [`Ret`](opcodes::Ret) instruction with the provided params.
     pub fn from_revert(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         Self {
@@ -195,6 +199,8 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
+
+    /// Creates a panic [`Ret`](opcodes::Ret) instruction with the provided params.
     pub fn from_panic(label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         Self {
@@ -203,6 +209,7 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
         }
     }
 
+    /// Creates a *invalid* instruction that will panic by draining all gas.
     pub const fn from_invalid() -> Self {
         Self {
             // This field is never read because the instruction fails at the gas cost stage.

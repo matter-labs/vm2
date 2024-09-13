@@ -3,12 +3,11 @@ use zkevm_opcode_defs::ethereum_types::Address;
 use zksync_vm2_interface::{opcodes, CallframeInterface, StateInterface};
 
 use crate::{
-    address_into_u256,
     addressing_modes::{
         Arguments, CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
     },
-    initial_decommit,
-    testonly::TestWorld,
+    instruction_handlers::address_into_u256,
+    testonly::{initial_decommit, TestWorld},
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
 };
 

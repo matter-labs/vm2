@@ -1,9 +1,9 @@
 use primitive_types::U256;
+use zksync_vm2_interface::HeapId;
 
 use super::{
     mock_array::MockRead, validation::is_valid_tagged_value, vm::arbitrary_register_value,
 };
-use crate::HeapId;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Stack {

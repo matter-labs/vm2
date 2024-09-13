@@ -1,11 +1,11 @@
 use arbitrary::Arbitrary;
 use primitive_types::U256;
-use zksync_vm2_interface::Tracer;
+use zksync_vm2_interface::{HeapId, Tracer};
 
 use super::{heap::Heaps, stack::StackPool};
 use crate::{
     addressing_modes::Arguments, callframe::Callframe, fat_pointer::FatPointer, state::State,
-    HeapId, Instruction, ModeRequirements, Predicate, Settings, VirtualMachine, World,
+    Instruction, ModeRequirements, Predicate, Settings, VirtualMachine, World,
 };
 
 impl<T: Tracer, W> VirtualMachine<T, W> {

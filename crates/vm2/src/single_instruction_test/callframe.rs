@@ -1,12 +1,11 @@
 use arbitrary::Arbitrary;
 use primitive_types::H160;
 use zkevm_opcode_defs::EVM_SIMULATOR_STIPEND;
-use zksync_vm2_interface::Tracer;
+use zksync_vm2_interface::{HeapId, Tracer};
 
 use super::stack::{Stack, StackPool};
 use crate::{
-    callframe::Callframe, decommit::is_kernel, predication::Flags, HeapId, Program, World,
-    WorldDiff,
+    callframe::Callframe, decommit::is_kernel, predication::Flags, Program, World, WorldDiff,
 };
 
 impl<'a> Arbitrary<'a> for Flags {

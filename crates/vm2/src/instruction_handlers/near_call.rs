@@ -38,6 +38,7 @@ fn near_call<T: Tracer, W: World<T>>(
 }
 
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
+    /// Creates a [`NearCall`](opcodes::NearCall) instruction with the provided params.
     pub fn from_near_call(
         gas: Register1,
         destination: Immediate1,

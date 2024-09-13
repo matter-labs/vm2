@@ -27,6 +27,7 @@ where
 }
 
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
+    /// Creates a [`Jump`](opcodes::Jump) instruction with the provided params.
     pub fn from_jump(source: AnySource, destination: Register1, arguments: Arguments) -> Self {
         Self {
             handler: monomorphize!(jump [T W] match_source source),

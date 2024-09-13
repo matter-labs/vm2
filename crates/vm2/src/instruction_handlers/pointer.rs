@@ -54,7 +54,7 @@ where
     })
 }
 
-pub trait PtrOp: OpcodeType {
+pub(crate) trait PtrOp: OpcodeType {
     fn perform(in1: U256, in2: U256) -> Option<U256>;
 }
 
@@ -109,9 +109,31 @@ impl PtrOp for PointerShrink {
     }
 }
 
+macro_rules! from_ptr_op {
+    ($name:ident <$binop:ty>) => {
+        #[doc = concat!("Creates a [`", stringify!($binop), "`] instruction with the provided params.")]
+        #[inline(always)]
+        pub fn $name(
+            src1: AnySource,
+            src2: Register2,
+            out: AnyDestination,
+            arguments: Arguments,
+            swap: bool,
+        ) -> Self {
+            Self::from_ptr::<$binop>(src1, src2, out, arguments, swap)
+        }
+    };
+}
+
+/// Pointer-related instructions.
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
+    from_ptr_op!(from_pointer_add<PointerAdd>);
+    from_ptr_op!(from_pointer_sub<PointerSub>);
+    from_ptr_op!(from_pointer_pack<PointerPack>);
+    from_ptr_op!(from_pointer_shrink<PointerShrink>);
+
     #[inline(always)]
-    pub fn from_ptr<Op: PtrOp>(
+    pub(crate) fn from_ptr<Op: PtrOp>(
         src1: AnySource,
         src2: Register2,
         out: AnyDestination,

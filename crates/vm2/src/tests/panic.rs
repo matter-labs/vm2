@@ -3,8 +3,7 @@ use zkevm_opcode_defs::ethereum_types::Address;
 
 use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register, Register1},
-    initial_decommit,
-    testonly::TestWorld,
+    testonly::{initial_decommit, TestWorld},
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
 };
 

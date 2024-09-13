@@ -11,7 +11,7 @@ use zkevm_opcode_defs::{
 };
 use zksync_vm2_interface::Tracer;
 
-use crate::{address_into_u256, Program, StorageInterface, World};
+use crate::{instruction_handlers::address_into_u256, Program, StorageInterface, World};
 
 /// Test [`World`] implementation.
 #[derive(Debug)]
@@ -93,4 +93,24 @@ impl<T> StorageInterface for TestWorld<T> {
     fn is_free_storage_slot(&self, _contract: &H160, _key: &U256) -> bool {
         false
     }
+}
+
+/// May be used to load code when the VM first starts up.
+/// Doesn't check for any errors.
+/// Doesn't cost anything but also doesn't make the code free in future decommits.
+#[doc(hidden)] // should be used only in low-level testing / benches
+pub fn initial_decommit<T: Tracer, W: World<T>>(world: &mut W, address: H160) -> Program<T, W> {
+    let deployer_system_contract_address =
+        Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
+    let code_info = world
+        .read_storage(deployer_system_contract_address, address_into_u256(address))
+        .unwrap_or_default();
+
+    let mut code_info_bytes = [0; 32];
+    code_info.to_big_endian(&mut code_info_bytes);
+
+    code_info_bytes[1] = 0;
+    let code_key: U256 = U256::from_big_endian(&code_info_bytes);
+
+    world.decommit(code_key)
 }
