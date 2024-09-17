@@ -1,6 +1,4 @@
-#![allow(clippy::zero_sized_map_values)] // FIXME: why?
-
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A trait for things that can be rolled back to snapshots
 pub(crate) trait Rollback {
@@ -68,14 +66,14 @@ impl<K: Ord, V> AsRef<BTreeMap<K, V>> for RollbackableMap<K, V> {
 
 #[derive(Debug, Default)]
 pub(crate) struct RollbackableSet<K: Ord> {
-    map: BTreeMap<K, ()>,
+    map: BTreeSet<K>,
     old_entries: Vec<K>,
 }
 
 impl<T: Ord + Clone> RollbackableSet<T> {
     /// Adds `key` to the set and returns if it was added (not present earlier).
     pub(crate) fn add(&mut self, key: T) -> bool {
-        let is_new = self.map.insert(key.clone(), ()).is_none();
+        let is_new = self.map.insert(key.clone());
         if is_new {
             self.old_entries.push(key);
         }
@@ -101,8 +99,8 @@ impl<K: Ord> Rollback for RollbackableSet<K> {
     }
 }
 
-impl<K: Ord> AsRef<BTreeMap<K, ()>> for RollbackableSet<K> {
-    fn as_ref(&self) -> &BTreeMap<K, ()> {
+impl<K: Ord> AsRef<BTreeSet<K>> for RollbackableSet<K> {
+    fn as_ref(&self) -> &BTreeSet<K> {
         &self.map
     }
 }
