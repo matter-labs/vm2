@@ -145,7 +145,8 @@ impl<T, W> Callframe<T, W> {
         offset_in_bytes / mem::size_of::<Instruction<T, W>>() as isize
     }
 
-    // FIXME: can overflow / underflow on invalid instruction / free panic
+    // TODO: can overflow / underflow after an invalid instruction or free panic. Ordinarily, this will lead to VM termination (for an invalid instruction)
+    //   or the callframe getting popped (for a panic), but it's still technically possible to invoke this method afterwards in certain cases (e.g., in the bootloader callframe).
     #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
     pub(crate) fn get_pc_as_u16(&self) -> u16 {
         self.get_raw_pc() as u16
