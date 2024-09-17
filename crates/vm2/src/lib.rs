@@ -2,10 +2,7 @@
 //!
 //! This crate provides high-performance [`VirtualMachine`] for ZKsync Era.
 
-use std::{
-    convert::Infallible,
-    hash::{DefaultHasher, Hash, Hasher},
-};
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use primitive_types::{H160, U256};
 pub use zksync_vm2_interface as interface;
@@ -66,20 +63,6 @@ pub trait StorageInterface {
     fn is_free_storage_slot(&self, contract: &H160, key: &U256) -> bool;
 }
 
-impl StorageInterface for Infallible {
-    fn read_storage(&mut self, _contract: H160, _key: U256) -> Option<U256> {
-        match *self {}
-    }
-
-    fn cost_of_writing_storage(&mut self, _initial_value: Option<U256>, _new_value: U256) -> u32 {
-        match *self {}
-    }
-
-    fn is_free_storage_slot(&self, _contract: &H160, _key: &U256) -> bool {
-        match *self {}
-    }
-}
-
 /// Encapsulates VM interaction with the external world. This includes VM storage and decomitting (loading) bytecodes
 /// for execution.
 pub trait World<T: Tracer>: StorageInterface + Sized {
@@ -91,16 +74,6 @@ pub trait World<T: Tracer>: StorageInterface + Sized {
 
     /// Loads bytecode bytes for the `decommit` opcode.
     fn decommit_code(&mut self, hash: U256) -> Vec<u8>;
-}
-
-impl<T: Tracer> World<T> for Infallible {
-    fn decommit(&mut self, _hash: U256) -> Program<T, Self> {
-        match *self {}
-    }
-
-    fn decommit_code(&mut self, _hash: U256) -> Vec<u8> {
-        match *self {}
-    }
 }
 
 /// Deterministic (across program runs and machines) hash that can be used for `Debug` implementations

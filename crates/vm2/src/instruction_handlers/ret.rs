@@ -1,5 +1,3 @@
-use std::convert::Infallible;
-
 use primitive_types::U256;
 use zksync_vm2_interface::{
     opcodes::{self, Normal, Panic, Revert, TypeLevelReturnType},
@@ -20,14 +18,10 @@ use crate::{
     Instruction, Predicate, VirtualMachine,
 };
 
-fn naked_ret<T, W, RT, const TO_LABEL: bool>(
+fn naked_ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
     vm: &mut VirtualMachine<T, W>,
     args: &Arguments,
-) -> ExecutionStatus
-where
-    T: Tracer,
-    RT: TypeLevelReturnType,
-{
+) -> ExecutionStatus {
     let mut return_type = RT::VALUE;
     let near_call_leftover_gas = vm.state.current_frame.gas;
 
@@ -125,15 +119,11 @@ where
     ExecutionStatus::Running
 }
 
-fn ret<T, W, RT, const TO_LABEL: bool>(
+fn ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus
-where
-    T: Tracer,
-    RT: TypeLevelReturnType,
-{
+) -> ExecutionStatus {
     full_boilerplate::<opcodes::Ret<RT>, _, _>(vm, world, tracer, |vm, args, _, _| {
         naked_ret::<T, W, RT, TO_LABEL>(vm, args)
     })
@@ -183,7 +173,7 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
 }
 
 /// Panics, burning all available gas.
-static INVALID_INSTRUCTION: Instruction<(), Infallible> = Instruction::from_invalid();
+static INVALID_INSTRUCTION: Instruction<(), ()> = Instruction::from_invalid();
 
 pub(crate) fn invalid_instruction<'a, T, W>() -> &'a Instruction<T, W> {
     // Safety: the handler of an invalid instruction is never read.
