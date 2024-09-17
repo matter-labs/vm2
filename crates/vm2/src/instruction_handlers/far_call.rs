@@ -191,8 +191,11 @@ pub(crate) fn get_far_call_calldata<T, W>(
     already_failed: bool,
 ) -> Option<FatPointer> {
     let mut pointer = FatPointer::from(raw_abi);
+    #[allow(clippy::cast_possible_truncation)]
+    // intentional: the source is encoded in the lower byte of the extracted value
+    let raw_source = (raw_abi.0[3] >> 32) as u8;
 
-    match FatPointerSource::from_abi((raw_abi.0[3] >> 32) & 0xff) {
+    match FatPointerSource::from_abi(raw_source) {
         FatPointerSource::ForwardFatPointer => {
             if !is_pointer || pointer.offset > pointer.length || already_failed {
                 return None;
@@ -248,7 +251,7 @@ enum FatPointerTarget {
 }
 
 impl FatPointerSource {
-    const fn from_abi(value: u64) -> Self {
+    const fn from_abi(value: u8) -> Self {
         match value {
             1 => Self::ForwardFatPointer,
             2 => Self::MakeNewPointer(FatPointerTarget::ToAuxHeap),

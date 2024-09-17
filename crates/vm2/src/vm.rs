@@ -153,7 +153,7 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
         });
     }
 
-    /// Returns the VM to the state it was in when [`Self::make_snapshot()`] was called. If there is
+    /// Returns the VM to the state it was in when [`Self::make_snapshot()`] was called.
     ///
     /// # Panics
     ///
@@ -169,7 +169,7 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
             .snapshot
             .take()
             .expect("`rollback()` called without a snapshot");
-        self.world_diff.external_rollback(&snapshot.world_snapshot);
+        self.world_diff.external_rollback(snapshot.world_snapshot);
         self.state.rollback(snapshot.state_snapshot);
         self.delete_history();
     }

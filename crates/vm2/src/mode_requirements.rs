@@ -1,4 +1,4 @@
-/// Requirements for the VM execution mode that can be placed by instructions.
+/// VM execution mode requirements (kernel only, not in static call) that can be placed on instructions.
 #[derive(Debug, Clone, Copy)]
 pub struct ModeRequirements(pub(crate) u8);
 

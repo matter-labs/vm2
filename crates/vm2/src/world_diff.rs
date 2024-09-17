@@ -277,7 +277,8 @@ impl WorldDiff {
         }
     }
 
-    pub(crate) fn rollback(&mut self, snapshot: &Snapshot) {
+    #[allow(clippy::needless_pass_by_value)] // intentional: we require a snapshot to be rolled back to no more than once
+    pub(crate) fn rollback(&mut self, snapshot: Snapshot) {
         self.storage_changes.rollback(snapshot.storage_changes);
         self.paid_changes.rollback(snapshot.paid_changes);
         self.events.rollback(snapshot.events);
@@ -307,8 +308,8 @@ impl WorldDiff {
         }
     }
 
-    pub(crate) fn external_rollback(&mut self, snapshot: &ExternalSnapshot) {
-        self.rollback(&snapshot.internal_snapshot);
+    pub(crate) fn external_rollback(&mut self, snapshot: ExternalSnapshot) {
+        self.rollback(snapshot.internal_snapshot);
         self.storage_refunds.rollback(snapshot.storage_refunds);
         self.pubdata_costs.rollback(snapshot.pubdata_costs);
         self.decommitted_hashes

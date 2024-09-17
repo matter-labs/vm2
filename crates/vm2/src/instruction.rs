@@ -28,7 +28,7 @@ pub(crate) enum ExecutionStatus {
     Stopped(ExecutionEnd),
 }
 
-/// End of a VM execution returned from [`VirtualMachine::run()`].
+/// VM stop reason returned from [`VirtualMachine::run()`].
 #[derive(Debug, PartialEq)]
 pub enum ExecutionEnd {
     /// The executed program has finished and returned the specified data.

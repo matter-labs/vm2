@@ -107,7 +107,7 @@ impl Binop for Xor {
 impl Binop for ShiftLeft {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
-        let result = *a << (b.low_u32() & 0xff);
+        let result = *a << (b.low_u32() % 256);
         (result, (), Flags::new(false, result.is_zero(), false))
     }
     type Out2 = ();
@@ -116,7 +116,7 @@ impl Binop for ShiftLeft {
 impl Binop for ShiftRight {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
-        let result = *a >> (b.low_u32() & 0xff);
+        let result = *a >> (b.low_u32() % 256);
         (result, (), Flags::new(false, result.is_zero(), false))
     }
     type Out2 = ();
@@ -125,7 +125,7 @@ impl Binop for ShiftRight {
 impl Binop for RotateLeft {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
-        let shift = b.low_u32() & 0xff;
+        let shift = b.low_u32() % 256;
         let result = *a << shift | *a >> (256 - shift);
         (result, (), Flags::new(false, result.is_zero(), false))
     }
@@ -135,7 +135,7 @@ impl Binop for RotateLeft {
 impl Binop for RotateRight {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
-        let shift = b.low_u32() & 0xff;
+        let shift = b.low_u32() % 256;
         let result = *a >> shift | *a << (256 - shift);
         (result, (), Flags::new(false, result.is_zero(), false))
     }

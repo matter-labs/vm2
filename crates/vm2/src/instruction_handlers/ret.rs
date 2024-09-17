@@ -116,7 +116,7 @@ where
     };
 
     if return_type.is_failure() {
-        vm.world_diff.rollback(&snapshot);
+        vm.world_diff.rollback(snapshot);
     }
 
     vm.state.flags = Flags::new(return_type == ReturnType::Panic, false, false);

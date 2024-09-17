@@ -27,10 +27,7 @@ impl From<&mut U256> for &mut FatPointer {
 #[cfg(target_endian = "little")]
 impl From<U256> for FatPointer {
     fn from(value: U256) -> Self {
-        unsafe {
-            let ptr: *const FatPointer = ptr::addr_of!(value).cast();
-            ptr.read()
-        }
+        unsafe { std::mem::transmute(value.low_u128()) }
     }
 }
 

@@ -4,16 +4,12 @@ use super::ret::free_panic;
 use crate::{addressing_modes::Arguments, instruction::ExecutionStatus, VirtualMachine};
 
 #[inline(always)]
-pub(crate) fn boilerplate<Opcode, T, W>(
+pub(crate) fn boilerplate<Opcode: OpcodeType, T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
     business_logic: impl FnOnce(&mut VirtualMachine<T, W>, &Arguments),
-) -> ExecutionStatus
-where
-    Opcode: OpcodeType,
-    T: Tracer,
-{
+) -> ExecutionStatus {
     full_boilerplate::<Opcode, T, W>(vm, world, tracer, |vm, args, _, _| {
         business_logic(vm, args);
         ExecutionStatus::Running
@@ -21,16 +17,12 @@ where
 }
 
 #[inline(always)]
-pub(crate) fn boilerplate_ext<Opcode, T, W>(
+pub(crate) fn boilerplate_ext<Opcode: OpcodeType, T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
     business_logic: impl FnOnce(&mut VirtualMachine<T, W>, &Arguments, &mut W, &mut T),
-) -> ExecutionStatus
-where
-    Opcode: OpcodeType,
-    T: Tracer,
-{
+) -> ExecutionStatus {
     full_boilerplate::<Opcode, T, W>(vm, world, tracer, |vm, args, world, tracer| {
         business_logic(vm, args, world, tracer);
         ExecutionStatus::Running
@@ -38,7 +30,7 @@ where
 }
 
 #[inline(always)]
-pub(crate) fn full_boilerplate<Opcode, T, W>(
+pub(crate) fn full_boilerplate<Opcode: OpcodeType, T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -48,11 +40,7 @@ pub(crate) fn full_boilerplate<Opcode, T, W>(
         &mut W,
         &mut T,
     ) -> ExecutionStatus,
-) -> ExecutionStatus
-where
-    Opcode: OpcodeType,
-    T: Tracer,
-{
+) -> ExecutionStatus {
     let args = unsafe { &(*vm.state.current_frame.pc).arguments };
 
     if vm.state.use_gas(args.get_static_gas_cost()).is_err()

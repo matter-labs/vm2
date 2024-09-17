@@ -74,7 +74,6 @@ impl ContextOp for SP {
     }
 }
 
-#[allow(clippy::cast_sign_loss)] // intentional
 fn context_meta<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
@@ -89,7 +88,10 @@ fn context_meta<T: Tracer, W>(
             code_shard_id: 0,
             // This field is actually pubdata!
             aux_field_0: if vm.state.current_frame.is_kernel {
-                vm.world_diff.pubdata.0 as u32
+                #[allow(clippy::cast_sign_loss)] // wrapping conversion is intentional
+                {
+                    vm.world_diff.pubdata.0 as u32
+                }
             } else {
                 0
             },

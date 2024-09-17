@@ -3,7 +3,7 @@
 //! It would be wasteful to randomly generate the whole heap. Instead, we only generate
 //! the part of the heap that is actually accessed, which is at most 32 bytes!
 //!
-//! The same kind of mocking in applied to stack memory, the program, the world and callstack.
+//! The same kind of mocking is applied to stack memory, the program, the world and the callstack.
 
 #![allow(missing_docs)]
 

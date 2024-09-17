@@ -119,7 +119,8 @@ impl<T, W> PartialEq for Program<T, W> {
     }
 }
 
-/// "Jump to start" instruction placed at the end of programs exceeding `1 << 16` instructions.
+/// Wraparound instruction placed at the end of programs exceeding `1 << 16` instructions to simulate the 16-bit program counter overflowing.
+/// Does not invoke tracers because it is an implementation detail, not an actual instruction.
 fn jump_to_beginning<T, W>() -> Instruction<T, W> {
     Instruction {
         handler: jump_to_beginning_handler,

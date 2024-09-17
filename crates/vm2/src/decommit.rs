@@ -97,9 +97,9 @@ impl WorldDiff {
         let is_new = self.decommitted_hashes.insert(code_hash, true) != Some(true);
         let code = world.decommit_code(code_hash);
         if is_new {
-            // Decommitter can process two words per cycle
             let code_len = u32::try_from(code.len()).expect("bytecode length overflow");
-            tracer.on_extra_prover_cycles(CycleStats::Decommit((code_len + 63) / 64));
+            // Decommitter can process two words per cycle, hence division by 2 * 32 = 64.
+            tracer.on_extra_prover_cycles(CycleStats::Decommit(code_len.div_ceil(64)));
         }
         (code, is_new)
     }
@@ -124,9 +124,10 @@ impl WorldDiff {
 
         let decommit = world.decommit(decommit.code_key);
         if is_new {
-            let code_len =
+            let code_len_in_words =
                 u32::try_from(decommit.code_page().len()).expect("bytecode length overflow");
-            tracer.on_extra_prover_cycles(CycleStats::Decommit((code_len + 1) / 2));
+            // Decommitter can process two words per cycle.
+            tracer.on_extra_prover_cycles(CycleStats::Decommit(code_len_in_words.div_ceil(2)));
         }
 
         Some(decommit)
