@@ -116,7 +116,6 @@ impl PtrOp for PointerShrink {
 macro_rules! from_ptr_op {
     ($name:ident <$binop:ty>) => {
         #[doc = concat!("Creates a [`", stringify!($binop), "`] instruction with the provided params.")]
-        #[inline(always)]
         pub fn $name(
             src1: AnySource,
             src2: Register2,
@@ -136,7 +135,6 @@ impl<T: Tracer, W> Instruction<T, W> {
     from_ptr_op!(from_pointer_pack<PointerPack>);
     from_ptr_op!(from_pointer_shrink<PointerShrink>);
 
-    #[inline(always)]
     pub(crate) fn from_ptr<Op: PtrOp>(
         src1: AnySource,
         src2: Register2,

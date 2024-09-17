@@ -203,7 +203,6 @@ fn load_pointer<T: Tracer, W, const INCREMENT: bool>(
 
 impl<T: Tracer, W> Instruction<T, W> {
     /// Creates a [`HeapRead`](opcodes::HeapRead) instruction with the provided params.
-    #[inline(always)]
     pub fn from_heap_read(
         src: RegisterOrImmediate,
         out: Register1,
@@ -214,7 +213,6 @@ impl<T: Tracer, W> Instruction<T, W> {
     }
 
     /// Creates an [`AuxHeapRead`](opcodes::AuxHeapRead) instruction with the provided params.
-    #[inline(always)]
     pub fn from_aux_heap_read(
         src: RegisterOrImmediate,
         out: Register1,
@@ -224,7 +222,6 @@ impl<T: Tracer, W> Instruction<T, W> {
         Self::from_read::<AuxHeap>(src, out, incremented_out, arguments)
     }
 
-    #[inline(always)]
     fn from_read<H: HeapFromState>(
         src: RegisterOrImmediate,
         out: Register1,
@@ -245,7 +242,6 @@ impl<T: Tracer, W> Instruction<T, W> {
     }
 
     /// Creates a [`HeapWrite`](opcodes::HeapWrite) instruction with the provided params.
-    #[inline(always)]
     pub fn from_heap_write(
         src1: RegisterOrImmediate,
         src2: Register2,
@@ -257,7 +253,6 @@ impl<T: Tracer, W> Instruction<T, W> {
     }
 
     /// Creates an [`AuxHeapWrite`](opcodes::AuxHeapWrite) instruction with the provided params.
-    #[inline(always)]
     pub fn from_aux_heap_store(
         src1: RegisterOrImmediate,
         src2: Register2,
@@ -267,7 +262,6 @@ impl<T: Tracer, W> Instruction<T, W> {
         Self::from_write::<AuxHeap>(src1, src2, incremented_out, arguments, false)
     }
 
-    #[inline(always)]
     fn from_write<H: HeapFromState>(
         src1: RegisterOrImmediate,
         src2: Register2,
@@ -286,7 +280,6 @@ impl<T: Tracer, W> Instruction<T, W> {
     }
 
     /// Creates an [`PointerRead`](opcodes::PointerRead) instruction with the provided params.
-    #[inline(always)]
     pub fn from_pointer_read(
         src: Register1,
         out: Register1,

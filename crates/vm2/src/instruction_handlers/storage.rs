@@ -77,7 +77,6 @@ fn sload_transient<T: Tracer, W>(
 
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
     /// Creates a [`StorageWrite`](opcodes::StorageWrite) instruction with the provided params.
-    #[inline(always)]
     pub fn from_storage_write(src1: Register1, src2: Register2, arguments: Arguments) -> Self {
         Self {
             handler: sstore,
@@ -86,7 +85,6 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
     }
 
     /// Creates a [`TransientStorageWrite`](opcodes::TransientStorageWrite) instruction with the provided params.
-    #[inline(always)]
     pub fn from_transient_storage_write(
         src1: Register1,
         src2: Register2,
@@ -99,7 +97,6 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
     }
 
     /// Creates a [`StorageRead`](opcodes::StorageRead) instruction with the provided params.
-    #[inline(always)]
     pub fn from_storage_read(src: Register1, dst: Register1, arguments: Arguments) -> Self {
         Self {
             handler: sload,
@@ -108,7 +105,6 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
     }
 
     /// Creates a [`TransientStorageRead`](opcodes::TransientStorageRead) instruction with the provided params.
-    #[inline(always)]
     pub fn from_transient_storage_read(
         src: Register1,
         dst: Register1,
