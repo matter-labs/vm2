@@ -20,17 +20,11 @@ use crate::{
     Instruction, VirtualMachine,
 };
 
-fn ptr<T, W, Op, In1, Out, const SWAP: bool>(
+fn ptr<T: Tracer, W, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus
-where
-    T: Tracer,
-    Op: PtrOp,
-    In1: Source,
-    Out: Destination,
-{
+) -> ExecutionStatus {
     boilerplate::<Op, _, _>(vm, world, tracer, |vm, args| {
         let ((a, a_is_pointer), (b, b_is_pointer)) = if SWAP {
             (

@@ -63,16 +63,11 @@ fn bigger_than_last_address(x: U256) -> bool {
     x.0[0] > LAST_ADDRESS.into() || x.0[1] != 0 || x.0[2] != 0 || x.0[3] != 0
 }
 
-fn load<T, W, H, In, const INCREMENT: bool>(
+fn load<T: Tracer, W, H: HeapFromState, In: Source, const INCREMENT: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus
-where
-    T: Tracer,
-    H: HeapFromState,
-    In: Source,
-{
+) -> ExecutionStatus {
     boilerplate::<H::Read, _, _>(vm, world, tracer, |vm, args| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
@@ -153,10 +148,10 @@ where
 
 /// Pays for more heap space. Doesn't acually grow the heap.
 /// That distinction is necessary because the bootloader gets `u32::MAX` heap for free.
-pub(crate) fn grow_heap<T, W, H>(state: &mut State<T, W>, new_bound: u32) -> Result<(), ()>
-where
-    H: HeapFromState,
-{
+pub(crate) fn grow_heap<T, W, H: HeapFromState>(
+    state: &mut State<T, W>,
+    new_bound: u32,
+) -> Result<(), ()> {
     let already_paid = H::get_heap_size(state);
     if *already_paid < new_bound {
         let to_pay = new_bound - *already_paid;

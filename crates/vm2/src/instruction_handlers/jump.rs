@@ -13,11 +13,11 @@ use crate::{
     VirtualMachine,
 };
 
-fn jump<T, W, In>(vm: &mut VirtualMachine<T, W>, world: &mut W, tracer: &mut T) -> ExecutionStatus
-where
-    T: Tracer,
-    In: Source,
-{
+fn jump<T: Tracer, W, In: Source>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
+    tracer: &mut T,
+) -> ExecutionStatus {
     boilerplate::<opcodes::Jump, _, _>(vm, world, tracer, |vm, args| {
         #[allow(clippy::cast_possible_truncation)] // intentional
         let target = In::get(args, &mut vm.state).low_u32() as u16;

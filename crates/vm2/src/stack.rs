@@ -21,7 +21,7 @@ const DIRTY_AREA_SIZE: usize = (1 << 16) / NUMBER_OF_DIRTY_AREAS;
 impl Stack {
     #[allow(clippy::cast_ptr_alignment)] // aligned per `Stack` layout
     pub(crate) fn new() -> Box<Self> {
-        unsafe { Box::from_raw(alloc_zeroed(Layout::new::<Self>()).cast::<Stack>()) }
+        unsafe { Box::from_raw(alloc_zeroed(Layout::new::<Self>()).cast()) }
     }
 
     #[inline(always)]
