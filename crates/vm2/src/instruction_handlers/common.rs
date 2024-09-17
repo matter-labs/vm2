@@ -1,7 +1,7 @@
 use zksync_vm2_interface::{opcodes, OpcodeType, Tracer};
 
 use super::ret::free_panic;
-use crate::{addressing_modes::Arguments, instruction::ExecutionStatus, VirtualMachine, World};
+use crate::{addressing_modes::Arguments, instruction::ExecutionStatus, VirtualMachine};
 
 #[inline(always)]
 pub(crate) fn boilerplate<Opcode, T, W>(
@@ -13,7 +13,6 @@ pub(crate) fn boilerplate<Opcode, T, W>(
 where
     Opcode: OpcodeType,
     T: Tracer,
-    W: World<T>,
 {
     full_boilerplate::<Opcode, T, W>(vm, world, tracer, |vm, args, _, _| {
         business_logic(vm, args);
@@ -31,7 +30,6 @@ pub(crate) fn boilerplate_ext<Opcode, T, W>(
 where
     Opcode: OpcodeType,
     T: Tracer,
-    W: World<T>,
 {
     full_boilerplate::<Opcode, T, W>(vm, world, tracer, |vm, args, world, tracer| {
         business_logic(vm, args, world, tracer);
@@ -54,7 +52,6 @@ pub(crate) fn full_boilerplate<Opcode, T, W>(
 where
     Opcode: OpcodeType,
     T: Tracer,
-    W: World<T>,
 {
     let args = unsafe { &(*vm.state.current_frame.pc).arguments };
 

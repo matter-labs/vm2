@@ -10,7 +10,7 @@ use crate::{
     addressing_modes::{Arguments, Destination, Register1, Source},
     instruction::ExecutionStatus,
     state::State,
-    Instruction, VirtualMachine, World,
+    Instruction, VirtualMachine,
 };
 
 pub(crate) fn address_into_u256(address: H160) -> U256 {
@@ -26,7 +26,6 @@ fn context<T, W, Op>(
 ) -> ExecutionStatus
 where
     T: Tracer,
-    W: World<T>,
     Op: ContextOp,
 {
     boilerplate::<Op, _, _>(vm, world, tracer, |vm, args| {
@@ -36,47 +35,47 @@ where
 }
 
 trait ContextOp: OpcodeType {
-    fn get<T: Tracer, W: World<T>>(state: &State<T, W>) -> U256;
+    fn get<T, W>(state: &State<T, W>) -> U256;
 }
 
 impl ContextOp for This {
-    fn get<T: Tracer, W: World<T>>(state: &State<T, W>) -> U256 {
+    fn get<T, W>(state: &State<T, W>) -> U256 {
         address_into_u256(state.current_frame.address)
     }
 }
 
 impl ContextOp for Caller {
-    fn get<T: Tracer, W: World<T>>(state: &State<T, W>) -> U256 {
+    fn get<T, W>(state: &State<T, W>) -> U256 {
         address_into_u256(state.current_frame.caller)
     }
 }
 
 impl ContextOp for CodeAddress {
-    fn get<T: Tracer, W: World<T>>(state: &State<T, W>) -> U256 {
+    fn get<T, W>(state: &State<T, W>) -> U256 {
         address_into_u256(state.current_frame.code_address)
     }
 }
 
 impl ContextOp for ErgsLeft {
-    fn get<T: Tracer, W: World<T>>(state: &State<T, W>) -> U256 {
+    fn get<T, W>(state: &State<T, W>) -> U256 {
         U256([state.current_frame.gas.into(), 0, 0, 0])
     }
 }
 
 impl ContextOp for ContextU128 {
-    fn get<T: Tracer, W: World<T>>(state: &State<T, W>) -> U256 {
+    fn get<T, W>(state: &State<T, W>) -> U256 {
         state.get_context_u128().into()
     }
 }
 
 impl ContextOp for SP {
-    fn get<T: Tracer, W: World<T>>(state: &State<T, W>) -> U256 {
+    fn get<T, W>(state: &State<T, W>) -> U256 {
         state.current_frame.sp.into()
     }
 }
 
 #[allow(clippy::cast_sign_loss)] // intentional
-fn context_meta<T: Tracer, W: World<T>>(
+fn context_meta<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -101,7 +100,7 @@ fn context_meta<T: Tracer, W: World<T>>(
     })
 }
 
-fn set_context_u128<T: Tracer, W: World<T>>(
+fn set_context_u128<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -112,7 +111,7 @@ fn set_context_u128<T: Tracer, W: World<T>>(
     })
 }
 
-fn increment_tx_number<T: Tracer, W: World<T>>(
+fn increment_tx_number<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -122,7 +121,7 @@ fn increment_tx_number<T: Tracer, W: World<T>>(
     })
 }
 
-fn aux_mutating<T: Tracer, W: World<T>>(
+fn aux_mutating<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -133,7 +132,7 @@ fn aux_mutating<T: Tracer, W: World<T>>(
 }
 
 /// Context-related instructions.
-impl<T: Tracer, W: World<T>> Instruction<T, W> {
+impl<T: Tracer, W> Instruction<T, W> {
     fn from_context<Op: ContextOp>(out: Register1, arguments: Arguments) -> Self {
         Self {
             handler: context::<T, W, Op>,

@@ -13,7 +13,7 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
     state::State,
-    ExecutionEnd, Instruction, VirtualMachine, World,
+    ExecutionEnd, Instruction, VirtualMachine,
 };
 
 pub(crate) trait HeapFromState {
@@ -70,7 +70,6 @@ fn load<T, W, H, In, const INCREMENT: bool>(
 ) -> ExecutionStatus
 where
     T: Tracer,
-    W: World<T>,
     H: HeapFromState,
     In: Source,
 {
@@ -112,7 +111,6 @@ fn store<T, W, H, In, const INCREMENT: bool, const HOOKING_ENABLED: bool>(
 ) -> ExecutionStatus
 where
     T: Tracer,
-    W: World<T>,
     H: HeapFromState,
     In: Source,
 {
@@ -157,8 +155,6 @@ where
 /// That distinction is necessary because the bootloader gets `u32::MAX` heap for free.
 pub(crate) fn grow_heap<T, W, H>(state: &mut State<T, W>, new_bound: u32) -> Result<(), ()>
 where
-    T: Tracer,
-    W: World<T>,
     H: HeapFromState,
 {
     let already_paid = H::get_heap_size(state);
@@ -171,7 +167,7 @@ where
     Ok(())
 }
 
-fn load_pointer<T: Tracer, W: World<T>, const INCREMENT: bool>(
+fn load_pointer<T: Tracer, W, const INCREMENT: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -205,7 +201,7 @@ fn load_pointer<T: Tracer, W: World<T>, const INCREMENT: bool>(
     })
 }
 
-impl<T: Tracer, W: World<T>> Instruction<T, W> {
+impl<T: Tracer, W> Instruction<T, W> {
     /// Creates a [`HeapRead`](opcodes::HeapRead) instruction with the provided params.
     #[inline(always)]
     pub fn from_heap_read(

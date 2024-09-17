@@ -65,11 +65,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for Callframe<T, W> {
     }
 }
 
-impl<T: Tracer, W: World<T>> Callframe<T, W> {
-    pub(crate) fn raw_first_instruction(&self) -> u64 {
-        self.program.raw_first_instruction
-    }
-
+impl<T: Tracer, W> Callframe<T, W> {
     pub(crate) fn dummy() -> Self {
         Self {
             address: H160::zero(),
@@ -94,5 +90,11 @@ impl<T: Tracer, W: World<T>> Callframe<T, W> {
             heaps_i_am_keeping_alive: vec![],
             world_before_this_frame: WorldDiff::default().snapshot(),
         }
+    }
+}
+
+impl<T, W> Callframe<T, W> {
+    pub(crate) fn raw_first_instruction(&self) -> u64 {
+        self.program.raw_first_instruction
     }
 }

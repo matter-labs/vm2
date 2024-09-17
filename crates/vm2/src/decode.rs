@@ -25,7 +25,7 @@ use crate::{
     Instruction, Predicate, VirtualMachine, World,
 };
 
-fn unimplemented_instruction<T: Tracer, W: World<T>>(variant: Opcode) -> Instruction<T, W> {
+fn unimplemented_instruction<T, W>(variant: Opcode) -> Instruction<T, W> {
     let mut arguments = Arguments::new(Predicate::Always, 0, ModeRequirements::none());
     let variant_as_number: u16 = unsafe { std::mem::transmute(variant) };
     Immediate1(variant_as_number).write_source(&mut arguments);
@@ -35,7 +35,7 @@ fn unimplemented_instruction<T: Tracer, W: World<T>>(variant: Opcode) -> Instruc
     }
 }
 
-fn unimplemented_handler<T: Tracer, W: World<T>>(
+fn unimplemented_handler<T, W>(
     vm: &mut VirtualMachine<T, W>,
     _: &mut W,
     _: &mut T,

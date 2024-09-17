@@ -34,17 +34,16 @@ use crate::{
 ///
 /// Even though all errors happen before the new stack frame, they cause a panic in the new frame,
 /// not in the caller!
-fn far_call<
-    T: Tracer,
-    W: World<T>,
-    M: TypeLevelCallingMode,
-    const IS_STATIC: bool,
-    const IS_SHARD: bool,
->(
+fn far_call<T, W, M, const IS_STATIC: bool, const IS_SHARD: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) -> ExecutionStatus
+where
+    T: Tracer,
+    W: World<T>,
+    M: TypeLevelCallingMode,
+{
     boilerplate_ext::<FarCall<M>, _, _>(vm, world, tracer, |vm, args, world, tracer| {
         let (raw_abi, raw_abi_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
 
@@ -185,7 +184,7 @@ fn get_far_call_arguments(abi: U256) -> FarCallABI {
 ///
 /// This function needs to be called even if we already know we will panic because
 /// overflowing start + length makes the heap resize even when already panicking.
-pub(crate) fn get_far_call_calldata<T: Tracer, W: World<T>>(
+pub(crate) fn get_far_call_calldata<T, W>(
     raw_abi: U256,
     is_pointer: bool,
     vm: &mut VirtualMachine<T, W>,

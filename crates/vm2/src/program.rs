@@ -94,7 +94,9 @@ impl<T: Tracer, W: World<T>> Program<T, W> {
             code_page: code_page.into(),
         }
     }
+}
 
+impl<T, W> Program<T, W> {
     pub(crate) fn instruction(&self, n: u16) -> Option<&Instruction<T, W>> {
         self.instructions.get::<usize>(n.into())
     }
@@ -118,14 +120,14 @@ impl<T, W> PartialEq for Program<T, W> {
 }
 
 /// "Jump to start" instruction placed at the end of programs exceeding `1 << 16` instructions.
-fn jump_to_beginning<T: Tracer, W: World<T>>() -> Instruction<T, W> {
+fn jump_to_beginning<T, W>() -> Instruction<T, W> {
     Instruction {
         handler: jump_to_beginning_handler,
         arguments: Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
     }
 }
 
-fn jump_to_beginning_handler<T: Tracer, W: World<T>>(
+fn jump_to_beginning_handler<T, W>(
     vm: &mut VirtualMachine<T, W>,
     _: &mut W,
     _: &mut T,

@@ -5,10 +5,10 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register1, Source},
     instruction::ExecutionStatus,
     predication::Flags,
-    Instruction, VirtualMachine, World,
+    Instruction, VirtualMachine,
 };
 
-fn near_call<T: Tracer, W: World<T>>(
+fn near_call<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -35,7 +35,7 @@ fn near_call<T: Tracer, W: World<T>>(
     })
 }
 
-impl<T: Tracer, W: World<T>> Instruction<T, W> {
+impl<T: Tracer, W> Instruction<T, W> {
     /// Creates a [`NearCall`](opcodes::NearCall) instruction with the provided params.
     pub fn from_near_call(
         gas: Register1,

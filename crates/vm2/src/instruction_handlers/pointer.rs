@@ -17,7 +17,7 @@ use crate::{
     },
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
-    Instruction, VirtualMachine, World,
+    Instruction, VirtualMachine,
 };
 
 fn ptr<T, W, Op, In1, Out, const SWAP: bool>(
@@ -27,7 +27,6 @@ fn ptr<T, W, Op, In1, Out, const SWAP: bool>(
 ) -> ExecutionStatus
 where
     T: Tracer,
-    W: World<T>,
     Op: PtrOp,
     In1: Source,
     Out: Destination,
@@ -131,7 +130,7 @@ macro_rules! from_ptr_op {
 }
 
 /// Pointer-related instructions.
-impl<T: Tracer, W: World<T>> Instruction<T, W> {
+impl<T: Tracer, W> Instruction<T, W> {
     from_ptr_op!(from_pointer_add<PointerAdd>);
     from_ptr_op!(from_pointer_sub<PointerSub>);
     from_ptr_op!(from_pointer_pack<PointerPack>);

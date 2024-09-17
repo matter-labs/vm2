@@ -1,5 +1,5 @@
 use primitive_types::{H160, U256};
-use zksync_vm2_interface::{HeapId, Tracer};
+use zksync_vm2_interface::HeapId;
 
 use crate::{
     addressing_modes::Addressable,
@@ -10,7 +10,6 @@ use crate::{
     program::Program,
     stack::Stack,
     world_diff::Snapshot,
-    World,
 };
 
 /// State of a [`VirtualMachine`](crate::VirtualMachine).
@@ -28,7 +27,7 @@ pub(crate) struct State<T, W> {
     pub(crate) context_u128: u128,
 }
 
-impl<T: Tracer, W: World<T>> State<T, W> {
+impl<T, W> State<T, W> {
     pub(crate) fn new(
         address: H160,
         caller: H160,
@@ -174,7 +173,7 @@ impl<T, W> PartialEq for State<T, W> {
     }
 }
 
-impl<T: Tracer, W: World<T>> Addressable for State<T, W> {
+impl<T, W> Addressable for State<T, W> {
     fn registers(&mut self) -> &mut [U256; 16] {
         &mut self.registers
     }

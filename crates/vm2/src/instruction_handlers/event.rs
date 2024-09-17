@@ -6,10 +6,10 @@ use super::common::boilerplate_ext;
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
     instruction::ExecutionStatus,
-    Instruction, VirtualMachine, World,
+    Instruction, VirtualMachine,
 };
 
-fn event<T: Tracer, W: World<T>>(
+fn event<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -31,7 +31,7 @@ fn event<T: Tracer, W: World<T>>(
     })
 }
 
-fn l2_to_l1<T: Tracer, W: World<T>>(
+fn l2_to_l1<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -51,7 +51,7 @@ fn l2_to_l1<T: Tracer, W: World<T>>(
     })
 }
 
-impl<T: Tracer, W: World<T>> Instruction<T, W> {
+impl<T: Tracer, W> Instruction<T, W> {
     /// Creates an [`Event`](opcodes::Event) instruction with the provided params.
     pub fn from_event(
         key: Register1,

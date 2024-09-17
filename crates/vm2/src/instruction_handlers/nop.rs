@@ -4,10 +4,10 @@ use super::common::boilerplate;
 use crate::{
     addressing_modes::{destination_stack_address, AdvanceStackPointer, Arguments, Source},
     instruction::ExecutionStatus,
-    Instruction, VirtualMachine, World,
+    Instruction, VirtualMachine,
 };
 
-fn nop<T: Tracer, W: World<T>>(
+fn nop<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -23,7 +23,7 @@ fn nop<T: Tracer, W: World<T>>(
     })
 }
 
-impl<T: Tracer, W: World<T>> Instruction<T, W> {
+impl<T: Tracer, W> Instruction<T, W> {
     /// Creates a [`Nop`](opcodes::Nop) instruction with the provided params.
     pub fn from_nop(
         pop: AdvanceStackPointer,

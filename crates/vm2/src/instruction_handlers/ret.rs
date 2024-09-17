@@ -17,7 +17,7 @@ use crate::{
     instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
     predication::Flags,
-    Instruction, Predicate, VirtualMachine, World,
+    Instruction, Predicate, VirtualMachine,
 };
 
 fn naked_ret<T, W, RT, const TO_LABEL: bool>(
@@ -26,7 +26,6 @@ fn naked_ret<T, W, RT, const TO_LABEL: bool>(
 ) -> ExecutionStatus
 where
     T: Tracer,
-    W: World<T>,
     RT: TypeLevelReturnType,
 {
     let mut return_type = RT::VALUE;
@@ -133,7 +132,6 @@ fn ret<T, W, RT, const TO_LABEL: bool>(
 ) -> ExecutionStatus
 where
     T: Tracer,
-    W: World<T>,
     RT: TypeLevelReturnType,
 {
     full_boilerplate::<opcodes::Ret<RT>, _, _>(vm, world, tracer, |vm, args, _, _| {
@@ -150,7 +148,7 @@ where
 /// - the far call stack overflows
 ///
 /// For all other panics, point the instruction pointer at [PANIC] instead.
-pub(crate) fn free_panic<T: Tracer, W: World<T>>(
+pub(crate) fn free_panic<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     tracer: &mut T,
 ) -> ExecutionStatus {
@@ -166,7 +164,7 @@ pub(crate) fn free_panic<T: Tracer, W: World<T>>(
 
 /// Formally, a far call pushes a new frame and returns from it immediately if it panics.
 /// This function instead panics without popping a frame to save on allocation.
-pub(crate) fn panic_from_failed_far_call<T: Tracer, W: World<T>>(
+pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     tracer: &mut T,
     exception_handler: u16,
@@ -195,7 +193,7 @@ pub(crate) fn invalid_instruction<'a, T, W>() -> &'a Instruction<T, W> {
 pub(crate) const RETURN_COST: u32 = 5;
 
 /// Variations of [`Ret`](opcodes::Ret) instructions.
-impl<T: Tracer, W: World<T>> Instruction<T, W> {
+impl<T: Tracer, W> Instruction<T, W> {
     /// Creates a normal [`Ret`](opcodes::Ret) instruction with the provided params.
     pub fn from_ret(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();

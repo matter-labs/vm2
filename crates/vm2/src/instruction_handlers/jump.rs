@@ -10,13 +10,12 @@ use crate::{
         Immediate1, Register1, RelativeStack, Source,
     },
     instruction::{ExecutionStatus, Instruction},
-    VirtualMachine, World,
+    VirtualMachine,
 };
 
 fn jump<T, W, In>(vm: &mut VirtualMachine<T, W>, world: &mut W, tracer: &mut T) -> ExecutionStatus
 where
     T: Tracer,
-    W: World<T>,
     In: Source,
 {
     boilerplate::<opcodes::Jump, _, _>(vm, world, tracer, |vm, args| {
@@ -30,7 +29,7 @@ where
     })
 }
 
-impl<T: Tracer, W: World<T>> Instruction<T, W> {
+impl<T: Tracer, W> Instruction<T, W> {
     /// Creates a [`Jump`](opcodes::Jump) instruction with the provided params.
     pub fn from_jump(source: AnySource, destination: Register1, arguments: Arguments) -> Self {
         Self {

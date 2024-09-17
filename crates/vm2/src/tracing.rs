@@ -9,10 +9,10 @@ use crate::{
     callframe::{Callframe, NearCallFrame},
     decommit::is_kernel,
     predication::{self, Predicate},
-    VirtualMachine, World,
+    VirtualMachine,
 };
 
-impl<T: Tracer, W: World<T>> StateInterface for VirtualMachine<T, W> {
+impl<T: Tracer, W> StateInterface for VirtualMachine<T, W> {
     fn read_register(&self, register: u8) -> (U256, bool) {
         (
             self.state.registers[register as usize],
@@ -157,7 +157,7 @@ struct CallframeWrapper<'a, T, W> {
     near_call: Option<usize>,
 }
 
-impl<T: Tracer, W: World<T>> CallframeInterface for CallframeWrapper<'_, T, W> {
+impl<T: Tracer, W> CallframeInterface for CallframeWrapper<'_, T, W> {
     fn address(&self) -> H160 {
         self.frame.address
     }

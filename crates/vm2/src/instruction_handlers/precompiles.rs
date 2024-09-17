@@ -22,10 +22,10 @@ use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     heap::Heaps,
     instruction::ExecutionStatus,
-    Instruction, VirtualMachine, World,
+    Instruction, VirtualMachine,
 };
 
-fn precompile_call<T: Tracer, W: World<T>>(
+fn precompile_call<T: Tracer, W>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -138,7 +138,7 @@ impl Memory for Heaps {
     }
 }
 
-impl<T: Tracer, W: World<T>> Instruction<T, W> {
+impl<T: Tracer, W> Instruction<T, W> {
     /// Creates a [`PrecompileCall`](opcodes::PrecompileCall) instruction with the provided params.
     pub fn from_precompile_call(
         abi: Register1,

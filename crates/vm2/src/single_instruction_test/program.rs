@@ -67,7 +67,7 @@ impl<T, W> Program<T, W> {
     }
 }
 
-impl<T: Tracer, W: World<T>> Program<T, W> {
+impl<T: Tracer, W> Program<T, W> {
     pub fn for_decommit() -> Self {
         Self {
             raw_first_instruction: 0,
