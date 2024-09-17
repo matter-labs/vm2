@@ -79,40 +79,41 @@ pub trait CallframeInterface {
     fn set_address(&mut self, address: H160);
     /// Address of the contract being executed.
     fn code_address(&self) -> H160;
-    /// Sets the address of the contract being executed.
+    /// Sets the address of the contract being executed. Does not cause the contract at the specified address get loaded per se, just updates
+    /// the value used internally by the VM (e.g., returned by the [`CodeAddress`](crate::opcodes::CodeAddress) opcode).
     fn set_code_address(&mut self, address: H160);
     /// Address of the calling contract. Respects delegate and mimic calls.
     fn caller(&self) -> H160;
-    /// Sets the address of the calling contract
+    /// Sets the address of the calling contract.
     fn set_caller(&mut self, address: H160);
 
     /// Returns the current program counter (i.e., 0-based index of the instruction being executed).
-    /// During panic and arbitrary code execution this returns `None`.
+    /// During panic this returns `None`.
     fn program_counter(&self) -> Option<u16>;
     /// Sets the program counter.
     /// The VM will execute an invalid instruction if you jump out of the program.
     fn set_program_counter(&mut self, value: u16);
 
-    /// Returns a 0-based index of the starting exception handler instruction.
+    /// Returns the program counter that the parent frame should continue from if this frame fails.
     fn exception_handler(&self) -> u16;
-    /// Sets the exception handler pointer.
+    /// Sets the exception handler as specified [above](Self::exception_handler()).
     fn set_exception_handler(&mut self, value: u16);
 
     /// Checks whether the call is static.
     fn is_static(&self) -> bool;
-    /// Checks whether the call is executed in the kernel mode.
+    /// Checks whether the call is executed in kernel mode.
     fn is_kernel(&self) -> bool;
 
     /// Returns the remaining amount of gas.
     fn gas(&self) -> u32;
     /// Sets the remaining amount of gas.
     fn set_gas(&mut self, new_gas: u32);
-    /// Additional
+    /// Additional gas provided for the duration of this callframe.
     fn stipend(&self) -> u32;
 
-    /// Returns the context register for this call.
+    /// Returns the context value for this call. This context is accessible via [`ContextU128`](crate::opcodes::ContextU128) opcode.
     fn context_u128(&self) -> u128;
-    /// Sets the context register for this call.
+    /// Sets the context value for this call.
     fn set_context_u128(&mut self, value: u128);
 
     /// Checks whether this frame corresponds to a near call.
@@ -142,8 +143,8 @@ pub trait CallframeInterface {
     /// Sets the auxiliary heap boundary.
     fn set_aux_heap_bound(&mut self, value: u32);
 
-    /// Reads a word from the code page of the executing contract.
-    fn read_code_page(&self, slot: u16) -> U256;
+    /// Reads a word from the bytecode of the executing contract.
+    fn read_contract_code(&self, slot: u16) -> U256;
 }
 
 /// Identifier of a VM heap.
@@ -416,7 +417,7 @@ impl CallframeInterface for DummyState {
         unimplemented!()
     }
 
-    fn read_code_page(&self, _: u16) -> U256 {
+    fn read_contract_code(&self, _: u16) -> U256 {
         unimplemented!()
     }
 }

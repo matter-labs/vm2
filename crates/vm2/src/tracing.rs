@@ -243,7 +243,7 @@ impl<T: Tracer, W> CallframeInterface for CallframeWrapper<'_, T, W> {
         self.frame.aux_heap_size = value;
     }
 
-    fn read_code_page(&self, slot: u16) -> U256 {
+    fn read_contract_code(&self, slot: u16) -> U256 {
         self.frame.program.code_page()[slot as usize]
     }
 
