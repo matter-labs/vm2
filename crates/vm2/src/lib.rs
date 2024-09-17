@@ -68,15 +68,15 @@ pub trait StorageInterface {
 
 impl StorageInterface for Infallible {
     fn read_storage(&mut self, _contract: H160, _key: U256) -> Option<U256> {
-        unreachable!("`Infallible` cannot be constructed")
+        match *self {}
     }
 
     fn cost_of_writing_storage(&mut self, _initial_value: Option<U256>, _new_value: U256) -> u32 {
-        unreachable!("`Infallible` cannot be constructed")
+        match *self {}
     }
 
     fn is_free_storage_slot(&self, _contract: &H160, _key: &U256) -> bool {
-        unreachable!("`Infallible` cannot be constructed")
+        match *self {}
     }
 }
 
@@ -95,11 +95,11 @@ pub trait World<T: Tracer>: StorageInterface + Sized {
 
 impl<T: Tracer> World<T> for Infallible {
     fn decommit(&mut self, _hash: U256) -> Program<T, Self> {
-        unreachable!("`Infallible` cannot be constructed")
+        match *self {}
     }
 
     fn decommit_code(&mut self, _hash: U256) -> Vec<u8> {
-        unreachable!("`Infallible` cannot be constructed")
+        match *self {}
     }
 }
 
