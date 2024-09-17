@@ -9,7 +9,7 @@ use zksync_vm2_interface::HeapId;
 pub struct FatPointer {
     /// Additional pointer offset inside the `start..(start + length)` range.
     pub offset: u32,
-    /// ID of the heap page this points to.
+    /// ID of the heap this points to.
     pub memory_page: HeapId,
     /// 0-based index of the pointer start byte at the `memory` page.
     pub start: u32,

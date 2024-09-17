@@ -15,12 +15,12 @@ pub trait StateInterface {
     /// zero is the current frame, one is the frame before that etc.
     fn callframe(&mut self, n: usize) -> impl CallframeInterface + '_;
 
-    /// Reads a single byte from the specified heap page at the specified 0-based offset.
+    /// Reads a single byte from the specified heap at the specified 0-based offset.
     fn read_heap_byte(&self, heap: HeapId, offset: u32) -> u8;
-    /// Reads an entire `U256` word in the big-endian order from the specified heap page / `offset`
+    /// Reads an entire `U256` word in the big-endian order from the specified heap / `offset`
     /// (which is the index of the most significant byte of the read value).
     fn read_heap_u256(&self, heap: HeapId, offset: u32) -> U256;
-    /// Writes an entire `U256` word in the big-endian order to the specified heap page at the specified `offset`
+    /// Writes an entire `U256` word in the big-endian order to the specified heap at the specified `offset`
     /// (which is the index of the most significant byte of the written value).
     fn write_heap_u256(&mut self, heap: HeapId, offset: u32, value: U256);
 
@@ -128,34 +128,36 @@ pub trait CallframeInterface {
     /// Sets the stack pointer.
     fn set_stack_pointer(&mut self, value: u16);
 
-    /// Returns ID of the main heap page used in this call.
+    /// Returns ID of the main heap used in this call.
     fn heap(&self) -> HeapId;
-    /// Returns the main heap page boundary (number of paid bytes).
+    /// Returns the main heap boundary (number of paid bytes).
     fn heap_bound(&self) -> u32;
-    /// Sets the main heap page boundary.
+    /// Sets the main heap boundary.
     fn set_heap_bound(&mut self, value: u32);
 
-    /// Returns ID of the auxiliary heap page used in this call.
+    /// Returns ID of the auxiliary heap used in this call.
     fn aux_heap(&self) -> HeapId;
-    /// Returns the auxiliary heap page boundary (number of paid bytes).
+    /// Returns the auxiliary heap boundary (number of paid bytes).
     fn aux_heap_bound(&self) -> u32;
-    /// Sets the auxiliary heap page boundary.
+    /// Sets the auxiliary heap boundary.
     fn set_aux_heap_bound(&mut self, value: u32);
 
     /// Reads a word from the code page of the executing contract.
     fn read_code_page(&self, slot: u16) -> U256;
 }
 
-/// Identifier of a VM heap page.
+/// Identifier of a VM heap.
+///
+/// EraVM docs sometimes refer to heaps as *heap pages*; docs in these crate don't to avoid confusion with internal heap structure.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct HeapId(u32);
 
 impl HeapId {
-    /// Identifier of the calldata heap page used by the first executed program (i.e., the bootloader).
+    /// Identifier of the calldata heap used by the first executed program (i.e., the bootloader).
     pub const FIRST_CALLDATA: Self = Self(1);
-    /// Identifier of the heap page used by the first executed program (i.e., the bootloader).
+    /// Identifier of the heap used by the first executed program (i.e., the bootloader).
     pub const FIRST: Self = Self(2);
-    /// Identifier of the auxiliary heap page used by the first executed program (i.e., the bootloader)
+    /// Identifier of the auxiliary heap used by the first executed program (i.e., the bootloader)
     pub const FIRST_AUX: Self = Self(3);
 
     /// Only for dealing with external data structures, never use internally.
