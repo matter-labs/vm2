@@ -91,8 +91,6 @@ pub struct MockMemory {
     heap_write: Option<ExpectedHeapValue>,
 }
 
-// One arbitrary heap value is not enough for zk_evm
-// because it reads two U256s to read one U256.
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct ExpectedHeapValue {
     heap: u32,
@@ -102,6 +100,7 @@ pub(crate) struct ExpectedHeapValue {
 
 impl ExpectedHeapValue {
     /// Returns a new U256 that contains data from the heap value and zero elsewhere.
+    /// One arbitrary heap value is not enough for `zk_evm` because it reads two U256s to read one U256.
     fn partially_overlapping_u256(&self, start: u32) -> U256 {
         let mut read = [0; 32];
         for i in 0..32 {
