@@ -1,0 +1,2 @@
+# Configures additional identifiers excempt from `clippy::doc_markdown` lint
+doc-valid-idents = ["EraVM", "ZKsync", ".."]

@@ -1,42 +1,29 @@
 use zkevm_opcode_defs::{
     decoding::{EncodingModeProduction, VmEncodingMode},
     ImmMemHandlerFlags, Opcode,
-    Operand::*,
+    Operand::{Full, RegOnly, RegOrImm},
     RegOrImmFlags, FAR_CALL_SHARD_FLAG_IDX, FAR_CALL_STATIC_FLAG_IDX, FIRST_MESSAGE_FLAG_IDX,
     RET_TO_LABEL_BIT_IDX, SET_FLAGS_FLAG_IDX, SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES,
     SWAP_OPERANDS_FLAG_IDX_FOR_PTR_OPCODE, UMA_INCREMENT_FLAG_IDX,
 };
-use zksync_vm2_interface::{opcodes, Tracer};
+use zksync_vm2_interface::{
+    opcodes::{
+        self, Add, And, Div, Mul, Or, PointerAdd, PointerPack, PointerShrink, PointerSub,
+        RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
+    },
+    Tracer,
+};
 
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
         Immediate1, Immediate2, Register, Register1, Register2, RegisterAndImmediate,
-        RelativeStack, Source, SourceWriter,
+        RelativeStack, SourceWriter,
     },
-    instruction::{jump_to_beginning, ExecutionEnd, ExecutionStatus},
-    instruction_handlers::{
-        Add, And, Div, Mul, Or, PointerAdd, PointerPack, PointerShrink, PointerSub, RotateLeft,
-        RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
-    },
+    instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
     Instruction, Predicate, VirtualMachine, World,
 };
-
-pub fn decode_program<T: Tracer, W: World<T>>(
-    raw: &[u64],
-    is_bootloader: bool,
-) -> Vec<Instruction<T, W>> {
-    raw.iter()
-        .take(1 << 16)
-        .map(|i| decode(*i, is_bootloader))
-        .chain(std::iter::once(if raw.len() >= 1 << 16 {
-            jump_to_beginning()
-        } else {
-            Instruction::from_invalid()
-        }))
-        .collect()
-}
 
 fn unimplemented_instruction<T, W>(variant: Opcode) -> Instruction<T, W> {
     let mut arguments = Arguments::new(Predicate::Always, 0, ModeRequirements::none());
@@ -54,27 +41,25 @@ fn unimplemented_handler<T, W>(
     _: &mut T,
 ) -> ExecutionStatus {
     let variant: Opcode = unsafe {
-        std::mem::transmute(
-            Immediate1::get(&(*vm.state.current_frame.pc).arguments, &mut vm.state).low_u32()
-                as u16,
-        )
+        std::mem::transmute(Immediate1::get_u16(&(*vm.state.current_frame.pc).arguments))
     };
-    eprintln!("Unimplemented instruction: {:?}!", variant);
+    eprintln!("Unimplemented instruction: {variant:?}");
     ExecutionStatus::Stopped(ExecutionEnd::Panicked)
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> Instruction<T, W> {
     let (parsed, _) = EncodingModeProduction::parse_preliminary_variant_and_absolute_number(raw);
 
     let predicate = match parsed.condition {
-        zkevm_opcode_defs::Condition::Always => crate::Predicate::Always,
-        zkevm_opcode_defs::Condition::Gt => crate::Predicate::IfGT,
-        zkevm_opcode_defs::Condition::Lt => crate::Predicate::IfLT,
-        zkevm_opcode_defs::Condition::Eq => crate::Predicate::IfEQ,
-        zkevm_opcode_defs::Condition::Ge => crate::Predicate::IfGE,
-        zkevm_opcode_defs::Condition::Le => crate::Predicate::IfLE,
-        zkevm_opcode_defs::Condition::Ne => crate::Predicate::IfNotEQ,
-        zkevm_opcode_defs::Condition::GtOrLt => crate::Predicate::IfGtOrLT,
+        zkevm_opcode_defs::Condition::Always => Predicate::Always,
+        zkevm_opcode_defs::Condition::Gt => Predicate::IfGT,
+        zkevm_opcode_defs::Condition::Lt => Predicate::IfLT,
+        zkevm_opcode_defs::Condition::Eq => Predicate::IfEQ,
+        zkevm_opcode_defs::Condition::Ge => Predicate::IfGE,
+        zkevm_opcode_defs::Condition::Le => Predicate::IfLE,
+        zkevm_opcode_defs::Condition::Ne => Predicate::IfNotEQ,
+        zkevm_opcode_defs::Condition::GtOrLt => Predicate::IfGTOrLT,
     };
     let arguments = Arguments::new(
         predicate,
@@ -128,7 +113,7 @@ pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> I
                 src1,
                 src2,
                 out,
-                $snd,
+                &$snd,
                 arguments,
                 parsed.variant.flags[SWAP_OPERANDS_FLAG_IDX_FOR_ARITH_OPCODES],
                 parsed.variant.flags[SET_FLAGS_FLAG_IDX],
@@ -248,13 +233,13 @@ pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> I
             }
         }
         Opcode::Log(x) => match x {
-            zkevm_opcode_defs::LogOpcode::StorageRead => Instruction::from_sload(
+            zkevm_opcode_defs::LogOpcode::StorageRead => Instruction::from_storage_read(
                 src1.try_into().unwrap(),
                 out.try_into().unwrap(),
                 arguments,
             ),
             zkevm_opcode_defs::LogOpcode::TransientStorageRead => {
-                Instruction::from_sload_transient(
+                Instruction::from_transient_storage_read(
                     src1.try_into().unwrap(),
                     out.try_into().unwrap(),
                     arguments,
@@ -262,11 +247,11 @@ pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> I
             }
 
             zkevm_opcode_defs::LogOpcode::StorageWrite => {
-                Instruction::from_sstore(src1.try_into().unwrap(), src2, arguments)
+                Instruction::from_storage_write(src1.try_into().unwrap(), src2, arguments)
             }
 
             zkevm_opcode_defs::LogOpcode::TransientStorageWrite => {
-                Instruction::from_sstore_transient(src1.try_into().unwrap(), src2, arguments)
+                Instruction::from_transient_storage_write(src1.try_into().unwrap(), src2, arguments)
             }
 
             zkevm_opcode_defs::LogOpcode::ToL1Message => Instruction::from_l2_to_l1_message(
@@ -297,20 +282,20 @@ pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> I
         Opcode::UMA(x) => {
             let increment = parsed.variant.flags[UMA_INCREMENT_FLAG_IDX];
             match x {
-                zkevm_opcode_defs::UMAOpcode::HeapRead => Instruction::from_heap_load(
+                zkevm_opcode_defs::UMAOpcode::HeapRead => Instruction::from_heap_read(
                     src1.try_into().unwrap(),
                     out.try_into().unwrap(),
                     increment.then_some(out2),
                     arguments,
                 ),
-                zkevm_opcode_defs::UMAOpcode::HeapWrite => Instruction::from_heap_store(
+                zkevm_opcode_defs::UMAOpcode::HeapWrite => Instruction::from_heap_write(
                     src1.try_into().unwrap(),
                     src2,
                     increment.then_some(out.try_into().unwrap()),
                     arguments,
                     is_bootloader,
                 ),
-                zkevm_opcode_defs::UMAOpcode::AuxHeapRead => Instruction::from_aux_heap_load(
+                zkevm_opcode_defs::UMAOpcode::AuxHeapRead => Instruction::from_aux_heap_read(
                     src1.try_into().unwrap(),
                     out.try_into().unwrap(),
                     increment.then_some(out2),
@@ -322,7 +307,7 @@ pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> I
                     increment.then_some(out.try_into().unwrap()),
                     arguments,
                 ),
-                zkevm_opcode_defs::UMAOpcode::FatPointerRead => Instruction::from_load_pointer(
+                zkevm_opcode_defs::UMAOpcode::FatPointerRead => Instruction::from_pointer_read(
                     src1.try_into().unwrap(),
                     out.try_into().unwrap(),
                     increment.then_some(out2),

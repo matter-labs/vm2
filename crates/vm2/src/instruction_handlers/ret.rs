@@ -4,7 +4,11 @@ use zksync_vm2_interface::{
     ReturnType, Tracer,
 };
 
-use super::{common::full_boilerplate, far_call::get_far_call_calldata, monomorphization::*};
+use super::{
+    common::full_boilerplate,
+    far_call::get_far_call_calldata,
+    monomorphization::{match_boolean, monomorphize, parameterize},
+};
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     callframe::FrameRemnant,
@@ -27,10 +31,10 @@ fn naked_ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
     }) = vm.state.current_frame.pop_near_call()
     {
         if TO_LABEL {
-            let pc = Immediate1::get(args, &mut vm.state).low_u32() as u16;
+            let pc = Immediate1::get_u16(args);
             vm.state.current_frame.set_pc_from_u16(pc);
         } else if return_type.is_failure() {
-            vm.state.current_frame.set_pc_from_u16(exception_handler)
+            vm.state.current_frame.set_pc_from_u16(exception_handler);
         }
 
         (snapshot, near_call_leftover_gas)
@@ -79,7 +83,7 @@ fn naked_ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
                     .read_range_big_endian(
                         return_value.start..return_value.start + return_value.length,
                     )
-                    .to_vec();
+                    .clone();
                 if return_type == ReturnType::Revert {
                     ExecutionStatus::Stopped(ExecutionEnd::Reverted(output))
                 } else {
@@ -99,7 +103,7 @@ fn naked_ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
         vm.state.register_pointer_flags = 2;
 
         if return_type.is_failure() {
-            vm.state.current_frame.set_pc_from_u16(exception_handler)
+            vm.state.current_frame.set_pc_from_u16(exception_handler);
         }
 
         (snapshot, leftover_gas)
@@ -140,7 +144,7 @@ pub(crate) fn free_panic<T: Tracer, W>(
 ) -> ExecutionStatus {
     tracer.before_instruction::<opcodes::Ret<Panic>, _>(vm);
     // args aren't used for panics unless TO_LABEL
-    let result = naked_ret::<T, W, opcodes::Panic, false>(
+    let result = naked_ret::<T, W, Panic, false>(
         vm,
         &Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
     );
@@ -159,14 +163,10 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
 
     // Gas is already subtracted in the far call code.
     // No need to roll back, as no changes are made in this "frame".
-
     vm.state.set_context_u128(0);
-
     vm.state.registers = [U256::zero(); 16];
     vm.state.register_pointer_flags = 2;
-
     vm.state.flags = Flags::new(true, false, false);
-
     vm.state.current_frame.set_pc_from_u16(exception_handler);
 
     tracer.after_instruction::<opcodes::Ret<Panic>, _>(vm);
@@ -175,14 +175,16 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
 /// Panics, burning all available gas.
 static INVALID_INSTRUCTION: Instruction<(), ()> = Instruction::from_invalid();
 
-pub fn invalid_instruction<'a, T, W>() -> &'a Instruction<T, W> {
+pub(crate) fn invalid_instruction<'a, T, W>() -> &'a Instruction<T, W> {
     // Safety: the handler of an invalid instruction is never read.
-    unsafe { &*(&INVALID_INSTRUCTION as *const Instruction<(), ()>).cast() }
+    unsafe { &*std::ptr::addr_of!(INVALID_INSTRUCTION).cast() }
 }
 
 pub(crate) const RETURN_COST: u32 = 5;
 
+/// Variations of [`Ret`](opcodes::Ret) instructions.
 impl<T: Tracer, W> Instruction<T, W> {
+    /// Creates a normal [`Ret`](opcodes::Ret) instruction with the provided params.
     pub fn from_ret(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         Self {
@@ -190,6 +192,8 @@ impl<T: Tracer, W> Instruction<T, W> {
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
+
+    /// Creates a revert [`Ret`](opcodes::Ret) instruction with the provided params.
     pub fn from_revert(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         Self {
@@ -197,6 +201,8 @@ impl<T: Tracer, W> Instruction<T, W> {
             arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
+
+    /// Creates a panic [`Ret`](opcodes::Ret) instruction with the provided params.
     pub fn from_panic(label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         Self {
@@ -205,6 +211,7 @@ impl<T: Tracer, W> Instruction<T, W> {
         }
     }
 
+    /// Creates a *invalid* instruction that will panic by draining all gas.
     pub const fn from_invalid() -> Self {
         Self {
             // This field is never read because the instruction fails at the gas cost stage.

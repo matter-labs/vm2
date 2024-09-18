@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A trait for things that can be rolled back to snapshots
 pub(crate) trait Rollback {
@@ -15,7 +15,7 @@ pub(crate) struct RollbackableMap<K: Ord, V> {
 }
 
 impl<K: Ord + Clone, V: Clone> RollbackableMap<K, V> {
-    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+    pub(crate) fn insert(&mut self, key: K, value: V) -> Option<V> {
         let old_value = self.map.insert(key.clone(), value);
         self.old_entries.push((key, old_value.clone()));
         old_value
@@ -66,14 +66,14 @@ impl<K: Ord, V> AsRef<BTreeMap<K, V>> for RollbackableMap<K, V> {
 
 #[derive(Debug, Default)]
 pub(crate) struct RollbackableSet<K: Ord> {
-    map: BTreeMap<K, ()>,
+    map: BTreeSet<K>,
     old_entries: Vec<K>,
 }
 
 impl<T: Ord + Clone> RollbackableSet<T> {
     /// Adds `key` to the set and returns if it was added (not present earlier).
-    pub fn add(&mut self, key: T) -> bool {
-        let is_new = self.map.insert(key.clone(), ()).is_none();
+    pub(crate) fn add(&mut self, key: T) -> bool {
+        let is_new = self.map.insert(key.clone());
         if is_new {
             self.old_entries.push(key);
         }
@@ -99,8 +99,8 @@ impl<K: Ord> Rollback for RollbackableSet<K> {
     }
 }
 
-impl<K: Ord> AsRef<BTreeMap<K, ()>> for RollbackableSet<K> {
-    fn as_ref(&self) -> &BTreeMap<K, ()> {
+impl<K: Ord> AsRef<BTreeSet<K>> for RollbackableSet<K> {
+    fn as_ref(&self) -> &BTreeSet<K> {
         &self.map
     }
 }
@@ -113,7 +113,7 @@ pub(crate) struct RollbackableLog<T> {
 impl<T> Default for RollbackableLog<T> {
     fn default() -> Self {
         Self {
-            entries: Default::default(),
+            entries: Vec::default(),
         }
     }
 }
@@ -126,15 +126,15 @@ impl<T> Rollback for RollbackableLog<T> {
     }
 
     fn rollback(&mut self, snapshot: Self::Snapshot) {
-        self.entries.truncate(snapshot)
+        self.entries.truncate(snapshot);
     }
 
     fn delete_history(&mut self) {}
 }
 
 impl<T> RollbackableLog<T> {
-    pub fn push(&mut self, entry: T) {
-        self.entries.push(entry)
+    pub(crate) fn push(&mut self, entry: T) {
+        self.entries.push(entry);
     }
 
     pub(crate) fn logs_after(&self, snapshot: <RollbackableLog<T> as Rollback>::Snapshot) -> &[T] {
@@ -150,7 +150,7 @@ impl<T> AsRef<[T]> for RollbackableLog<T> {
 
 /// Rollbackable Plain Old Data simply stores copies of itself in snapshots.
 #[derive(Debug, Default, Copy, Clone)]
-pub(crate) struct RollbackablePod<T: Copy>(pub T);
+pub(crate) struct RollbackablePod<T: Copy>(pub(crate) T);
 
 impl<T: Copy> Rollback for RollbackablePod<T> {
     type Snapshot = T;
@@ -160,7 +160,7 @@ impl<T: Copy> Rollback for RollbackablePod<T> {
     }
 
     fn rollback(&mut self, snapshot: Self::Snapshot) {
-        self.0 = snapshot
+        self.0 = snapshot;
     }
 
     fn delete_history(&mut self) {}

@@ -1,3 +1,4 @@
+use primitive_types::{H160, U256};
 use zk_evm_abstractions::{
     aux::Timestamp,
     precompiles::{
@@ -37,7 +38,11 @@ fn precompile_call<T: Tracer, W>(
             vm.state.current_frame.pc = &*vm.panic;
             return;
         };
-        vm.world_diff.pubdata.0 += aux_data.extra_pubdata_cost as i32;
+
+        #[allow(clippy::cast_possible_wrap)]
+        {
+            vm.world_diff.pubdata.0 += aux_data.extra_pubdata_cost as i32;
+        }
 
         let mut abi = PrecompileCallABI::from_u256(Register1::get(args, &mut vm.state));
         if abi.memory_page_to_read == 0 {
@@ -54,9 +59,9 @@ fn precompile_call<T: Tracer, W>(
             tx_number_in_block: Default::default(),
             aux_byte: Default::default(),
             shard_id: Default::default(),
-            address: Default::default(),
-            read_value: Default::default(),
-            written_value: Default::default(),
+            address: H160::default(),
+            read_value: U256::default(),
+            written_value: U256::default(),
             rw_flag: Default::default(),
             rollback: Default::default(),
             is_service: Default::default(),
@@ -65,6 +70,9 @@ fn precompile_call<T: Tracer, W>(
         let address_bytes = vm.state.current_frame.address.0;
         let address_low = u16::from_le_bytes([address_bytes[19], address_bytes[18]]);
         let heaps = &mut vm.state.heaps;
+
+        #[allow(clippy::cast_possible_truncation)]
+        // if we're having `> u32::MAX` cycles, we've got larger issues
         match address_low {
             KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
                 tracer.on_extra_prover_cycles(CycleStats::Keccak256(
@@ -82,7 +90,7 @@ fn precompile_call<T: Tracer, W>(
                 ));
             }
             SECP256R1_VERIFY_PRECOMPILE_ADDRESS => {
-                tracer.on_extra_prover_cycles(CycleStats::Secp256k1Verify(
+                tracer.on_extra_prover_cycles(CycleStats::Secp256r1Verify(
                     secp256r1_verify_function::<_, false>(0, query, heaps).0 as u32,
                 ));
             }
@@ -131,6 +139,7 @@ impl Memory for Heaps {
 }
 
 impl<T: Tracer, W> Instruction<T, W> {
+    /// Creates a [`PrecompileCall`](opcodes::PrecompileCall) instruction with the provided params.
     pub fn from_precompile_call(
         abi: Register1,
         burn: Register2,

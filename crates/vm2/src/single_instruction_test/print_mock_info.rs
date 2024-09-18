@@ -13,9 +13,9 @@ impl<T, W> VirtualMachine<T, W> {
 }
 
 impl<T, W> State<T, W> {
-    pub fn print_mock_info(&self) {
-        if let Some((heapid, heap)) = self.heaps.read.read_that_happened() {
-            println!("Heap: {:?}", heapid);
+    pub(crate) fn print_mock_info(&self) {
+        if let Some((heap_id, heap)) = self.heaps.read.read_that_happened() {
+            println!("Heap: {heap_id:?}");
             if let Some((address, value)) = heap.read.read_that_happened() {
                 println!("  {value:?} read from {address:?}");
             }
@@ -35,7 +35,7 @@ impl<T, W> State<T, W> {
 }
 
 impl<T, W> Callframe<T, W> {
-    pub fn print_mock_info(&self) {
+    pub(crate) fn print_mock_info(&self) {
         if let Some((address, (value, tag))) = self.stack.read_that_happened() {
             println!("  {value:?} (is_pointer: {tag}) read from stack address {address}",);
         }

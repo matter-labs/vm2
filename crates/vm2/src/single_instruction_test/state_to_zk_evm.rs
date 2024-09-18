@@ -6,7 +6,6 @@ use zk_evm::{
     vm_state::{execution_stack::CallStackEntry, Callstack, PrimitiveValue, VmLocalState},
 };
 use zkevm_opcode_defs::decoding::EncodingModeProduction;
-use zksync_vm2_interface::Tracer;
 
 use crate::{
     callframe::{Callframe, NearCallFrame},
@@ -14,7 +13,7 @@ use crate::{
     Instruction,
 };
 
-pub(crate) fn vm2_state_to_zk_evm_state<T: Tracer, W>(
+pub(crate) fn vm2_state_to_zk_evm_state<T, W>(
     state: &State<T, W>,
     panic: &Instruction<T, W>,
 ) -> VmLocalState<8, EncodingModeProduction> {

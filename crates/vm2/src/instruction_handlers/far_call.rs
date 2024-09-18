@@ -11,6 +11,7 @@ use zksync_vm2_interface::{
 use super::{
     common::boilerplate_ext,
     heap_access::grow_heap,
+    monomorphization::{match_boolean, monomorphize, parameterize},
     ret::{panic_from_failed_far_call, RETURN_COST},
     AuxHeap, Heap,
 };
@@ -33,23 +34,22 @@ use crate::{
 ///
 /// Even though all errors happen before the new stack frame, they cause a panic in the new frame,
 /// not in the caller!
-fn far_call<
-    T: Tracer,
-    W: World<T>,
-    M: TypeLevelCallingMode,
-    const IS_STATIC: bool,
-    const IS_SHARD: bool,
->(
+fn far_call<T, W, M, const IS_STATIC: bool, const IS_SHARD: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) -> ExecutionStatus
+where
+    T: Tracer,
+    W: World<T>,
+    M: TypeLevelCallingMode,
+{
     boilerplate_ext::<FarCall<M>, _, _>(vm, world, tracer, |vm, args, world, tracer| {
         let (raw_abi, raw_abi_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
 
         let address_mask: U256 = U256::MAX >> (256 - 160);
         let destination_address = Register2::get(args, &mut vm.state) & address_mask;
-        let exception_handler = Immediate1::get(args, &mut vm.state).low_u32() as u16;
+        let exception_handler = Immediate1::get_u16(args);
 
         let mut abi = get_far_call_arguments(raw_abi);
         abi.is_constructor_call = abi.is_constructor_call && vm.state.current_frame.is_kernel;
@@ -158,14 +158,16 @@ fn far_call<
     })
 }
 
+#[derive(Debug)]
 pub(crate) struct FarCallABI {
-    pub gas_to_pass: u32,
-    pub shard_id: u8,
-    pub is_constructor_call: bool,
-    pub is_system_call: bool,
+    pub(crate) gas_to_pass: u32,
+    pub(crate) shard_id: u8,
+    pub(crate) is_constructor_call: bool,
+    pub(crate) is_system_call: bool,
 }
 
-pub(crate) fn get_far_call_arguments(abi: U256) -> FarCallABI {
+#[allow(clippy::cast_possible_truncation)] // intentional
+fn get_far_call_arguments(abi: U256) -> FarCallABI {
     let gas_to_pass = abi.0[3] as u32;
     let settings = (abi.0[3] >> 32) as u32;
     let [_, shard_id, constructor_call_byte, system_call_byte] = settings.to_le_bytes();
@@ -182,15 +184,18 @@ pub(crate) fn get_far_call_arguments(abi: U256) -> FarCallABI {
 ///
 /// This function needs to be called even if we already know we will panic because
 /// overflowing start + length makes the heap resize even when already panicking.
-pub(crate) fn get_far_call_calldata<T: Tracer, W>(
+pub(crate) fn get_far_call_calldata<T, W>(
     raw_abi: U256,
     is_pointer: bool,
     vm: &mut VirtualMachine<T, W>,
     already_failed: bool,
 ) -> Option<FatPointer> {
     let mut pointer = FatPointer::from(raw_abi);
+    #[allow(clippy::cast_possible_truncation)]
+    // intentional: the source is encoded in the lower byte of the extracted value
+    let raw_source = (raw_abi.0[3] >> 32) as u8;
 
-    match FatPointerSource::from_abi((raw_abi.0[3] >> 32) as u8) {
+    match FatPointerSource::from_abi(raw_source) {
         FatPointerSource::ForwardFatPointer => {
             if !is_pointer || pointer.offset > pointer.length || already_failed {
                 return None;
@@ -204,11 +209,11 @@ pub(crate) fn get_far_call_calldata<T: Tracer, W>(
                     return None;
                 }
                 match target {
-                    ToHeap => {
+                    FatPointerTarget::ToHeap => {
                         grow_heap::<_, _, Heap>(&mut vm.state, bound).ok()?;
                         pointer.memory_page = vm.state.current_frame.heap;
                     }
-                    ToAuxHeap => {
+                    FatPointerTarget::ToAuxHeap => {
                         grow_heap::<_, _, AuxHeap>(&mut vm.state, bound).ok()?;
                         pointer.memory_page = vm.state.current_frame.aux_heap;
                     }
@@ -218,10 +223,10 @@ pub(crate) fn get_far_call_calldata<T: Tracer, W>(
                 // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
                 let bound = u32::MAX;
                 match target {
-                    ToHeap => {
+                    FatPointerTarget::ToHeap => {
                         grow_heap::<_, _, Heap>(&mut vm.state, bound).ok()?;
                     }
-                    ToAuxHeap => {
+                    FatPointerTarget::ToAuxHeap => {
                         grow_heap::<_, _, AuxHeap>(&mut vm.state, bound).ok()?;
                     }
                 }
@@ -233,23 +238,24 @@ pub(crate) fn get_far_call_calldata<T: Tracer, W>(
     Some(pointer)
 }
 
+#[derive(Debug)]
 enum FatPointerSource {
     MakeNewPointer(FatPointerTarget),
     ForwardFatPointer,
 }
+
+#[derive(Debug)]
 enum FatPointerTarget {
     ToHeap,
     ToAuxHeap,
 }
-use FatPointerTarget::*;
 
 impl FatPointerSource {
-    pub const fn from_abi(value: u8) -> Self {
+    const fn from_abi(value: u8) -> Self {
         match value {
-            0 => Self::MakeNewPointer(ToHeap),
             1 => Self::ForwardFatPointer,
-            2 => Self::MakeNewPointer(ToAuxHeap),
-            _ => Self::MakeNewPointer(ToHeap), // default
+            2 => Self::MakeNewPointer(FatPointerTarget::ToAuxHeap),
+            _ => Self::MakeNewPointer(FatPointerTarget::ToHeap), // default
         }
     }
 }
@@ -262,9 +268,8 @@ impl FatPointer {
     }
 }
 
-use super::monomorphization::*;
-
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
+    /// Creates a [`FarCall`] instruction with the provided mode and params.
     pub fn from_far_call<M: TypeLevelCallingMode>(
         src1: Register1,
         src2: Register2,

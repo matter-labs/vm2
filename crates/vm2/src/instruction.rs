@@ -1,10 +1,11 @@
 use std::fmt;
 
-use crate::{
-    addressing_modes::Arguments, mode_requirements::ModeRequirements, vm::VirtualMachine, Predicate,
-};
+use crate::{addressing_modes::Arguments, vm::VirtualMachine};
 
-#[doc(hidden)] // should only be used for low-level testing / benchmarking
+/// Single EraVM instruction (an opcode + [`Arguments`]).
+///
+/// Managing instructions is warranted for low-level tests; prefer using [`Program`](crate::Program)s to decode instructions
+/// from EraVM bytecodes.
 pub struct Instruction<T, W> {
     pub(crate) handler: Handler<T, W>,
     pub(crate) arguments: Arguments,
@@ -27,28 +28,15 @@ pub(crate) enum ExecutionStatus {
     Stopped(ExecutionEnd),
 }
 
+/// VM stop reason returned from [`VirtualMachine::run()`].
 #[derive(Debug, PartialEq)]
 pub enum ExecutionEnd {
+    /// The executed program has finished and returned the specified data.
     ProgramFinished(Vec<u8>),
+    /// The executed program has reverted returning the specified data.
     Reverted(Vec<u8>),
+    /// The executed program has panicked.
     Panicked,
-
-    /// Returned when the bootloader writes to the heap location [crate::Settings::hook_address]
+    /// Returned when the bootloader writes to the heap location specified by [`hook_address`](crate::Settings.hook_address).
     SuspendedOnHook(u32),
-}
-
-pub(crate) fn jump_to_beginning<T, W>() -> Instruction<T, W> {
-    Instruction {
-        handler: jump_to_beginning_handler,
-        arguments: Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
-    }
-}
-fn jump_to_beginning_handler<T, W>(
-    vm: &mut VirtualMachine<T, W>,
-    _: &mut W,
-    _: &mut T,
-) -> ExecutionStatus {
-    let first_instruction = vm.state.current_frame.program.instruction(0).unwrap();
-    vm.state.current_frame.pc = first_instruction;
-    ExecutionStatus::Running
 }

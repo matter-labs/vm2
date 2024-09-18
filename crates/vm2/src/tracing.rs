@@ -1,7 +1,9 @@
 use std::cmp::Ordering;
 
 use primitive_types::{H160, U256};
-use zksync_vm2_interface::*;
+use zksync_vm2_interface::{
+    CallframeInterface, Event, Flags, HeapId, L2ToL1Log, StateInterface, Tracer,
+};
 
 use crate::{
     callframe::{Callframe, NearCallFrame},
@@ -10,7 +12,7 @@ use crate::{
     VirtualMachine,
 };
 
-impl<T, W> StateInterface for VirtualMachine<T, W> {
+impl<T: Tracer, W> StateInterface for VirtualMachine<T, W> {
     fn read_register(&self, register: u8) -> (U256, bool) {
         (
             self.state.registers[register as usize],
@@ -130,28 +132,15 @@ impl<T, W> StateInterface for VirtualMachine<T, W> {
 
     fn write_transient_storage(&mut self, address: H160, slot: U256, value: U256) {
         self.world_diff
-            .write_transient_storage(address, slot, value)
+            .write_transient_storage(address, slot, value);
     }
 
     fn events(&self) -> impl Iterator<Item = Event> {
-        self.world_diff.events().iter().map(|event| Event {
-            key: event.key,
-            value: event.value,
-            is_first: event.is_first,
-            shard_id: event.shard_id,
-            tx_number: event.tx_number,
-        })
+        self.world_diff.events().iter().copied()
     }
 
     fn l2_to_l1_logs(&self) -> impl Iterator<Item = L2ToL1Log> {
-        self.world_diff.l2_to_l1_logs().iter().map(|log| L2ToL1Log {
-            address: log.address,
-            key: log.key,
-            value: log.value,
-            is_service: log.is_service,
-            shard_id: log.shard_id,
-            tx_number: log.tx_number,
-        })
+        self.world_diff.l2_to_l1_logs().iter().copied()
     }
 
     fn pubdata(&self) -> i32 {
@@ -168,7 +157,7 @@ struct CallframeWrapper<'a, T, W> {
     near_call: Option<usize>,
 }
 
-impl<T, W> CallframeInterface for CallframeWrapper<'_, T, W> {
+impl<T: Tracer, W> CallframeInterface for CallframeWrapper<'_, T, W> {
     fn address(&self) -> H160 {
         self.frame.address
     }
@@ -254,7 +243,7 @@ impl<T, W> CallframeInterface for CallframeWrapper<'_, T, W> {
         self.frame.aux_heap_size = value;
     }
 
-    fn read_code_page(&self, slot: u16) -> U256 {
+    fn read_contract_code(&self, slot: u16) -> U256 {
         self.frame.program.code_page()[slot as usize]
     }
 
@@ -296,15 +285,17 @@ impl<T, W> CallframeInterface for CallframeWrapper<'_, T, W> {
         }
     }
 
+    // we don't expect the VM to run on 16-bit machines, and sign loss / wrap is checked
+    #[allow(
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap
+    )]
     fn program_counter(&self) -> Option<u16> {
         if let Some(call) = self.near_call_on_top() {
             Some(call.previous_frame_pc)
         } else {
-            let offset = unsafe {
-                self.frame
-                    .pc
-                    .offset_from(self.frame.program.instruction(0).unwrap())
-            };
+            let offset = self.frame.get_raw_pc();
             if offset < 0
                 || offset > u16::MAX as isize
                 || self.frame.program.instruction(offset as u16).is_none()
@@ -370,16 +361,19 @@ impl<T, W> CallframeWrapper<'_, T, W> {
 mod test {
     use primitive_types::H160;
     use zkevm_opcode_defs::ethereum_types::Address;
-    use zksync_vm2_interface::HeapId;
+    use zksync_vm2_interface::opcodes;
 
     use super::*;
-    use crate::{initial_decommit, testworld::TestWorld, Instruction, Program, VirtualMachine};
+    use crate::{
+        testonly::{initial_decommit, TestWorld},
+        Instruction, Program, VirtualMachine,
+    };
 
     #[test]
     fn callframe_picking() {
-        let program = Program::new(vec![Instruction::from_invalid()], vec![]);
+        let program = Program::from_raw(vec![Instruction::from_invalid()], vec![]);
 
-        let address = Address::from_low_u64_be(0x1234567890abcdef);
+        let address = Address::from_low_u64_be(0x_1234_5678_90ab_cdef);
         let mut world = TestWorld::new(&[(address, program)]);
         let program = initial_decommit(&mut world, address);
 
@@ -387,7 +381,7 @@ mod test {
             address,
             program.clone(),
             Address::zero(),
-            vec![],
+            &[],
             1000,
             crate::Settings {
                 default_aa_code_hash: [0; 32],

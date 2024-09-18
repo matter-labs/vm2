@@ -5,7 +5,7 @@ use zkevm_opcode_defs::system_params::{
     STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST, STORAGE_ACCESS_WARM_READ_COST,
     STORAGE_ACCESS_WARM_WRITE_COST,
 };
-use zksync_vm2_interface::{CycleStats, Tracer};
+use zksync_vm2_interface::{CycleStats, Event, L2ToL1Log, Tracer};
 
 use crate::{
     rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackablePod, RollbackableSet},
@@ -39,34 +39,13 @@ pub struct WorldDiff {
 }
 
 #[derive(Debug)]
-pub struct ExternalSnapshot {
+pub(crate) struct ExternalSnapshot {
     internal_snapshot: Snapshot,
     pub(crate) decommitted_hashes: <RollbackableMap<U256, ()> as Rollback>::Snapshot,
     read_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
     written_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
     storage_refunds: <RollbackableLog<u32> as Rollback>::Snapshot,
     pubdata_costs: <RollbackableLog<i32> as Rollback>::Snapshot,
-}
-
-/// There is no address field because nobody is interested in events that don't come
-/// from the event writer, so we simply do not record events coming frome anywhere else.
-#[derive(Clone, PartialEq, Debug)]
-pub struct Event {
-    pub key: U256,
-    pub value: U256,
-    pub is_first: bool,
-    pub shard_id: u8,
-    pub tx_number: u16,
-}
-
-#[derive(Debug)]
-pub struct L2ToL1Log {
-    pub key: U256,
-    pub value: U256,
-    pub is_service: bool,
-    pub address: H160,
-    pub shard_id: u8,
-    pub tx_number: u16,
 }
 
 impl WorldDiff {
@@ -157,41 +136,48 @@ impl WorldDiff {
             .insert((contract, key), update_cost)
             .unwrap_or(0);
 
-        let refund = if !self.written_storage_slots.add((contract, key)) {
-            WARM_WRITE_REFUND
-        } else {
+        let refund = if self.written_storage_slots.add((contract, key)) {
             tracer.on_extra_prover_cycles(CycleStats::StorageWrite);
 
-            if !self.read_storage_slots.add((contract, key)) {
-                COLD_WRITE_AFTER_WARM_READ_REFUND
-            } else {
+            if self.read_storage_slots.add((contract, key)) {
                 0
+            } else {
+                COLD_WRITE_AFTER_WARM_READ_REFUND
             }
+        } else {
+            WARM_WRITE_REFUND
         };
 
-        let pubdata_cost = (update_cost as i32) - (prepaid as i32);
-        self.pubdata.0 += pubdata_cost;
-        self.storage_refunds.push(refund);
-        self.pubdata_costs.push(pubdata_cost);
+        #[allow(clippy::cast_possible_wrap)]
+        {
+            let pubdata_cost = (update_cost as i32) - (prepaid as i32);
+            self.pubdata.0 += pubdata_cost;
+            self.storage_refunds.push(refund);
+            self.pubdata_costs.push(pubdata_cost);
+        }
         refund
     }
 
-    pub fn pubdata(&self) -> i32 {
+    pub(crate) fn pubdata(&self) -> i32 {
         self.pubdata.0
     }
 
+    /// Returns recorded refunds for all storage operations.
     pub fn storage_refunds(&self) -> &[u32] {
         self.storage_refunds.as_ref()
     }
 
+    /// Returns recorded pubdata costs for all storage operations.
     pub fn pubdata_costs(&self) -> &[i32] {
         self.pubdata_costs.as_ref()
     }
 
+    #[doc(hidden)] // duplicates `StateInterface::get_storage_state()`, but we use random access in some places
     pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
         self.storage_changes.as_ref()
     }
 
+    /// Gets changes for all touched storage slots.
     pub fn get_storage_changes(
         &self,
     ) -> impl Iterator<Item = ((H160, U256), (Option<U256>, U256))> + '_ {
@@ -207,6 +193,7 @@ impl WorldDiff {
             })
     }
 
+    /// Gets changes for storage slots touched after the specified `snapshot` was created.
     pub fn get_storage_changes_after(
         &self,
         snapshot: &Snapshot,
@@ -242,7 +229,7 @@ impl WorldDiff {
             .insert((contract, key), value);
     }
 
-    pub fn get_transient_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
+    pub(crate) fn get_transient_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
         self.transient_storage_changes.as_ref()
     }
 
@@ -250,10 +237,11 @@ impl WorldDiff {
         self.events.push(event);
     }
 
-    pub fn events(&self) -> &[Event] {
+    pub(crate) fn events(&self) -> &[Event] {
         self.events.as_ref()
     }
 
+    /// Returns events emitted after the specified `snapshot` was created.
     pub fn events_after(&self, snapshot: &Snapshot) -> &[Event] {
         self.events.logs_after(snapshot.events)
     }
@@ -262,10 +250,11 @@ impl WorldDiff {
         self.l2_to_l1_logs.push(log);
     }
 
-    pub fn l2_to_l1_logs(&self) -> &[L2ToL1Log] {
+    pub(crate) fn l2_to_l1_logs(&self) -> &[L2ToL1Log] {
         self.l2_to_l1_logs.as_ref()
     }
 
+    /// Returns L2-to-L1 logs emitted after the specified `snapshot` was created.
     pub fn l2_to_l1_logs_after(&self, snapshot: &Snapshot) -> &[L2ToL1Log] {
         self.l2_to_l1_logs.logs_after(snapshot.l2_to_l1_logs)
     }
@@ -276,9 +265,7 @@ impl WorldDiff {
         self.decommitted_hashes.as_ref().keys().copied()
     }
 
-    /// Get a snapshot for selecting which logs [Self::events_after] & Co output.
-    /// The snapshot can't be used for rolling back the VM because the method for
-    /// that is private. Use [crate::VirtualMachine::snapshot] for that instead.
+    /// Get a snapshot for selecting which logs & co. to output using [`Self::events_after()`] and other methods.
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
             storage_changes: self.storage_changes.snapshot(),
@@ -290,6 +277,7 @@ impl WorldDiff {
         }
     }
 
+    #[allow(clippy::needless_pass_by_value)] // intentional: we require a snapshot to be rolled back to no more than once
     pub(crate) fn rollback(&mut self, snapshot: Snapshot) {
         self.storage_changes.rollback(snapshot.storage_changes);
         self.paid_changes.rollback(snapshot.paid_changes);
@@ -347,10 +335,12 @@ impl WorldDiff {
     }
 
     pub(crate) fn clear_transient_storage(&mut self) {
-        self.transient_storage_changes = Default::default();
+        self.transient_storage_changes = RollbackableMap::default();
     }
 }
 
+/// Opaque snapshot of a [`WorldDiff`] output by its [eponymous method](WorldDiff::snapshot()).
+/// Can be provided to [`WorldDiff::events_after()`] etc. to get data after the snapshot was created.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Snapshot {
     storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
@@ -361,11 +351,14 @@ pub struct Snapshot {
     pubdata: <RollbackablePod<i32> as Rollback>::Snapshot,
 }
 
+/// Change in a single storage slot.
 #[derive(Debug, PartialEq)]
 pub struct StorageChange {
+    /// Value before the slot was written to. `None` if the slot was not written to previously.
     pub before: Option<U256>,
+    /// Value written to the slot.
     pub after: U256,
-    /// `true` if the slot is not set in the World.
+    /// `true` if the slot is not set in the [`World`](crate::World).
     /// A write may be initial even if it isn't the first write to a slot!
     pub is_initial: bool,
 }
@@ -447,10 +440,10 @@ mod tests {
                 .collect::<BTreeMap<_, _>>();
             for (key, value) in second_changes {
                 let initial = initial_values.get(&key).copied();
-                if initial.unwrap_or_default() != value {
-                    combined.insert(key, (initial, value));
-                } else {
+                if initial.unwrap_or_default() == value {
                     combined.remove(&key);
+                } else {
+                    combined.insert(key, (initial, value));
                 }
             }
 

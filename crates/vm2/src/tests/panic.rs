@@ -1,11 +1,9 @@
-#![cfg(not(feature = "single_instruction_test"))]
-
 use proptest::prelude::*;
 use zkevm_opcode_defs::ethereum_types::Address;
-use zksync_vm2::{
+
+use crate::{
     addressing_modes::{Arguments, Immediate1, Immediate2, Register, Register1},
-    initial_decommit,
-    testworld::TestWorld,
+    testonly::{initial_decommit, TestWorld},
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
 };
 
@@ -29,9 +27,9 @@ proptest! {
             ));
         }
 
-        let program = Program::new(instructions, vec![]);
+        let program = Program::from_raw(instructions, vec![]);
 
-        let address = Address::from_low_u64_be(0x1234567890abcdef);
+        let address = Address::from_low_u64_be(0x_1234_5678_90ab_cdef);
         let mut world = TestWorld::new(&[(address, program)]);
         let program = initial_decommit(&mut world, address);
 
@@ -39,7 +37,7 @@ proptest! {
             address,
             program,
             Address::zero(),
-            vec![],
+            &[],
             1000,
             Settings {
                 default_aa_code_hash: [0; 32],

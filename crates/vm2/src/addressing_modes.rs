@@ -29,7 +29,7 @@ pub(crate) trait Source {
     ) -> (U256, bool) {
         let (mut value, is_pointer) = Self::get_with_pointer_flag(args, state);
         if is_pointer && !state.in_kernel_mode() {
-            erase_fat_pointer_metadata(&mut value)
+            erase_fat_pointer_metadata(&mut value);
         }
         (value, is_pointer && state.in_kernel_mode())
     }
@@ -69,7 +69,7 @@ pub(crate) trait SourceWriter {
 impl<T: SourceWriter> SourceWriter for Option<T> {
     fn write_source(&self, args: &mut Arguments) {
         if let Some(x) = self {
-            x.write_source(args)
+            x.write_source(args);
         }
     }
 }
@@ -82,12 +82,12 @@ pub(crate) trait DestinationWriter {
 impl<T: DestinationWriter> DestinationWriter for Option<T> {
     fn write_destination(&self, args: &mut Arguments) {
         if let Some(x) = self {
-            x.write_destination(args)
+            x.write_destination(args);
         }
     }
 }
 
-/// Argument provided to an instruction in an EraVM bytecode.
+/// Arguments provided to an instruction in an EraVM bytecode.
 // It is important for performance that this fits into 8 bytes.
 #[derive(Debug)]
 pub struct Arguments {
@@ -99,12 +99,14 @@ pub struct Arguments {
     static_gas_cost: u8,
 }
 
-pub(crate) const L1_MESSAGE_COST: u32 = 156250;
-pub(crate) const SSTORE_COST: u32 = 5511;
-pub(crate) const SLOAD_COST: u32 = 2008;
-pub(crate) const INVALID_INSTRUCTION_COST: u32 = 4294967295;
+pub(crate) const L1_MESSAGE_COST: u32 = 156_250;
+pub(crate) const SSTORE_COST: u32 = 5_511;
+pub(crate) const SLOAD_COST: u32 = 2_008;
+pub(crate) const INVALID_INSTRUCTION_COST: u32 = 4_294_967_295;
 
 impl Arguments {
+    /// Creates arguments from the provided info.
+    #[allow(clippy::missing_panics_doc)] // never panics on properly created inputs
     pub const fn new(
         predicate: Predicate,
         gas_cost: u32,
@@ -124,6 +126,7 @@ impl Arguments {
         }
     }
 
+    #[allow(clippy::cast_possible_truncation)] // checked
     const fn encode_static_gas_cost(x: u32) -> u8 {
         match x {
             L1_MESSAGE_COST => 1,
@@ -133,7 +136,7 @@ impl Arguments {
             1..=4 => panic!("Reserved gas cost values overlap with actual gas costs"),
             x => {
                 if x > u8::MAX as u32 {
-                    panic!("Gas cost doesn't fit into 8 bits")
+                    panic!("Gas cost doesn't fit into 8 bits");
                 } else {
                     x as u8
                 }
@@ -221,7 +224,7 @@ impl Destination for Register1 {
 
 impl DestinationWriter for Register1 {
     fn write_destination(&self, args: &mut Arguments) {
-        args.destination_registers.set_register1(self.0)
+        args.destination_registers.set_register1(self.0);
     }
 }
 
@@ -237,7 +240,7 @@ impl Destination for Register2 {
 
 impl DestinationWriter for Register2 {
     fn write_destination(&self, args: &mut Arguments) {
-        args.destination_registers.set_register2(self.0)
+        args.destination_registers.set_register2(self.0);
     }
 }
 
@@ -251,9 +254,21 @@ pub struct Immediate1(pub u16);
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub struct Immediate2(pub u16);
 
+impl Immediate1 {
+    pub(crate) fn get_u16(args: &Arguments) -> u16 {
+        args.immediate1
+    }
+}
+
+impl Immediate2 {
+    pub(crate) fn get_u16(args: &Arguments) -> u16 {
+        args.immediate2
+    }
+}
+
 impl Source for Immediate1 {
     fn get(args: &Arguments, _state: &mut impl Addressable) -> U256 {
-        U256([args.immediate1 as u64, 0, 0, 0])
+        U256([args.immediate1.into(), 0, 0, 0])
     }
 }
 
@@ -265,7 +280,7 @@ impl SourceWriter for Immediate1 {
 
 impl Source for Immediate2 {
     fn get(args: &Arguments, _state: &mut impl Addressable) -> U256 {
-        U256([args.immediate2 as u64, 0, 0, 0])
+        U256([args.immediate2.into(), 0, 0, 0])
     }
 }
 
@@ -280,7 +295,9 @@ impl SourceWriter for Immediate2 {
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub struct RegisterAndImmediate {
+    /// Immediate value.
     pub immediate: u16,
+    /// Register spec.
     pub register: Register,
 }
 
@@ -301,7 +318,7 @@ impl<T: RegisterPlusImmediate> DestinationWriter for T {
     fn write_destination(&self, args: &mut Arguments) {
         args.immediate2 = self.inner().immediate;
         args.destination_registers
-            .set_register1(self.inner().register)
+            .set_register1(self.inner().register);
     }
 }
 
@@ -348,6 +365,7 @@ pub(crate) fn destination_stack_address(args: &Arguments, state: &mut impl Addre
 
 /// Computes register + immediate (mod 2^16).
 /// Stack addresses are always in that remainder class anyway.
+#[allow(clippy::cast_possible_truncation)]
 fn compute_stack_address(state: &mut impl Addressable, register: Register, immediate: u16) -> u16 {
     (register.value(state).low_u32() as u16).wrapping_add(immediate)
 }
@@ -444,7 +462,7 @@ impl Source for CodePage {
         state
             .code_page()
             .get(address as usize)
-            .cloned()
+            .copied()
             .unwrap_or(U256::zero())
     }
 }
@@ -455,27 +473,31 @@ pub struct Register(u8);
 
 impl Register {
     /// Creates a register with the specified 0-based index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n >= 16`; EraVM has 16 registers.
     pub const fn new(n: u8) -> Self {
         assert!(n < 16, "EraVM has 16 registers");
         Self(n)
     }
 
-    fn value(&self, state: &mut impl Addressable) -> U256 {
+    fn value(self, state: &mut impl Addressable) -> U256 {
         unsafe { *state.registers().get_unchecked(self.0 as usize) }
     }
 
-    fn pointer_flag(&self, state: &mut impl Addressable) -> bool {
+    fn pointer_flag(self, state: &mut impl Addressable) -> bool {
         *state.register_pointer_flags() & (1 << self.0) != 0
     }
 
-    fn set(&self, state: &mut impl Addressable, value: U256) {
+    fn set(self, state: &mut impl Addressable, value: U256) {
         if self.0 != 0 {
             unsafe { *state.registers().get_unchecked_mut(self.0 as usize) = value };
             *state.register_pointer_flags() &= !(1 << self.0);
         }
     }
 
-    fn set_ptr(&self, state: &mut impl Addressable, value: U256) {
+    fn set_ptr(self, state: &mut impl Addressable, value: U256) {
         if self.0 != 0 {
             unsafe { *state.registers().get_unchecked_mut(self.0 as usize) = value };
             *state.register_pointer_flags() |= 1 << self.0;
@@ -485,6 +507,7 @@ impl Register {
 
 #[cfg(feature = "arbitrary")]
 impl<'a> Arbitrary<'a> for Register {
+    #[allow(clippy::cast_possible_truncation)] // false positive: the value is <16
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self, arbitrary::Error> {
         Ok(Register(u.choose_index(16)? as u8))
     }
@@ -510,16 +533,22 @@ impl PackedRegisters {
     }
 }
 
-/// All supported addressing modes for source arguments.
+/// All supported addressing modes for the first source argument.
 #[enum_dispatch(SourceWriter)]
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub enum AnySource {
+    /// Register mode.
     Register1,
+    /// Immediate mode.
     Immediate1,
+    /// Absolute stack addressing.
     AbsoluteStack,
+    /// Relative stack addressing.
     RelativeStack,
+    /// Relative stack addressing that updates the stack pointer on access.
     AdvanceStackPointer,
+    /// Addressing into the code page of the executing contract.
     CodePage,
 }
 
@@ -528,7 +557,9 @@ pub enum AnySource {
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub enum RegisterOrImmediate {
+    /// Register mode.
     Register1,
+    /// Immediate mode.
     Immediate1,
 }
 
@@ -548,13 +579,17 @@ impl TryFrom<AnySource> for RegisterOrImmediate {
     }
 }
 
-/// All supported addressing modes for destination arguments.
+/// All supported addressing modes for the first destination argument.
 #[enum_dispatch(DestinationWriter)]
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub enum AnyDestination {
+    /// Register mode.
     Register1,
+    /// Absolute stack addressing.
     AbsoluteStack,
+    /// Relative stack addressing.
     RelativeStack,
+    /// Relative stack addressing that updates the stack pointer on access.
     AdvanceStackPointer,
 }

@@ -48,54 +48,87 @@ macro_rules! forall_simple_opcodes {
 
 macro_rules! pub_struct {
     ($x:ident) => {
+        #[doc = concat!("`", stringify!($x), "` opcode.")]
+        #[derive(Debug)]
         pub struct $x;
     };
 }
 
+/// EraVM opcodes.
 pub mod opcodes {
     use std::marker::PhantomData;
 
     use super::{CallingMode, ReturnType};
 
     forall_simple_opcodes!(pub_struct);
+
+    /// `FarCall` group of opcodes distinguished by the calling mode (normal, delegate, or mimic).
+    #[derive(Debug)]
     pub struct FarCall<M: TypeLevelCallingMode>(PhantomData<M>);
+
+    /// `Ret` group of opcodes distinguished by the return type (normal, panic, or revert).
+    #[derive(Debug)]
     pub struct Ret<T: TypeLevelReturnType>(PhantomData<T>);
 
+    /// Normal [`Ret`]urn mode / [`FarCall`] mode.
+    #[derive(Debug)]
     pub struct Normal;
+
+    /// Delegate [`FarCall`] mode.
+    #[derive(Debug)]
     pub struct Delegate;
+
+    /// Mimic [`FarCall`] mode.
+    #[derive(Debug)]
     pub struct Mimic;
+
+    /// Revert [`Ret`]urn mode.
+    #[derive(Debug)]
     pub struct Revert;
+
+    /// Panic [`Ret`]urn mode.
+    #[derive(Debug)]
     pub struct Panic;
 
+    /// Calling mode for the [`FarCall`] opcodes.
     pub trait TypeLevelCallingMode {
+        /// Constant corresponding to this mode allowing to easily `match` it.
         const VALUE: CallingMode;
     }
 
     impl TypeLevelCallingMode for Normal {
         const VALUE: CallingMode = CallingMode::Normal;
     }
+
     impl TypeLevelCallingMode for Delegate {
         const VALUE: CallingMode = CallingMode::Delegate;
     }
+
     impl TypeLevelCallingMode for Mimic {
         const VALUE: CallingMode = CallingMode::Mimic;
     }
 
+    /// Return type for the [`Ret`] opcodes.
     pub trait TypeLevelReturnType {
+        /// Constant corresponding to this return type allowing to easily `match` it.
         const VALUE: ReturnType;
     }
 
     impl TypeLevelReturnType for Normal {
         const VALUE: ReturnType = ReturnType::Normal;
     }
+
     impl TypeLevelReturnType for Revert {
         const VALUE: ReturnType = ReturnType::Revert;
     }
+
     impl TypeLevelReturnType for Panic {
         const VALUE: ReturnType = ReturnType::Panic;
     }
 }
 
+/// All supported EraVM opcodes in a single enumeration.
+#[allow(missing_docs)]
 #[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub enum Opcode {
     Nop,
@@ -143,27 +176,38 @@ pub enum Opcode {
     TransientStorageWrite,
 }
 
+/// All supported calling modes for [`FarCall`](opcodes::FarCall) opcode.
 #[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub enum CallingMode {
+    /// Normal calling mode.
     Normal,
+    /// Delegate calling mode (similar to `delegatecall` in EVM).
     Delegate,
+    /// Mimic calling mode (can only be used by system contracts; allows to emulate `eth_call` semantics while retaining the bootloader).
     Mimic,
 }
 
+/// All supported return types for the [`Ret`](opcodes::Ret) opcode.
 #[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub enum ReturnType {
+    /// Normal return.
     Normal,
+    /// Revert (e.g., a result of a Solidity `revert`).
     Revert,
+    /// Panic, i.e. a non-revert abnormal control flow termination (e.g., out of gas).
     Panic,
 }
 
 impl ReturnType {
+    /// Checks if this return type is [normal](Self::Normal).
     pub fn is_failure(&self) -> bool {
         *self != ReturnType::Normal
     }
 }
 
+/// Trait mapping opcodes as types to the corresponding variants of the [`Opcode`] enum.
 pub trait OpcodeType {
+    /// `Opcode` variant corresponding to this opcode type.
     const VALUE: Opcode;
 }
 
@@ -185,16 +229,17 @@ impl<T: opcodes::TypeLevelReturnType> OpcodeType for opcodes::Ret<T> {
     const VALUE: Opcode = Opcode::Ret(T::VALUE);
 }
 
-/// Implement this for a type that holds the state of your tracer.
+/// EraVM instruction tracer.
 ///
-/// [Tracer::before_instruction] is called just before the actual instruction is executed.
-/// If the instruction is skipped, `before_instruction` will be called with [Nop](opcodes::Nop).
-/// [Tracer::after_instruction] is called once the instruction is executed and the program
+/// [`Self::before_instruction()`] is called just before the actual instruction is executed.
+/// If the instruction is skipped, `before_instruction` will be called with [`Nop`](opcodes::Nop).
+/// [`Self::after_instruction()`] is called once the instruction is executed and the program
 /// counter has advanced.
 ///
 /// # Examples
 ///
 /// Here `FarCallCounter` counts the number of far calls.
+///
 /// ```
 /// # use zksync_vm2_interface::{Tracer, StateInterface, OpcodeType, Opcode};
 /// struct FarCallCounter(usize);
@@ -209,23 +254,41 @@ impl<T: opcodes::TypeLevelReturnType> OpcodeType for opcodes::Ret<T> {
 /// }
 /// ```
 pub trait Tracer {
+    /// Executes logic before an instruction handler.
+    ///
+    /// The default implementation does nothing.
     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
+    /// Executes logic after an instruction handler.
+    ///
+    /// The default implementation does nothing.
     fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
 
+    /// Provides cycle statistics for "complex" instructions from the prover perspective (mostly precompile calls).
+    ///
+    /// The default implementation does nothing.
     fn on_extra_prover_cycles(&mut self, _stats: CycleStats) {}
 }
 
+/// Cycle statistics emitted by the VM and supplied to [`Tracer::on_extra_prover_cycles()`].
 #[derive(Debug, Clone, Copy)]
 pub enum CycleStats {
+    /// Call to the `keccak256` precompile with the specified number of hash cycles.
     Keccak256(u32),
+    /// Call to the `sha256` precompile with the specified number of hash cycles.
     Sha256(u32),
+    /// Call to the `ecrecover` precompile with the specified number of hash cycles.
     EcRecover(u32),
-    Secp256k1Verify(u32),
+    /// Call to the `secp256r1_verify` precompile with the specified number of hash cycles.
+    Secp256r1Verify(u32),
+    /// Decommitting an opcode.
     Decommit(u32),
+    /// Reading a slot from the VM storage.
     StorageRead,
+    /// Writing a slot to the VM storage.
     StorageWrite,
 }
 
+/// No-op tracer implementation.
 impl Tracer for () {}
 
 // Multiple tracers can be combined by building a linked list out of tuples.

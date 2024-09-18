@@ -1,12 +1,11 @@
 use primitive_types::H160;
 use zkevm_opcode_defs::ADDRESS_EVENT_WRITER;
-use zksync_vm2_interface::{opcodes, Tracer};
+use zksync_vm2_interface::{opcodes, Event, L2ToL1Log, Tracer};
 
 use super::common::boilerplate_ext;
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
     instruction::ExecutionStatus,
-    world_diff::{Event, L2ToL1Log},
     Instruction, VirtualMachine,
 };
 
@@ -16,7 +15,7 @@ fn event<T: Tracer, W>(
     tracer: &mut T,
 ) -> ExecutionStatus {
     boilerplate_ext::<opcodes::Event, _, _>(vm, world, tracer, |vm, args, _, _| {
-        if vm.state.current_frame.address == H160::from_low_u64_be(ADDRESS_EVENT_WRITER as u64) {
+        if vm.state.current_frame.address == H160::from_low_u64_be(ADDRESS_EVENT_WRITER.into()) {
             let key = Register1::get(args, &mut vm.state);
             let value = Register2::get(args, &mut vm.state);
             let is_first = Immediate1::get(args, &mut vm.state).low_u32() == 1;
@@ -53,6 +52,7 @@ fn l2_to_l1<T: Tracer, W>(
 }
 
 impl<T: Tracer, W> Instruction<T, W> {
+    /// Creates an [`Event`](opcodes::Event) instruction with the provided params.
     pub fn from_event(
         key: Register1,
         value: Register2,
@@ -68,6 +68,7 @@ impl<T: Tracer, W> Instruction<T, W> {
         }
     }
 
+    /// Creates an [`L2ToL1Message`](opcodes::L2ToL1Message) instruction with the provided params.
     pub fn from_l2_to_l1_message(
         key: Register1,
         value: Register2,

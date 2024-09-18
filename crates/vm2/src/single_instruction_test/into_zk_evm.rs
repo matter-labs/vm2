@@ -15,7 +15,7 @@ use zkevm_opcode_defs::{decoding::EncodingModeProduction, TRANSIENT_STORAGE_AUX_
 use zksync_vm2_interface::Tracer;
 
 use super::{stack::Stack, state_to_zk_evm::vm2_state_to_zk_evm_state, MockWorld};
-use crate::{StorageInterface, VirtualMachine};
+use crate::{StorageInterface, VirtualMachine, World};
 
 type ZkEvmState = VmState<
     MockWorldWrapper,
@@ -28,7 +28,10 @@ type ZkEvmState = VmState<
     EncodingModeProduction,
 >;
 
-pub fn vm2_to_zk_evm<T: Tracer, W>(vm: &VirtualMachine<T, W>, world: MockWorld) -> ZkEvmState {
+pub fn vm2_to_zk_evm<T: Tracer, W: World<T>>(
+    vm: &VirtualMachine<T, W>,
+    world: MockWorld,
+) -> ZkEvmState {
     let mut event_sink = InMemoryEventSink::new();
     event_sink.start_frame(zk_evm::aux_structures::Timestamp(0));
 
@@ -88,10 +91,8 @@ pub struct MockMemory {
     heap_write: Option<ExpectedHeapValue>,
 }
 
-// One arbitrary heap value is not enough for zk_evm
-// because it reads two U256s to read one U256.
 #[derive(Debug, Copy, Clone)]
-pub struct ExpectedHeapValue {
+pub(crate) struct ExpectedHeapValue {
     heap: u32,
     start_index: u32,
     value: [u8; 32],
@@ -99,6 +100,7 @@ pub struct ExpectedHeapValue {
 
 impl ExpectedHeapValue {
     /// Returns a new U256 that contains data from the heap value and zero elsewhere.
+    /// One arbitrary heap value is not enough for `zk_evm` because it reads two U256s to read one U256.
     fn partially_overlapping_u256(&self, start: u32) -> U256 {
         let mut read = [0; 32];
         for i in 0..32 {
@@ -121,6 +123,7 @@ impl Memory for MockMemory {
     ) -> zk_evm::aux_structures::MemoryQuery {
         match query.location.memory_type {
             MemoryType::Stack => {
+                #[allow(clippy::cast_possible_truncation)] // intentional
                 let slot = query.location.index.0 as u16;
                 if query.rw_flag {
                     self.stack.set(slot, query.value);
@@ -174,7 +177,7 @@ impl Memory for MockMemory {
         query.value = self
             .code_page
             .get(query.location.index.0 as usize)
-            .cloned()
+            .copied()
             .unwrap_or_default();
         query
     }
@@ -196,10 +199,7 @@ impl Storage for MockWorldWrapper {
         &mut self,
         _: u32,
         mut query: zk_evm::aux_structures::LogQuery,
-    ) -> (
-        zk_evm::aux_structures::LogQuery,
-        zk_evm::aux_structures::PubdataCost,
-    ) {
+    ) -> (zk_evm::aux_structures::LogQuery, PubdataCost) {
         if query.rw_flag {
             (query, PubdataCost(0))
         } else {
@@ -234,12 +234,12 @@ impl DecommittmentProcessor for MockDecommitter {
         Ok(partial_query)
     }
 
-    fn decommit_into_memory<M: zk_evm::abstractions::Memory>(
+    fn decommit_into_memory<M: Memory>(
         &mut self,
         _: u32,
         _partial_query: zk_evm::aux_structures::DecommittmentQuery,
         _memory: &mut M,
-    ) -> anyhow::Result<Option<Vec<zk_evm::ethereum_types::U256>>> {
+    ) -> anyhow::Result<Option<Vec<U256>>> {
         Ok(None)
     }
 }
@@ -286,7 +286,7 @@ impl tracing::Tracer for NoTracer {
 pub struct NoOracle;
 
 impl PrecompilesProcessor for NoOracle {
-    fn execute_precompile<M: zk_evm::abstractions::Memory>(
+    fn execute_precompile<M: Memory>(
         &mut self,
         _: u32,
         _: zk_evm::aux_structures::LogQuery,
@@ -333,7 +333,7 @@ impl VmWitnessTracer<8, EncodingModeProduction> for NoOracle {
         &mut self,
         _: u32,
         _: zk_evm::aux_structures::LogQuery,
-        _: zk_evm::aux_structures::PubdataCost,
+        _: PubdataCost,
     ) {
     }
 
@@ -344,7 +344,7 @@ impl VmWitnessTracer<8, EncodingModeProduction> for NoOracle {
         &mut self,
         _: u32,
         _: zk_evm::aux_structures::DecommittmentQuery,
-        _: Vec<zk_evm::ethereum_types::U256>,
+        _: Vec<U256>,
     ) {
     }
 

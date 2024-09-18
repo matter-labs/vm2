@@ -1,17 +1,15 @@
-#![cfg(not(feature = "single_instruction_test"))]
-
 use primitive_types::U256;
 use zkevm_opcode_defs::ethereum_types::Address;
-use zksync_vm2::{
-    address_into_u256,
+use zksync_vm2_interface::{opcodes, CallframeInterface, StateInterface};
+
+use crate::{
     addressing_modes::{
         Arguments, CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
     },
-    initial_decommit,
-    testworld::TestWorld,
+    instruction_handlers::address_into_u256,
+    testonly::{initial_decommit, TestWorld},
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
 };
-use zksync_vm2_interface::{opcodes, CallframeInterface, StateInterface};
 
 const INITIAL_GAS: u32 = 1000;
 
@@ -20,11 +18,11 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
     let r1 = Register::new(1);
     let r2 = Register::new(2);
 
-    let ethereum_address = 0xeeeeee;
+    let ethereum_address = 0x_00ee_eeee;
     let mut abi = U256::zero();
-    abi.0[3] = gas_to_pass as u64;
+    abi.0[3] = gas_to_pass.into();
 
-    let main_program = Program::new(
+    let main_program = Program::from_raw(
         vec![
             Instruction::from_add(
                 CodePage(RegisterAndImmediate {
@@ -68,7 +66,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
         vec![abi, ethereum_address.into()],
     );
 
-    let interpreter = Program::new(
+    let interpreter = Program::from_raw(
         vec![
             Instruction::from_add(
                 Register1(r0).into(),
@@ -87,8 +85,8 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
         vec![],
     );
 
-    let main_address = Address::from_low_u64_be(0xfeddeadbeef);
-    let interpreter_address = Address::from_low_u64_be(0x1234567890abcdef);
+    let main_address = Address::from_low_u64_be(0x_0fed_dead_beef);
+    let interpreter_address = Address::from_low_u64_be(0x_1234_5678_90ab_cdef);
     let mut world = TestWorld::new(&[
         (interpreter_address, interpreter),
         (main_address, main_program),
@@ -107,7 +105,7 @@ fn test_scenario(gas_to_pass: u32) -> (ExecutionEnd, u32) {
         main_address,
         program,
         Address::zero(),
-        vec![],
+        &[],
         INITIAL_GAS,
         Settings {
             default_aa_code_hash: [0; 32],

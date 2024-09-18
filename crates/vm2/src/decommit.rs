@@ -17,7 +17,7 @@ impl WorldDiff {
         is_constructor_call: bool,
     ) -> Option<(UnpaidDecommit, bool)> {
         let deployer_system_contract_address =
-            Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
+            Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW.into());
 
         let mut is_evm = false;
 
@@ -79,7 +79,7 @@ impl WorldDiff {
             0
         } else {
             let code_length_in_words = u16::from_be_bytes([code_info[2], code_info[3]]);
-            code_length_in_words as u32 * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT
+            u32::from(code_length_in_words) * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT
         };
 
         Some((UnpaidDecommit { cost, code_key }, is_evm))
@@ -97,8 +97,9 @@ impl WorldDiff {
         let is_new = self.decommitted_hashes.insert(code_hash, true) != Some(true);
         let code = world.decommit_code(code_hash);
         if is_new {
-            // Decommitter can process two words per cycle
-            tracer.on_extra_prover_cycles(CycleStats::Decommit((code.len() as u32 + 63) / 64));
+            let code_len = u32::try_from(code.len()).expect("bytecode length overflow");
+            // Decommitter can process two words per cycle, hence division by 2 * 32 = 64.
+            tracer.on_extra_prover_cycles(CycleStats::Decommit(code_len.div_ceil(64)));
         }
         (code, is_new)
     }
@@ -123,46 +124,20 @@ impl WorldDiff {
 
         let decommit = world.decommit(decommit.code_key);
         if is_new {
-            tracer.on_extra_prover_cycles(CycleStats::Decommit(
-                (decommit.code_page().len() as u32 + 1) / 2,
-            ));
+            let code_len_in_words =
+                u32::try_from(decommit.code_page().len()).expect("bytecode length overflow");
+            // Decommitter can process two words per cycle.
+            tracer.on_extra_prover_cycles(CycleStats::Decommit(code_len_in_words.div_ceil(2)));
         }
 
         Some(decommit)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct UnpaidDecommit {
     cost: u32,
     code_key: U256,
-}
-
-/// May be used to load code when the VM first starts up.
-/// Doesn't check for any errors.
-/// Doesn't cost anything but also doesn't make the code free in future decommits.
-#[doc(hidden)] // should be used only in low-level testing / benches
-pub fn initial_decommit<T, W: World<T>>(world: &mut W, address: H160) -> Program<T, W> {
-    let deployer_system_contract_address =
-        Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW as u64);
-    let code_info = world
-        .read_storage(deployer_system_contract_address, address_into_u256(address))
-        .unwrap_or_default();
-
-    let mut code_info_bytes = [0; 32];
-    code_info.to_big_endian(&mut code_info_bytes);
-
-    code_info_bytes[1] = 0;
-    let code_key: U256 = U256::from_big_endian(&code_info_bytes);
-
-    world.decommit(code_key)
-}
-
-#[doc(hidden)] // should be used only in low-level testing / benches
-pub fn address_into_u256(address: H160) -> U256 {
-    let mut buffer = [0; 32];
-    buffer[12..].copy_from_slice(address.as_bytes());
-    U256::from_big_endian(&buffer)
 }
 
 pub(crate) fn u256_into_address(source: U256) -> H160 {

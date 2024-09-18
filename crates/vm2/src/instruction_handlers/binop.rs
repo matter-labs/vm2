@@ -4,7 +4,12 @@ use zksync_vm2_interface::{
     OpcodeType, Tracer,
 };
 
-use super::{common::boilerplate, monomorphization::*};
+use super::{
+    common::boilerplate,
+    monomorphization::{
+        match_boolean, match_destination, match_source, monomorphize, parameterize,
+    },
+};
 use crate::{
     addressing_modes::{
         AbsoluteStack, Addressable, AdvanceStackPointer, AnyDestination, AnySource, Arguments,
@@ -13,22 +18,20 @@ use crate::{
     },
     instruction::{ExecutionStatus, Instruction},
     predication::Flags,
-    VirtualMachine,
+    VirtualMachine, World,
 };
 
-fn binop<
-    T: Tracer,
-    W,
-    Op: Binop,
-    In1: Source,
-    Out: Destination,
-    const SWAP: bool,
-    const SET_FLAGS: bool,
->(
+fn binop<T, W, Op, In1, Out, const SWAP: bool, const SET_FLAGS: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) -> ExecutionStatus
+where
+    T: Tracer,
+    Op: Binop,
+    In1: Source,
+    Out: Destination,
+{
     boilerplate::<Op, _, _>(vm, world, tracer, |vm, args| {
         let a = In1::get(args, &mut vm.state);
         let b = Register2::get(args, &mut vm.state);
@@ -104,7 +107,7 @@ impl Binop for Xor {
 impl Binop for ShiftLeft {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
-        let result = *a << b.low_u32() as u8;
+        let result = *a << (b.low_u32() % 256);
         (result, (), Flags::new(false, result.is_zero(), false))
     }
     type Out2 = ();
@@ -113,7 +116,7 @@ impl Binop for ShiftLeft {
 impl Binop for ShiftRight {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
-        let result = *a >> b.low_u32() as u8;
+        let result = *a >> (b.low_u32() % 256);
         (result, (), Flags::new(false, result.is_zero(), false))
     }
     type Out2 = ();
@@ -122,8 +125,8 @@ impl Binop for ShiftRight {
 impl Binop for RotateLeft {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
-        let shift = b.low_u32() as u8;
-        let result = *a << shift | *a >> (256 - shift as u16);
+        let shift = b.low_u32() % 256;
+        let result = *a << shift | *a >> (256 - shift);
         (result, (), Flags::new(false, result.is_zero(), false))
     }
     type Out2 = ();
@@ -132,8 +135,8 @@ impl Binop for RotateLeft {
 impl Binop for RotateRight {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
-        let shift = b.low_u32() as u8;
-        let result = *a >> shift | *a << (256 - shift as u16);
+        let shift = b.low_u32() % 256;
+        let result = *a >> shift | *a << (256 - shift);
         (result, (), Flags::new(false, result.is_zero(), false))
     }
     type Out2 = ();
@@ -189,15 +192,15 @@ impl Binop for Mul {
 
 impl Binop for Div {
     fn perform(a: &U256, b: &U256) -> (U256, Self::Out2, Flags) {
-        if *b != U256::zero() {
+        if b.is_zero() {
+            (U256::zero(), U256::zero(), Flags::new(true, false, false))
+        } else {
             let (quotient, remainder) = a.div_mod(*b);
             (
                 quotient,
                 remainder,
                 Flags::new(false, quotient.is_zero(), remainder.is_zero()),
             )
-        } else {
-            (U256::zero(), U256::zero(), Flags::new(true, false, false))
         }
     }
     type Out2 = U256;
@@ -205,8 +208,7 @@ impl Binop for Div {
 
 macro_rules! from_binop {
     ($name:ident <$binop:ty>) => {
-        #[doc = concat!("Creates `", stringify!($binop), "` instruction with the provided params.")]
-        #[inline(always)]
+        #[doc = concat!("Creates [`", stringify!($binop), "`] instruction with the provided params.")]
         pub fn $name(
             src1: AnySource,
             src2: Register2,
@@ -215,13 +217,12 @@ macro_rules! from_binop {
             swap: bool,
             set_flags: bool,
         ) -> Self {
-            Self::from_binop::<$binop>(src1, src2, out, (), arguments, swap, set_flags)
+            Self::from_binop::<$binop>(src1, src2, out, &(), arguments, swap, set_flags)
         }
     };
 
     ($name:ident <$binop:ty, $out2: ty>) => {
-        #[doc = concat!("Creates `", stringify!($binop), "` instruction with the provided params.")]
-        #[inline(always)]
+        #[doc = concat!("Creates [`", stringify!($binop), "`] instruction with the provided params.")]
         pub fn $name(
             src1: AnySource,
             src2: Register2,
@@ -231,18 +232,18 @@ macro_rules! from_binop {
             swap: bool,
             set_flags: bool,
         ) -> Self {
-            Self::from_binop::<$binop>(src1, src2, out, out2, arguments, swap, set_flags)
+            Self::from_binop::<$binop>(src1, src2, out, &out2, arguments, swap, set_flags)
         }
     };
 }
 
-impl<T: Tracer, W> Instruction<T, W> {
-    #[inline(always)]
+/// Instructions for binary operations.
+impl<T: Tracer, W: World<T>> Instruction<T, W> {
     pub(crate) fn from_binop<Op: Binop>(
         src1: AnySource,
         src2: Register2,
         out: AnyDestination,
-        out2: <Op::Out2 as SecondOutput>::Destination,
+        out2: &<Op::Out2 as SecondOutput>::Destination,
         arguments: Arguments,
         swap: bool,
         set_flags: bool,
@@ -253,7 +254,7 @@ impl<T: Tracer, W> Instruction<T, W> {
                 .write_source(&src1)
                 .write_source(&src2)
                 .write_destination(&out)
-                .write_destination(&out2),
+                .write_destination(out2),
         }
     }
 

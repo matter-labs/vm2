@@ -1,12 +1,11 @@
 use arbitrary::Arbitrary;
 use primitive_types::H160;
 use zkevm_opcode_defs::EVM_SIMULATOR_STIPEND;
-use zksync_vm2_interface::Tracer;
+use zksync_vm2_interface::{HeapId, Tracer};
 
 use super::stack::{Stack, StackPool};
 use crate::{
-    callframe::Callframe, decommit::is_kernel, predication::Flags, HeapId, Program, World,
-    WorldDiff,
+    callframe::Callframe, decommit::is_kernel, predication::Flags, Program, World, WorldDiff,
 };
 
 impl<'a> Arbitrary<'a> for Flags {
@@ -25,6 +24,8 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for Callframe<T, W> {
         // zk_evm considers smaller pages to be older
         // vm2 doesn't care about the order
         // but the calldata heap must be different from the heap and aux heap
+        #[allow(clippy::range_minus_one)]
+        // cannot use exclusive range because of `int_in_range()` signature
         let calldata_heap = HeapId::from_u32_unchecked(u.int_in_range(0..=base_page - 1)?);
 
         let program: Program<T, W> = u.arbitrary()?;
@@ -65,11 +66,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for Callframe<T, W> {
 }
 
 impl<T: Tracer, W> Callframe<T, W> {
-    pub fn raw_first_instruction(&self) -> u64 {
-        self.program.raw_first_instruction
-    }
-
-    pub fn dummy() -> Self {
+    pub(crate) fn dummy() -> Self {
         Self {
             address: H160::zero(),
             code_address: H160::zero(),
@@ -93,5 +90,11 @@ impl<T: Tracer, W> Callframe<T, W> {
             heaps_i_am_keeping_alive: vec![],
             world_before_this_frame: WorldDiff::default().snapshot(),
         }
+    }
+}
+
+impl<T, W> Callframe<T, W> {
+    pub(crate) fn raw_first_instruction(&self) -> u64 {
+        self.program.raw_first_instruction
     }
 }

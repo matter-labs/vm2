@@ -1,18 +1,16 @@
-#![cfg(not(feature = "single_instruction_test"))]
-
 use std::collections::HashSet;
 
 use primitive_types::{H160, U256};
 use zkevm_opcode_defs::ethereum_types::Address;
-use zksync_vm2::{
+use zksync_vm2_interface::{opcodes, CallframeInterface, StateInterface};
+
+use crate::{
     addressing_modes::{
         Arguments, CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
     },
-    initial_decommit,
-    testworld::TestWorld,
+    testonly::{initial_decommit, TestWorld},
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
 };
-use zksync_vm2_interface::{opcodes, CallframeInterface, StateInterface};
 
 const GAS_TO_PASS: u32 = 10_000;
 const LARGE_BYTECODE_LEN: usize = 10_000;
@@ -29,7 +27,7 @@ fn create_test_world() -> TestWorld<()> {
     let mut abi = U256::zero();
     abi.0[3] = GAS_TO_PASS.into();
 
-    let main_program = Program::new(
+    let main_program = Program::from_raw(
         vec![
             // 0..=2: Prepare and execute far call
             Instruction::from_add(
@@ -65,7 +63,7 @@ fn create_test_world() -> TestWorld<()> {
                 Arguments::new(Predicate::Always, 200, ModeRequirements::none()),
             ),
             // 3: Hook (0)
-            Instruction::from_heap_store(
+            Instruction::from_heap_write(
                 Register1(r0).into(),
                 Register2(r0),
                 None,
@@ -88,7 +86,7 @@ fn create_test_world() -> TestWorld<()> {
         vec![abi, CALLED_ADDRESS.to_low_u64_be().into()],
     );
 
-    let called_program = Program::new(
+    let called_program = Program::from_raw(
         vec![
             Instruction::from_add(
                 Register1(r0).into(),
@@ -122,7 +120,7 @@ fn test() {
         MAIN_ADDRESS,
         main_program,
         Address::zero(),
-        vec![],
+        &[],
         initial_gas,
         Settings {
             default_aa_code_hash: [0; 32],
@@ -134,7 +132,7 @@ fn test() {
     let result = vm.run(&mut world, &mut ());
     let remaining_gas = vm.current_frame().gas();
     assert_eq!(result, ExecutionEnd::SuspendedOnHook(0));
-    let expected_decommit_cost = LARGE_BYTECODE_LEN as u32 * 4;
+    let expected_decommit_cost = u32::try_from(LARGE_BYTECODE_LEN).unwrap() * 4;
     assert!(
         remaining_gas < initial_gas - expected_decommit_cost,
         "{remaining_gas}"
@@ -158,7 +156,7 @@ fn test_with_initial_out_of_gas_error() {
         MAIN_ADDRESS,
         main_program,
         Address::zero(),
-        vec![],
+        &[],
         10_000,
         Settings {
             default_aa_code_hash: [0; 32],
@@ -185,7 +183,7 @@ fn test_with_initial_out_of_gas_error() {
     let result = vm.run(&mut world, &mut ());
     let remaining_gas = vm.current_frame().gas();
     assert_eq!(result, ExecutionEnd::SuspendedOnHook(0));
-    let expected_decommit_cost = LARGE_BYTECODE_LEN as u32 * 4;
+    let expected_decommit_cost = u32::try_from(LARGE_BYTECODE_LEN).unwrap() * 4;
     assert!(
         remaining_gas < initial_gas - expected_decommit_cost,
         "{remaining_gas}"

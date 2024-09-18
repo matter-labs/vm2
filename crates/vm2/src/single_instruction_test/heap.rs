@@ -12,6 +12,7 @@ pub struct Heap {
     pub(crate) write: Option<(u32, U256)>,
 }
 
+#[allow(clippy::unused_self)] // to align signatures with real implementation
 impl Heap {
     fn write_u256(&mut self, start_address: u32, value: U256) {
         assert!(self.write.is_none());
@@ -57,6 +58,7 @@ pub struct Heaps {
     pub(crate) read: MockRead<HeapId, Heap>,
 }
 
+#[allow(clippy::unused_self)] // to align signatures with real implementation
 impl Heaps {
     pub(crate) fn new(_: &[u8]) -> Self {
         unimplemented!("Should use arbitrary heap, not fresh heap in testing.")

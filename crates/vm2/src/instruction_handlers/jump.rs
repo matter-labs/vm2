@@ -1,6 +1,9 @@
 use zksync_vm2_interface::{opcodes, Tracer};
 
-use super::common::boilerplate;
+use super::{
+    common::boilerplate,
+    monomorphization::{match_source, monomorphize, parameterize},
+};
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Destination,
@@ -16,6 +19,7 @@ fn jump<T: Tracer, W, In: Source>(
     tracer: &mut T,
 ) -> ExecutionStatus {
     boilerplate::<opcodes::Jump, _, _>(vm, world, tracer, |vm, args| {
+        #[allow(clippy::cast_possible_truncation)] // intentional
         let target = In::get(args, &mut vm.state).low_u32() as u16;
 
         let next_instruction = vm.state.current_frame.get_pc_as_u16();
@@ -25,9 +29,8 @@ fn jump<T: Tracer, W, In: Source>(
     })
 }
 
-use super::monomorphization::*;
-
 impl<T: Tracer, W> Instruction<T, W> {
+    /// Creates a [`Jump`](opcodes::Jump) instruction with the provided params.
     pub fn from_jump(source: AnySource, destination: Register1, arguments: Arguments) -> Self {
         Self {
             handler: monomorphize!(jump [T W] match_source source),

@@ -76,32 +76,40 @@ fn sload_transient<T: Tracer, W>(
 }
 
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
-    #[inline(always)]
-    pub fn from_sstore(src1: Register1, src2: Register2, arguments: Arguments) -> Self {
+    /// Creates a [`StorageWrite`](opcodes::StorageWrite) instruction with the provided params.
+    pub fn from_storage_write(src1: Register1, src2: Register2, arguments: Arguments) -> Self {
         Self {
             handler: sstore,
             arguments: arguments.write_source(&src1).write_source(&src2),
         }
     }
 
-    #[inline(always)]
-    pub fn from_sstore_transient(src1: Register1, src2: Register2, arguments: Arguments) -> Self {
+    /// Creates a [`TransientStorageWrite`](opcodes::TransientStorageWrite) instruction with the provided params.
+    pub fn from_transient_storage_write(
+        src1: Register1,
+        src2: Register2,
+        arguments: Arguments,
+    ) -> Self {
         Self {
             handler: sstore_transient,
             arguments: arguments.write_source(&src1).write_source(&src2),
         }
     }
 
-    #[inline(always)]
-    pub fn from_sload(src: Register1, dst: Register1, arguments: Arguments) -> Self {
+    /// Creates a [`StorageRead`](opcodes::StorageRead) instruction with the provided params.
+    pub fn from_storage_read(src: Register1, dst: Register1, arguments: Arguments) -> Self {
         Self {
             handler: sload,
             arguments: arguments.write_source(&src).write_destination(&dst),
         }
     }
 
-    #[inline(always)]
-    pub fn from_sload_transient(src: Register1, dst: Register1, arguments: Arguments) -> Self {
+    /// Creates a [`TransientStorageRead`](opcodes::TransientStorageRead) instruction with the provided params.
+    pub fn from_transient_storage_read(
+        src: Register1,
+        dst: Register1,
+        arguments: Arguments,
+    ) -> Self {
         Self {
             handler: sload_transient,
             arguments: arguments.write_source(&src).write_destination(&dst),

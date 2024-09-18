@@ -18,7 +18,7 @@ pub struct UniversalVmState {
 }
 
 #[derive(PartialEq, Debug)]
-pub struct UniversalVmFrame {
+pub(crate) struct UniversalVmFrame {
     address: H160,
     caller: H160,
     code_address: H160,

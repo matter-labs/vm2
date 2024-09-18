@@ -24,6 +24,7 @@ fn nop<T: Tracer, W>(
 }
 
 impl<T: Tracer, W> Instruction<T, W> {
+    /// Creates a [`Nop`](opcodes::Nop) instruction with the provided params.
     pub fn from_nop(
         pop: AdvanceStackPointer,
         push: AdvanceStackPointer,

@@ -1,7 +1,10 @@
 use primitive_types::U256;
-use zksync_vm2_interface::{opcodes, OpcodeType, Tracer};
+use zksync_vm2_interface::{opcodes, HeapId, OpcodeType, Tracer};
 
-use super::common::{boilerplate, full_boilerplate};
+use super::{
+    common::{boilerplate, full_boilerplate},
+    monomorphization::{match_boolean, match_reg_imm, monomorphize, parameterize},
+};
 use crate::{
     addressing_modes::{
         Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
@@ -10,7 +13,7 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
     state::State,
-    ExecutionEnd, HeapId, Instruction, VirtualMachine,
+    ExecutionEnd, Instruction, VirtualMachine,
 };
 
 pub(crate) trait HeapFromState {
@@ -91,23 +94,21 @@ fn load<T: Tracer, W, H: HeapFromState, In: Source, const INCREMENT: bool>(
         Register1::set(args, &mut vm.state, value);
 
         if INCREMENT {
-            Register2::set(args, &mut vm.state, pointer + 32)
+            Register2::set(args, &mut vm.state, pointer + 32);
         }
     })
 }
 
-fn store<
-    T: Tracer,
-    W,
-    H: HeapFromState,
-    In: Source,
-    const INCREMENT: bool,
-    const HOOKING_ENABLED: bool,
->(
+fn store<T, W, H, In, const INCREMENT: bool, const HOOKING_ENABLED: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) -> ExecutionStatus
+where
+    T: Tracer,
+    H: HeapFromState,
+    In: Source,
+{
     full_boilerplate::<H::Write, _, _>(vm, world, tracer, |vm, args, _, _| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
@@ -134,7 +135,7 @@ fn store<
         vm.state.heaps.write_u256(heap, address, value);
 
         if INCREMENT {
-            Register1::set(args, &mut vm.state, pointer + 32)
+            Register1::set(args, &mut vm.state, pointer + 32);
         }
 
         if HOOKING_ENABLED && address == vm.settings.hook_address {
@@ -146,8 +147,8 @@ fn store<
 }
 
 /// Pays for more heap space. Doesn't acually grow the heap.
-/// That distinction is necessary because the bootloader gets u32::MAX heap for free.
-pub(crate) fn grow_heap<T: Tracer, W, H: HeapFromState>(
+/// That distinction is necessary because the bootloader gets `u32::MAX` heap for free.
+pub(crate) fn grow_heap<T, W, H: HeapFromState>(
     state: &mut State<T, W>,
     new_bound: u32,
 ) -> Result<(), ()> {
@@ -190,36 +191,33 @@ fn load_pointer<T: Tracer, W, const INCREMENT: bool>(
 
         if INCREMENT {
             // This addition does not overflow because we checked that the offset is small enough above.
-            Register2::set_fat_ptr(args, &mut vm.state, input + 32)
+            Register2::set_fat_ptr(args, &mut vm.state, input + 32);
         }
     })
 }
 
-use super::monomorphization::*;
-
 impl<T: Tracer, W> Instruction<T, W> {
-    #[inline(always)]
-    pub fn from_heap_load(
+    /// Creates a [`HeapRead`](opcodes::HeapRead) instruction with the provided params.
+    pub fn from_heap_read(
         src: RegisterOrImmediate,
         out: Register1,
         incremented_out: Option<Register2>,
         arguments: Arguments,
     ) -> Self {
-        Self::from_load::<Heap>(src, out, incremented_out, arguments)
+        Self::from_read::<Heap>(src, out, incremented_out, arguments)
     }
 
-    #[inline(always)]
-    pub fn from_aux_heap_load(
+    /// Creates an [`AuxHeapRead`](opcodes::AuxHeapRead) instruction with the provided params.
+    pub fn from_aux_heap_read(
         src: RegisterOrImmediate,
         out: Register1,
         incremented_out: Option<Register2>,
         arguments: Arguments,
     ) -> Self {
-        Self::from_load::<AuxHeap>(src, out, incremented_out, arguments)
+        Self::from_read::<AuxHeap>(src, out, incremented_out, arguments)
     }
 
-    #[inline(always)]
-    fn from_load<H: HeapFromState>(
+    fn from_read<H: HeapFromState>(
         src: RegisterOrImmediate,
         out: Register1,
         incremented_out: Option<Register2>,
@@ -238,29 +236,28 @@ impl<T: Tracer, W> Instruction<T, W> {
         }
     }
 
-    #[inline(always)]
-    pub fn from_heap_store(
+    /// Creates a [`HeapWrite`](opcodes::HeapWrite) instruction with the provided params.
+    pub fn from_heap_write(
         src1: RegisterOrImmediate,
         src2: Register2,
         incremented_out: Option<Register1>,
         arguments: Arguments,
         should_hook: bool,
     ) -> Self {
-        Self::from_store::<Heap>(src1, src2, incremented_out, arguments, should_hook)
+        Self::from_write::<Heap>(src1, src2, incremented_out, arguments, should_hook)
     }
 
-    #[inline(always)]
+    /// Creates an [`AuxHeapWrite`](opcodes::AuxHeapWrite) instruction with the provided params.
     pub fn from_aux_heap_store(
         src1: RegisterOrImmediate,
         src2: Register2,
         incremented_out: Option<Register1>,
         arguments: Arguments,
     ) -> Self {
-        Self::from_store::<AuxHeap>(src1, src2, incremented_out, arguments, false)
+        Self::from_write::<AuxHeap>(src1, src2, incremented_out, arguments, false)
     }
 
-    #[inline(always)]
-    fn from_store<H: HeapFromState>(
+    fn from_write<H: HeapFromState>(
         src1: RegisterOrImmediate,
         src2: Register2,
         incremented_out: Option<Register1>,
@@ -277,8 +274,8 @@ impl<T: Tracer, W> Instruction<T, W> {
         }
     }
 
-    #[inline(always)]
-    pub fn from_load_pointer(
+    /// Creates an [`PointerRead`](opcodes::PointerRead) instruction with the provided params.
+    pub fn from_pointer_read(
         src: Register1,
         out: Register1,
         incremented_out: Option<Register2>,

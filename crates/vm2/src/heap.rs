@@ -138,7 +138,7 @@ impl Heap {
     /// Needed only by tracers
     pub(crate) fn read_byte(&self, address: u32) -> u8 {
         let (page, offset) = address_to_page_offset(address);
-        self.page(page).map(|page| page.0[offset]).unwrap_or(0)
+        self.page(page).map_or(0, |page| page.0[offset])
     }
 
     fn page(&self, idx: usize) -> Option<&HeapPage> {
@@ -217,7 +217,8 @@ impl Heaps {
     }
 
     fn allocate_inner(&mut self, memory: &[u8]) -> HeapId {
-        let id = HeapId::from_u32_unchecked(self.heaps.len() as u32);
+        let id = u32::try_from(self.heaps.len()).expect("heap ID overflow");
+        let id = HeapId::from_u32_unchecked(id);
         self.heaps
             .push(Heap::from_bytes(memory, &mut self.pagepool));
         id
@@ -230,7 +231,7 @@ impl Heaps {
         }
     }
 
-    pub fn write_u256(&mut self, heap: HeapId, start_address: u32, value: U256) {
+    pub(crate) fn write_u256(&mut self, heap: HeapId, start_address: u32, value: U256) {
         if heap == HeapId::FIRST {
             let prev_value = self[heap].read_u256(start_address);
             self.bootloader_heap_rollback_info
@@ -329,6 +330,7 @@ impl PagePool {
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation)]
 mod tests {
     use super::*;
 

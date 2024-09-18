@@ -42,7 +42,7 @@ impl<T, W> State<T, W> {
             memory_page: HeapId::FIRST_CALLDATA,
             offset: 0,
             start: 0,
-            length: calldata.len() as u32,
+            length: u32::try_from(calldata.len()).expect("calldata length overflow"),
         }
         .into_u256();
 
@@ -92,7 +92,7 @@ impl<T, W> State<T, W> {
             + self
                 .previous_frames
                 .iter()
-                .map(|frame| frame.contained_gas())
+                .map(Callframe::contained_gas)
                 .sum::<u32>()
     }
 
@@ -177,6 +177,7 @@ impl<T, W> Addressable for State<T, W> {
     fn registers(&mut self) -> &mut [U256; 16] {
         &mut self.registers
     }
+
     fn register_pointer_flags(&mut self) -> &mut u16 {
         &mut self.register_pointer_flags
     }
@@ -184,9 +185,11 @@ impl<T, W> Addressable for State<T, W> {
     fn read_stack(&mut self, slot: u16) -> U256 {
         self.current_frame.stack.get(slot)
     }
+
     fn write_stack(&mut self, slot: u16, value: U256) {
-        self.current_frame.stack.set(slot, value)
+        self.current_frame.stack.set(slot, value);
     }
+
     fn stack_pointer(&mut self) -> &mut u16 {
         &mut self.current_frame.sp
     }
@@ -194,11 +197,13 @@ impl<T, W> Addressable for State<T, W> {
     fn read_stack_pointer_flag(&mut self, slot: u16) -> bool {
         self.current_frame.stack.get_pointer_flag(slot)
     }
+
     fn set_stack_pointer_flag(&mut self, slot: u16) {
-        self.current_frame.stack.set_pointer_flag(slot)
+        self.current_frame.stack.set_pointer_flag(slot);
     }
+
     fn clear_stack_pointer_flag(&mut self, slot: u16) {
-        self.current_frame.stack.clear_pointer_flag(slot)
+        self.current_frame.stack.clear_pointer_flag(slot);
     }
 
     fn code_page(&self) -> &[U256] {
