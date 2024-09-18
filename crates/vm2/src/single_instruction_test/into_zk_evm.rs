@@ -36,7 +36,7 @@ pub fn vm2_to_zk_evm<T: Tracer, W: World<T>>(
     event_sink.start_frame(zk_evm::aux_structures::Timestamp(0));
 
     VmState {
-        local_state: vm2_state_to_zk_evm_state(&vm.state, &*vm.panic),
+        local_state: vm2_state_to_zk_evm_state(&vm.state),
         block_properties: BlockProperties {
             default_aa_code_hash: U256::from_big_endian(&vm.settings.default_aa_code_hash),
             evm_simulator_code_hash: U256::from_big_endian(&vm.settings.evm_interpreter_code_hash),

@@ -4,15 +4,13 @@ use primitive_types::H160;
 use zksync_vm2_interface::{opcodes::TypeLevelCallingMode, CallingMode, HeapId, Tracer};
 
 use crate::{
-    addressing_modes::Arguments,
     callframe::{Callframe, FrameRemnant},
     decommit::u256_into_address,
     instruction::ExecutionStatus,
-    instruction_handlers::RETURN_COST,
     stack::StackPool,
     state::{State, StateSnapshot},
     world_diff::{ExternalSnapshot, Snapshot, WorldDiff},
-    ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, World,
+    ExecutionEnd, Program, World,
 };
 
 /// [`VirtualMachine`] settings.
@@ -33,9 +31,6 @@ pub struct VirtualMachine<T, W> {
     pub(crate) state: State<T, W>,
     pub(crate) settings: Settings,
     pub(crate) stack_pool: StackPool,
-    /// Instruction that is jumped to when things go wrong while executing another.
-    /// Boxed, so the pointer isn't invalidated by moves.
-    pub(crate) panic: Box<Instruction<T, W>>,
     pub(crate) snapshot: Option<VmSnapshot>,
 }
 
@@ -66,10 +61,6 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
             ),
             settings,
             stack_pool,
-            panic: Box::new(Instruction::from_panic(
-                None,
-                Arguments::new(Predicate::Always, RETURN_COST, ModeRequirements::none()),
-            )),
             snapshot: None,
         }
     }

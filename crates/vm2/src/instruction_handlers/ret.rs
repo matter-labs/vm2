@@ -182,11 +182,24 @@ fn invalid<T: Tracer, W>(
 }
 
 trait GenericStatics<T, W> {
+    const PANIC: Instruction<T, W>;
     const INVALID: Instruction<T, W>;
 }
 
 impl<T: Tracer, W> GenericStatics<T, W> for () {
+    const PANIC: Instruction<T, W> = Instruction {
+        handler: ret::<T, W, Panic, false>,
+        arguments: Arguments::new(Predicate::Always, RETURN_COST, ModeRequirements::none()),
+    };
     const INVALID: Instruction<T, W> = Instruction::from_invalid();
+}
+
+// The following functions return references that live for 'static.
+// They aren't marked as such because returning any lifetime is more ergonomic.
+
+/// Point the program counter at this instruction when a panic occurs during the logic of and instruction.
+pub(crate) fn spontaneous_panic<'a, T: Tracer, W>() -> &'a Instruction<T, W> {
+    &<()>::PANIC
 }
 
 /// Panics, burning all available gas.

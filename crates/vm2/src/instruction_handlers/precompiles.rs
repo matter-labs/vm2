@@ -17,7 +17,7 @@ use zkevm_opcode_defs::{
 };
 use zksync_vm2_interface::{opcodes, CycleStats, HeapId, Tracer};
 
-use super::common::boilerplate_ext;
+use super::{common::boilerplate_ext, ret::spontaneous_panic};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     heap::Heaps,
@@ -35,7 +35,7 @@ fn precompile_call<T: Tracer, W>(
         // This is safe because system contracts are trusted
         let aux_data = PrecompileAuxData::from_u256(Register2::get(args, &mut vm.state));
         let Ok(()) = vm.state.use_gas(aux_data.extra_ergs_cost) else {
-            vm.state.current_frame.pc = &*vm.panic;
+            vm.state.current_frame.pc = spontaneous_panic();
             return;
         };
 
