@@ -172,6 +172,15 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
     tracer.after_instruction::<opcodes::Ret<Panic>, _>(vm);
 }
 
+fn invalid<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    _: &mut W,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    vm.state.current_frame.gas = 0;
+    free_panic(vm, tracer)
+}
+
 trait GenericStatics<T, W> {
     const INVALID: Instruction<T, W>;
 }
@@ -219,7 +228,7 @@ impl<T: Tracer, W> Instruction<T, W> {
     /// Creates a *invalid* instruction that will panic by draining all gas.
     pub const fn from_invalid() -> Self {
         Self {
-            handler: ret::<T, W, Panic, false>,
+            handler: invalid,
             arguments: Arguments::new(
                 Predicate::Always,
                 INVALID_INSTRUCTION_COST,
