@@ -2,7 +2,7 @@ use std::{mem, ptr};
 
 use primitive_types::H160;
 use zkevm_opcode_defs::system_params::{NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND};
-use zksync_vm2_interface::HeapId;
+use zksync_vm2_interface::{HeapId, Tracer};
 
 use crate::{
     decommit::is_kernel,
@@ -105,7 +105,9 @@ impl<T, W> Callframe<T, W> {
             world_before_this_frame,
         }
     }
+}
 
+impl<T: Tracer, W> Callframe<T, W> {
     pub(crate) fn push_near_call(
         &mut self,
         gas_to_call: u32,

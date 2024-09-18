@@ -199,8 +199,7 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
     }
 }
 
-// Private methods. We don't constrain `T` and `W` to ease potential refactoring.
-impl<T, W> VirtualMachine<T, W> {
+impl<T: Tracer, W> VirtualMachine<T, W> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_frame<M: TypeLevelCallingMode>(
         &mut self,

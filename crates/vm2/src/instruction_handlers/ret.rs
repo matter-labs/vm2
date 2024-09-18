@@ -172,12 +172,17 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
     tracer.after_instruction::<opcodes::Ret<Panic>, _>(vm);
 }
 
-/// Panics, burning all available gas.
-static INVALID_INSTRUCTION: Instruction<(), ()> = Instruction::from_invalid();
+trait GenericStatics<T, W> {
+    const INVALID: Instruction<T, W>;
+}
 
-pub(crate) fn invalid_instruction<'a, T, W>() -> &'a Instruction<T, W> {
-    // Safety: the handler of an invalid instruction is never read.
-    unsafe { &*std::ptr::addr_of!(INVALID_INSTRUCTION).cast() }
+impl<T: Tracer, W> GenericStatics<T, W> for () {
+    const INVALID: Instruction<T, W> = Instruction::from_invalid();
+}
+
+/// Panics, burning all available gas.
+pub(crate) fn invalid_instruction<'a, T: Tracer, W>() -> &'a Instruction<T, W> {
+    &<()>::INVALID
 }
 
 pub(crate) const RETURN_COST: u32 = 5;
@@ -214,7 +219,6 @@ impl<T: Tracer, W> Instruction<T, W> {
     /// Creates a *invalid* instruction that will panic by draining all gas.
     pub const fn from_invalid() -> Self {
         Self {
-            // This field is never read because the instruction fails at the gas cost stage.
             handler: ret::<T, W, Panic, false>,
             arguments: Arguments::new(
                 Predicate::Always,
