@@ -172,12 +172,39 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
     tracer.after_instruction::<opcodes::Ret<Panic>, _>(vm);
 }
 
-/// Panics, burning all available gas.
-static INVALID_INSTRUCTION: Instruction<(), ()> = Instruction::from_invalid();
+fn invalid<T: Tracer, W>(
+    vm: &mut VirtualMachine<T, W>,
+    _: &mut W,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    vm.state.current_frame.gas = 0;
+    free_panic(vm, tracer)
+}
 
-pub(crate) fn invalid_instruction<'a, T, W>() -> &'a Instruction<T, W> {
-    // Safety: the handler of an invalid instruction is never read.
-    unsafe { &*std::ptr::addr_of!(INVALID_INSTRUCTION).cast() }
+trait GenericStatics<T, W> {
+    const PANIC: Instruction<T, W>;
+    const INVALID: Instruction<T, W>;
+}
+
+impl<T: Tracer, W> GenericStatics<T, W> for () {
+    const PANIC: Instruction<T, W> = Instruction {
+        handler: ret::<T, W, Panic, false>,
+        arguments: Arguments::new(Predicate::Always, RETURN_COST, ModeRequirements::none()),
+    };
+    const INVALID: Instruction<T, W> = Instruction::from_invalid();
+}
+
+// The following functions return references that live for 'static.
+// They aren't marked as such because returning any lifetime is more ergonomic.
+
+/// Point the program counter at this instruction when a panic occurs during the logic of and instruction.
+pub(crate) fn spontaneous_panic<'a, T: Tracer, W>() -> &'a Instruction<T, W> {
+    &<()>::PANIC
+}
+
+/// Panics, burning all available gas.
+pub(crate) fn invalid_instruction<'a, T: Tracer, W>() -> &'a Instruction<T, W> {
+    &<()>::INVALID
 }
 
 pub(crate) const RETURN_COST: u32 = 5;
@@ -214,8 +241,7 @@ impl<T: Tracer, W> Instruction<T, W> {
     /// Creates a *invalid* instruction that will panic by draining all gas.
     pub const fn from_invalid() -> Self {
         Self {
-            // This field is never read because the instruction fails at the gas cost stage.
-            handler: ret::<T, W, Panic, false>,
+            handler: invalid,
             arguments: Arguments::new(
                 Predicate::Always,
                 INVALID_INSTRUCTION_COST,

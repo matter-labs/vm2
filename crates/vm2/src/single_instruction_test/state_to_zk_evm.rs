@@ -6,16 +6,16 @@ use zk_evm::{
     vm_state::{execution_stack::CallStackEntry, Callstack, PrimitiveValue, VmLocalState},
 };
 use zkevm_opcode_defs::decoding::EncodingModeProduction;
+use zksync_vm2_interface::Tracer;
 
 use crate::{
     callframe::{Callframe, NearCallFrame},
+    instruction_handlers::spontaneous_panic,
     state::State,
-    Instruction,
 };
 
-pub(crate) fn vm2_state_to_zk_evm_state<T, W>(
+pub(crate) fn vm2_state_to_zk_evm_state<T: Tracer, W>(
     state: &State<T, W>,
-    panic: &Instruction<T, W>,
 ) -> VmLocalState<8, EncodingModeProduction> {
     // zk_evm requires an unused bottom frame
     let mut callframes: Vec<_> = iter::once(CallStackEntry::empty_context())
@@ -51,7 +51,7 @@ pub(crate) fn vm2_state_to_zk_evm_state<T, W>(
         memory_page_counter: 3000,
         absolute_execution_step: 0,
         tx_number_in_block: state.transaction_number,
-        pending_exception: state.current_frame.pc == panic,
+        pending_exception: state.current_frame.pc == spontaneous_panic(),
         previous_super_pc: 0, // Same as current pc so the instruction is read from previous_code_word
         context_u128_register: state.context_u128,
         callstack: Callstack {

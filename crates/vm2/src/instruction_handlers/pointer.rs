@@ -9,6 +9,7 @@ use super::{
     monomorphization::{
         match_boolean, match_destination, match_source, monomorphize, parameterize,
     },
+    ret::spontaneous_panic,
 };
 use crate::{
     addressing_modes::{
@@ -39,12 +40,12 @@ fn ptr<T: Tracer, W, Op: PtrOp, In1: Source, Out: Destination, const SWAP: bool>
         };
 
         if !a_is_pointer || b_is_pointer {
-            vm.state.current_frame.pc = &*vm.panic;
+            vm.state.current_frame.pc = spontaneous_panic();
             return;
         }
 
         let Some(result) = Op::perform(a, b) else {
-            vm.state.current_frame.pc = &*vm.panic;
+            vm.state.current_frame.pc = spontaneous_panic();
             return;
         };
 
