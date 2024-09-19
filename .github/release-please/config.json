@@ -1,0 +1,12 @@
+{
+  "bootstrap-sha": "7e674ebc47dcef047f867de3fa22f0b6d69612af",
+  "include-component-in-tag": false,
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": false,
+  "packages": {
+    ".": {
+      "component": "zksync-vm2",
+      "release-type": "simple"
+    }
+  }
+}
