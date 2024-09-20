@@ -38,8 +38,6 @@ jobs:
     runs-on: [ubuntu-latest]
     name: "release-please: Update version in Cargo.toml"
     needs: [check_state]
-    permissions:
-      contents: write
     if: ${{ needs.check_state.outputs.already_committed != 'true' }}
     steps:
       - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4
@@ -65,7 +63,7 @@ jobs:
         run: |
           git config --global user.email "zksync-era-bot@users.noreply.github.com"
           git config --global user.name "zksync-era-bot"
-          git remote set-url origin 'https://${{ secrets.GITHUB_TOKEN }}@github.com/matter-labs/vm2.git'
+          git remote set-url origin 'https://${{ secrets.RELEASE_TOKEN }}@github.com/matter-labs/vm2.git'
           git add ./Cargo.toml
           git commit -m "$EXPECTED_COMMIT_MESSAGE"
           git push
