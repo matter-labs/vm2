@@ -38,9 +38,10 @@ impl<T: Tracer, W> StateInterface for VirtualMachine<T, W> {
     }
 
     fn current_frame(&mut self) -> impl CallframeInterface + '_ {
+        let near_call = self.state.current_frame.near_calls.len().checked_sub(1);
         CallframeWrapper {
             frame: &mut self.state.current_frame,
-            near_call: None,
+            near_call,
         }
     }
 
