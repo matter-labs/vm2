@@ -4,6 +4,7 @@ use zksync_vm2_interface::{opcodes, HeapId, OpcodeType, Tracer};
 use super::{
     common::{boilerplate, full_boilerplate},
     monomorphization::{match_boolean, match_reg_imm, monomorphize, parameterize},
+    ret::spontaneous_panic,
 };
 use crate::{
     addressing_modes::{
@@ -77,7 +78,7 @@ fn load<T: Tracer, W, H: HeapFromState, In: Source, const INCREMENT: bool>(
 
         let new_bound = address.wrapping_add(32);
         if grow_heap::<_, _, H>(&mut vm.state, new_bound).is_err() {
-            vm.state.current_frame.pc = &*vm.panic;
+            vm.state.current_frame.pc = spontaneous_panic();
             return;
         };
 
@@ -85,7 +86,7 @@ fn load<T: Tracer, W, H: HeapFromState, In: Source, const INCREMENT: bool>(
         // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
         if bigger_than_last_address(pointer) {
             let _ = vm.state.use_gas(u32::MAX);
-            vm.state.current_frame.pc = &*vm.panic;
+            vm.state.current_frame.pc = spontaneous_panic();
             return;
         }
 
@@ -119,7 +120,7 @@ where
 
         let new_bound = address.wrapping_add(32);
         if grow_heap::<_, _, H>(&mut vm.state, new_bound).is_err() {
-            vm.state.current_frame.pc = &*vm.panic;
+            vm.state.current_frame.pc = spontaneous_panic();
             return ExecutionStatus::Running;
         }
 
@@ -127,7 +128,7 @@ where
         // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
         if bigger_than_last_address(pointer) {
             let _ = vm.state.use_gas(u32::MAX);
-            vm.state.current_frame.pc = &*vm.panic;
+            vm.state.current_frame.pc = spontaneous_panic();
             return ExecutionStatus::Running;
         }
 
@@ -170,7 +171,7 @@ fn load_pointer<T: Tracer, W, const INCREMENT: bool>(
     boilerplate::<opcodes::PointerRead, _, _>(vm, world, tracer, |vm, args| {
         let (input, input_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
         if !input_is_pointer {
-            vm.state.current_frame.pc = &*vm.panic;
+            vm.state.current_frame.pc = spontaneous_panic();
             return;
         }
         let pointer = FatPointer::from(input);
@@ -179,7 +180,7 @@ fn load_pointer<T: Tracer, W, const INCREMENT: bool>(
         // but if offset + 32 is not representable, we panic, even if we could've read some bytes.
         // This is not a bug, this is how it must work to be backwards compatible.
         if pointer.offset > LAST_ADDRESS {
-            vm.state.current_frame.pc = &*vm.panic;
+            vm.state.current_frame.pc = spontaneous_panic();
             return;
         };
 

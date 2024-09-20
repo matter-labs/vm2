@@ -1,5 +1,5 @@
 use primitive_types::{H160, U256};
-use zksync_vm2_interface::HeapId;
+use zksync_vm2_interface::{HeapId, Tracer};
 
 use crate::{
     addressing_modes::Addressable,
@@ -86,6 +86,16 @@ impl<T, W> State<T, W> {
         }
     }
 
+    pub(crate) fn set_context_u128(&mut self, value: u128) {
+        self.context_u128 = value;
+    }
+
+    pub(crate) fn get_context_u128(&self) -> u128 {
+        self.current_frame.context_u128
+    }
+}
+
+impl<T: Tracer, W> State<T, W> {
     /// Returns the total unspent gas in the VM, including stipends.
     pub(crate) fn total_unspent_gas(&self) -> u32 {
         self.current_frame.gas
@@ -94,14 +104,6 @@ impl<T, W> State<T, W> {
                 .iter()
                 .map(Callframe::contained_gas)
                 .sum::<u32>()
-    }
-
-    pub(crate) fn set_context_u128(&mut self, value: u128) {
-        self.context_u128 = value;
-    }
-
-    pub(crate) fn get_context_u128(&self) -> u128 {
-        self.current_frame.context_u128
     }
 
     pub(crate) fn snapshot(&self) -> StateSnapshot {
