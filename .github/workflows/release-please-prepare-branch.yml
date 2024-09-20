@@ -51,8 +51,6 @@ jobs:
         with:
           toolchain: ${{ env.nightly }}
           components: rustfmt, clippy
-          # Remove default `-D warnings`. This is a temporary measure.
-          rustflags: ""
 
       # cargo-workspaces fails to update versions in some cases.
       - name: Install cargo-edit

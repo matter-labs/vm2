@@ -50,8 +50,6 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: ${{ env.nightly }}
-          # Remove default `-D warnings`. This is a temporary measure.
-          rustflags: ""
 
       - name: Install sccache
         uses: mozilla-actions/sccache-action@v0.0.4
