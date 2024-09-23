@@ -19,6 +19,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: guibranco/github-status-action-v2@v1.1.13
+        if: always()
+        with:
+          authToken: ${{ secrets.GITHUB_TOKEN }}
+          state: ${{ (steps.lint_pr_title.outputs.error_message != null) && 'error' || 'success' }}
+          context: 'conventional-pr-title'
+          description: PR title ${{ (steps.lint_pr_title.outputs.error_message != null) && 'does not match' || 'matches' }} Conventional Commits spec
+          sha: ${{ github.event.pull_request.head.sha }}
+
       - uses: marocchino/sticky-pull-request-comment@v2
         # When the previous steps fails, the workflow would stop. By adding this
         # condition you can continue the execution with the populated error message.
@@ -27,7 +36,7 @@ jobs:
           header: pr-title-lint-error
           message: |
             Hey there! 👋🏼
-            
+
             We require pull request titles to follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/) and it looks like your proposed title needs to be adjusted.
             Examples of valid PR titles:
 
@@ -36,7 +45,7 @@ jobs:
             - ci: Add new workflow for linting
 
             Details:
-            
+
             ```
             ${{ steps.lint_pr_title.outputs.error_message }}
             ```
