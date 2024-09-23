@@ -9,7 +9,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["The Matter Labs Team <hello@matterlabs.dev>"]
 homepage = "https://zksync.io/"
@@ -36,8 +36,8 @@ zk_evm_abstractions = "0.150.0"
 zk_evm = { git = "https://github.com/matter-labs/era-zk_evm.git", rev = "b7caa02acc2119b2994730d92c8cb6b861f56484" }
 
 # Dependencies within the workspace
-zksync_vm2_interface = { version = "0.1.0", path = "crates/vm2-interface" }
-zksync_vm2 = { version = "0.1.0", path = "crates/vm2" }
+zksync_vm2_interface = { version = "0.2.0", path = "crates/vm2-interface" }
+zksync_vm2 = { version = "0.2.0", path = "crates/vm2" }
 
 [workspace.lints.rust]
 missing_docs = "warn"
