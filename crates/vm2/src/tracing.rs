@@ -310,7 +310,11 @@ impl<T: Tracer, W> CallframeInterface for CallframeWrapper<'_, T, W> {
     }
 
     fn set_program_counter(&mut self, value: u16) {
-        self.frame.set_pc_from_u16(value);
+        if let Some(call) = self.near_call_on_top_mut() {
+            call.previous_frame_pc = value;
+        } else {
+            self.frame.set_pc_from_u16(value);
+        }
     }
 
     fn exception_handler(&self) -> u16 {
