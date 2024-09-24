@@ -49,11 +49,12 @@ impl<T: Tracer, W> StateInterface for VirtualMachine<T, W> {
         for far_frame in std::iter::once(&mut self.state.current_frame)
             .chain(self.state.previous_frames.iter_mut().rev())
         {
-            match n.cmp(&far_frame.near_calls.len()) {
+            let near_calls = far_frame.near_calls.len();
+            match n.cmp(&near_calls) {
                 Ordering::Less => {
                     return CallframeWrapper {
                         frame: far_frame,
-                        near_call: Some(n),
+                        near_call: Some(near_calls - 1 - n),
                     }
                 }
                 Ordering::Equal => {
@@ -62,7 +63,7 @@ impl<T: Tracer, W> StateInterface for VirtualMachine<T, W> {
                         near_call: None,
                     }
                 }
-                Ordering::Greater => n -= far_frame.near_calls.len() + 1,
+                Ordering::Greater => n -= near_calls + 1,
             }
         }
         panic!("Callframe index out of bounds")
@@ -314,7 +315,7 @@ impl<T: Tracer, W> CallframeInterface for CallframeWrapper<'_, T, W> {
 
     fn exception_handler(&self) -> u16 {
         if let Some(i) = self.near_call {
-            self.frame.near_calls[self.frame.near_calls.len() - i - 1].exception_handler
+            self.frame.near_calls[i].exception_handler
         } else {
             self.frame.exception_handler
         }
@@ -322,8 +323,7 @@ impl<T: Tracer, W> CallframeInterface for CallframeWrapper<'_, T, W> {
 
     fn set_exception_handler(&mut self, value: u16) {
         if let Some(i) = self.near_call {
-            let idx = self.frame.near_calls.len() - i - 1;
-            self.frame.near_calls[idx].exception_handler = value;
+            self.frame.near_calls[i].exception_handler = value;
         } else {
             self.frame.exception_handler = value;
         }
@@ -332,27 +332,13 @@ impl<T: Tracer, W> CallframeInterface for CallframeWrapper<'_, T, W> {
 
 impl<T, W> CallframeWrapper<'_, T, W> {
     fn near_call_on_top(&self) -> Option<&NearCallFrame> {
-        if self.frame.near_calls.is_empty() || self.near_call == Some(0) {
-            None
-        } else {
-            let index = self
-                .near_call
-                .map(|x| self.frame.near_calls.len() - x)
-                .unwrap_or_default();
-            Some(&self.frame.near_calls[index])
-        }
+        let index = self.near_call.map_or(0, |i| i + 1);
+        self.frame.near_calls.get(index)
     }
 
     fn near_call_on_top_mut(&mut self) -> Option<&mut NearCallFrame> {
-        if self.frame.near_calls.is_empty() || self.near_call == Some(0) {
-            None
-        } else {
-            let index = self
-                .near_call
-                .map(|x| self.frame.near_calls.len() - x)
-                .unwrap_or_default();
-            Some(&mut self.frame.near_calls[index])
-        }
+        let index = self.near_call.map_or(0, |i| i + 1);
+        self.frame.near_calls.get_mut(index)
     }
 }
 
@@ -404,6 +390,7 @@ mod test {
                 HeapId::from_u32_unchecked(5),
                 vm.world_diff.snapshot(),
             );
+            assert_eq!(vm.current_frame().gas(), (*counter).into());
             *counter += 1;
         };
 
@@ -413,6 +400,7 @@ mod test {
             vm.state
                 .current_frame
                 .push_near_call(count_u32, *counter, vm.world_diff.snapshot());
+            assert_eq!(vm.current_frame().gas(), (*counter).into());
             *counter += 1;
         };
 
@@ -423,12 +411,9 @@ mod test {
         add_near_frame(&mut vm, &mut frame_count);
         add_near_frame(&mut vm, &mut frame_count);
 
-        for i in 0..frame_count {
-            assert_eq!(
-                vm.callframe(i as usize).exception_handler(),
-                frame_count - i - 1
-            );
-            assert_eq!(vm.callframe(i as usize).gas(), (frame_count - i - 1).into());
+        for (fwd, rev) in (0..frame_count.into()).zip((0..frame_count).rev()) {
+            assert_eq!(vm.callframe(fwd).exception_handler(), rev);
+            assert_eq!(vm.callframe(fwd).gas(), rev.into());
         }
     }
 }
