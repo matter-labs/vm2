@@ -58,7 +58,8 @@ jobs:
         run: cargo install cargo-workspaces
 
       - name: Build each package separately
-        run: cargo ws exec cargo build
+        # Ignore the fuzzing crate which requires a wrapper to build
+        run: cargo ws exec --ignore-private cargo build
 
       - name: Login to crates.io
         run: cargo login ${{ secrets.CRATES_IO_TOKEN }}
