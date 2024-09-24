@@ -335,11 +335,10 @@ impl<T, W> CallframeWrapper<'_, T, W> {
         if self.frame.near_calls.is_empty() || self.near_call == Some(0) {
             None
         } else {
-            let index = if let Some(i) = self.near_call {
-                i - 1
-            } else {
-                self.frame.near_calls.len() - 1
-            };
+            let index = self
+                .near_call
+                .map(|x| self.frame.near_calls.len() - x)
+                .unwrap_or_default();
             Some(&self.frame.near_calls[index])
         }
     }
@@ -348,11 +347,10 @@ impl<T, W> CallframeWrapper<'_, T, W> {
         if self.frame.near_calls.is_empty() || self.near_call == Some(0) {
             None
         } else {
-            let index = if let Some(i) = self.near_call {
-                i - 1
-            } else {
-                self.frame.near_calls.len() - 1
-            };
+            let index = self
+                .near_call
+                .map(|x| self.frame.near_calls.len() - x)
+                .unwrap_or_default();
             Some(&mut self.frame.near_calls[index])
         }
     }
@@ -391,13 +389,15 @@ mod test {
             },
         );
 
+        vm.state.current_frame.gas = 0;
+        vm.state.current_frame.exception_handler = 0;
         let mut frame_count = 1;
 
         let add_far_frame = |vm: &mut VirtualMachine<(), TestWorld<()>>, counter: &mut u16| {
             vm.push_frame::<opcodes::Normal>(
                 H160::from_low_u64_be(1),
                 program.clone(),
-                0,
+                (*counter).into(),
                 0,
                 *counter,
                 false,
@@ -408,9 +408,11 @@ mod test {
         };
 
         let add_near_frame = |vm: &mut VirtualMachine<(), TestWorld<()>>, counter: &mut u16| {
+            let count_u32 = (*counter).into();
+            vm.state.current_frame.gas += count_u32;
             vm.state
                 .current_frame
-                .push_near_call(0, *counter, vm.world_diff.snapshot());
+                .push_near_call(count_u32, *counter, vm.world_diff.snapshot());
             *counter += 1;
         };
 
@@ -426,6 +428,7 @@ mod test {
                 vm.callframe(i as usize).exception_handler(),
                 frame_count - i - 1
             );
+            assert_eq!(vm.callframe(i as usize).gas(), (frame_count - i - 1).into());
         }
     }
 }
