@@ -18,6 +18,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # FIXME: remove
+  test_commits:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac # v4
+        with:
+          ref: ${{ github.head_ref }}
+      - run: |
+          echo 'Test' > test.txt
+          git add test.txt
+
+      - name: Test signed commits
+        uses: qoomon/actions--create-commit@v1.2.1
+        id: commit
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          message: "Test commit"
+
+      - name: Push commit
+        run: git push
+
   build_and_test:
     runs-on: ubuntu-latest
 
@@ -49,7 +73,7 @@ jobs:
         run: |
           # Check the main library with non-test features (needs to be tested in isolation since the fuzzing crate enables test features)
           cargo clippy -p zksync_vm2 --all-targets -- -D warnings
-          # The benches in `vm2` don't compile with fuzzing enabled 
+          # The benches in `vm2` don't compile with fuzzing enabled
           cargo clippy --workspace --all-features --lib --bins --tests -- -D warnings
 
       - name: Check formatting
