@@ -1446,7 +1446,7 @@ dependencies = [
 
 [[package]]
 name = "zksync_vm2"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -1462,7 +1462,7 @@ dependencies = [
 
 [[package]]
 name = "zksync_vm2_afl_fuzz"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "afl",
  "arbitrary",
@@ -1474,7 +1474,7 @@ dependencies = [
 
 [[package]]
 name = "zksync_vm2_interface"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "primitive-types",
 ]
