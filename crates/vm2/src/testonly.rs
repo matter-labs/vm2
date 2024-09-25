@@ -11,7 +11,9 @@ use zkevm_opcode_defs::{
 };
 use zksync_vm2_interface::Tracer;
 
-use crate::{instruction_handlers::address_into_u256, Program, StorageInterface, World};
+use crate::{
+    instruction_handlers::address_into_u256, Program, StorageInterface, StorageSlot, World,
+};
 
 /// Test [`World`] implementation.
 #[derive(Debug)]
@@ -76,23 +78,26 @@ impl<T: Tracer> World<T> for TestWorld<T> {
 }
 
 impl<T> StorageInterface for TestWorld<T> {
-    fn read_storage(&mut self, contract: H160, key: U256) -> Option<U256> {
+    fn read_storage(&mut self, contract: H160, key: U256) -> StorageSlot {
         let deployer_system_contract_address =
             Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW.into());
 
         if contract == deployer_system_contract_address {
-            Some(
-                self.address_to_hash
-                    .get(&key)
-                    .copied()
-                    .unwrap_or(U256::zero()),
-            )
+            let value = self
+                .address_to_hash
+                .get(&key)
+                .copied()
+                .unwrap_or_else(U256::zero);
+            StorageSlot {
+                value,
+                is_write_initial: false,
+            }
         } else {
-            None
+            StorageSlot::EMPTY
         }
     }
 
-    fn cost_of_writing_storage(&mut self, _initial_value: Option<U256>, _new_value: U256) -> u32 {
+    fn cost_of_writing_storage(&mut self, _initial_slot: StorageSlot, _new_value: U256) -> u32 {
         50
     }
 
@@ -110,7 +115,7 @@ pub fn initial_decommit<T: Tracer, W: World<T>>(world: &mut W, address: H160) ->
         Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW.into());
     let code_info = world
         .read_storage(deployer_system_contract_address, address_into_u256(address))
-        .unwrap_or_default();
+        .value;
 
     let mut code_info_bytes = [0; 32];
     code_info.to_big_endian(&mut code_info_bytes);

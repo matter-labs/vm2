@@ -9,7 +9,7 @@ use zksync_vm2_interface::{CycleStats, Event, L2ToL1Log, Tracer};
 
 use crate::{
     rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackablePod, RollbackableSet},
-    StorageInterface,
+    StorageInterface, StorageSlot,
 };
 
 /// Pending modifications to the global state that are executed at the end of a block.
@@ -35,7 +35,7 @@ pub struct WorldDiff {
     written_storage_slots: RollbackableSet<(H160, U256)>,
 
     // This is never rolled back. It is just a cache to avoid asking these from DB every time.
-    storage_initial_values: BTreeMap<(H160, U256), Option<U256>>,
+    storage_initial_values: BTreeMap<(H160, U256), StorageSlot>,
 }
 
 #[derive(Debug)]
@@ -87,7 +87,7 @@ impl WorldDiff {
             .as_ref()
             .get(&(contract, key))
             .copied()
-            .unwrap_or_else(|| world.read_storage(contract, key).unwrap_or_default());
+            .unwrap_or_else(|| world.read_storage(contract, key).value);
 
         let newly_added = self.read_storage_slots.add((contract, key));
         if newly_added {
@@ -178,17 +178,23 @@ impl WorldDiff {
     }
 
     /// Gets changes for all touched storage slots.
-    pub fn get_storage_changes(
-        &self,
-    ) -> impl Iterator<Item = ((H160, U256), (Option<U256>, U256))> + '_ {
+    pub fn get_storage_changes(&self) -> impl Iterator<Item = ((H160, U256), StorageChange)> + '_ {
         self.storage_changes
             .as_ref()
             .iter()
             .filter_map(|(key, &value)| {
-                if self.storage_initial_values[key].unwrap_or_default() == value {
+                let initial_slot = &self.storage_initial_values[key];
+                if initial_slot.value == value {
                     None
                 } else {
-                    Some((*key, (self.storage_initial_values[key], value)))
+                    Some((
+                        *key,
+                        StorageChange {
+                            before: initial_slot.value,
+                            after: value,
+                            is_initial: initial_slot.is_write_initial,
+                        },
+                    ))
                 }
             })
     }
@@ -206,9 +212,9 @@ impl WorldDiff {
                 (
                     key,
                     StorageChange {
-                        before: before.or(initial),
+                        before: before.unwrap_or(initial.value),
                         after,
-                        is_initial: initial.is_none(),
+                        is_initial: initial.is_write_initial,
                     },
                 )
             })
@@ -354,8 +360,8 @@ pub struct Snapshot {
 /// Change in a single storage slot.
 #[derive(Debug, PartialEq)]
 pub struct StorageChange {
-    /// Value before the slot was written to. `None` if the slot was not written to previously.
-    pub before: Option<U256>,
+    /// Value before the slot was written to.
+    pub before: U256,
     /// Value written to the slot.
     pub after: U256,
     /// `true` if the slot is not set in the [`World`](crate::World).
@@ -372,6 +378,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::StorageSlot;
 
     proptest! {
         #[test]
@@ -382,7 +389,10 @@ mod tests {
         ) {
             let storage_initial_values = initial_values
                 .iter()
-                .map(|(key, value)| (*key, Some(*value)))
+                .map(|(key, &value)| (*key, StorageSlot {
+                    value,
+                    is_write_initial: false,
+                }))
                 .collect();
             let mut world_diff = WorldDiff {
                 storage_initial_values,
@@ -402,7 +412,7 @@ mod tests {
                     .map(|(key, value)| (
                         *key,
                         StorageChange {
-                            before: initial_values.get(key).copied(),
+                            before: initial_values.get(key).copied().unwrap_or_default(),
                             after: *value,
                             is_initial: !initial_values.contains_key(key),
                         }
@@ -423,7 +433,7 @@ mod tests {
                     .map(|(key, value)| (
                         *key,
                         StorageChange {
-                            before: first_changes.get(key).or(initial_values.get(key)).copied(),
+                            before: first_changes.get(key).or(initial_values.get(key)).copied().unwrap_or_default(),
                             after: *value,
                             is_initial: !initial_values.contains_key(key),
                         }
@@ -435,7 +445,11 @@ mod tests {
                 .into_iter()
                 .filter_map(|(key, value)| {
                     let initial = initial_values.get(&key).copied();
-                    (initial.unwrap_or_default() != value).then_some((key, (initial, value)))
+                    (initial.unwrap_or_default() != value).then_some((key, StorageChange {
+                        before: initial.unwrap_or_default(),
+                        after: value,
+                        is_initial: initial.is_none(),
+                    }))
                 })
                 .collect::<BTreeMap<_, _>>();
             for (key, value) in second_changes {
@@ -443,7 +457,11 @@ mod tests {
                 if initial.unwrap_or_default() == value {
                     combined.remove(&key);
                 } else {
-                    combined.insert(key, (initial, value));
+                    combined.insert(key, StorageChange {
+                        before: initial.unwrap_or_default(),
+                        after: value,
+                        is_initial: initial.is_none(),
+                    });
                 }
             }
 
@@ -462,12 +480,13 @@ mod tests {
     }
 
     struct NoWorld;
+
     impl StorageInterface for NoWorld {
-        fn read_storage(&mut self, _: H160, _: U256) -> Option<U256> {
-            None
+        fn read_storage(&mut self, _: H160, _: U256) -> StorageSlot {
+            StorageSlot::EMPTY
         }
 
-        fn cost_of_writing_storage(&mut self, _: Option<U256>, _: U256) -> u32 {
+        fn cost_of_writing_storage(&mut self, _: StorageSlot, _: U256) -> u32 {
             0
         }
 

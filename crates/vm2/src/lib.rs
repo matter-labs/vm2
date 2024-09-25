@@ -49,15 +49,32 @@ mod tracing;
 mod vm;
 mod world_diff;
 
+/// Storage slot information returned from [`StorageInterface::read_storage()`].
+#[derive(Debug, Clone, Copy)]
+pub struct StorageSlot {
+    /// Value of the storage slot.
+    pub value: U256,
+    /// Whether a write to the slot would be considered an initial write. This influences refunds.
+    pub is_write_initial: bool,
+}
+
+impl StorageSlot {
+    /// Represents an empty storage slot.
+    pub const EMPTY: Self = Self {
+        value: U256([0; 4]),
+        is_write_initial: true,
+    };
+}
+
 /// VM storage access operations.
 pub trait StorageInterface {
     /// Reads the specified slot from the storage.
     ///
     /// There is no write counterpart; [`WorldDiff::get_storage_changes()`] gives a list of all storage changes.
-    fn read_storage(&mut self, contract: H160, key: U256) -> Option<U256>;
+    fn read_storage(&mut self, contract: H160, key: U256) -> StorageSlot;
 
     /// Computes the cost of writing a storage slot.
-    fn cost_of_writing_storage(&mut self, initial_value: Option<U256>, new_value: U256) -> u32;
+    fn cost_of_writing_storage(&mut self, initial_slot: StorageSlot, new_value: U256) -> u32;
 
     /// Returns if the storage slot is free both in terms of gas and pubdata.
     fn is_free_storage_slot(&self, contract: &H160, key: &U256) -> bool;
