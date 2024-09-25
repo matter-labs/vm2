@@ -1402,8 +1402,9 @@ checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
 
 [[package]]
 name = "zk_evm"
-version = "0.150.0"
-source = "git+https://github.com/matter-labs/era-zk_evm.git?rev=b7caa02acc2119b2994730d92c8cb6b861f56484#b7caa02acc2119b2994730d92c8cb6b861f56484"
+version = "0.150.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a6e69931f24db5cf333b714721e8d80ff88bfdb7da8c3dc7882612ffddb8d27"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -1416,9 +1417,9 @@ dependencies = [
 
 [[package]]
 name = "zk_evm_abstractions"
-version = "0.150.0"
+version = "0.150.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc313cea4ac9ef6b855264b1425cbe9de30dd8f009559dabcb6b2896122da5db"
+checksum = "93d6b0720261ab55490fe3a96e96de30d5d7b277940b52ea7f52dbf564eb1748"
 dependencies = [
  "anyhow",
  "num_enum",
@@ -1429,9 +1430,9 @@ dependencies = [
 
 [[package]]
 name = "zkevm_opcode_defs"
-version = "0.150.0"
+version = "0.150.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3328c012d444bdbfadb754a72c01a56879eb66584efc71eac457e89e7843608"
+checksum = "79055eae1b6c1ab80793ed9d77d2964c9c896afa4b5dfed278cf58cd10acfe8f"
 dependencies = [
  "bitflags",
  "blake2",
