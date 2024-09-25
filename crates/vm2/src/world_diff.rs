@@ -87,7 +87,7 @@ impl WorldDiff {
             .as_ref()
             .get(&(contract, key))
             .copied()
-            .unwrap_or_else(|| world.read_storage(contract, key).value);
+            .unwrap_or_else(|| world.read_storage_value(contract, key));
 
         let newly_added = self.read_storage_slots.add((contract, key));
         if newly_added {

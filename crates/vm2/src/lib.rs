@@ -73,6 +73,13 @@ pub trait StorageInterface {
     /// There is no write counterpart; [`WorldDiff::get_storage_changes()`] gives a list of all storage changes.
     fn read_storage(&mut self, contract: H160, key: U256) -> StorageSlot;
 
+    /// Same as [`Self::read_storage()`], but doesn't request the initialness flag for the read slot.
+    ///
+    /// The default implementation uses `read_storage()`.
+    fn read_storage_value(&mut self, contract: H160, key: U256) -> U256 {
+        self.read_storage(contract, key).value
+    }
+
     /// Computes the cost of writing a storage slot.
     fn cost_of_writing_storage(&mut self, initial_slot: StorageSlot, new_value: U256) -> u32;
 

@@ -113,9 +113,8 @@ impl<T> StorageInterface for TestWorld<T> {
 pub fn initial_decommit<T: Tracer, W: World<T>>(world: &mut W, address: H160) -> Program<T, W> {
     let deployer_system_contract_address =
         Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW.into());
-    let code_info = world
-        .read_storage(deployer_system_contract_address, address_into_u256(address))
-        .value;
+    let code_info =
+        world.read_storage_value(deployer_system_contract_address, address_into_u256(address));
 
     let mut code_info_bytes = [0; 32];
     code_info.to_big_endian(&mut code_info_bytes);
