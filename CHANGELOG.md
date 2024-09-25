@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/matter-labs/vm2/compare/v0.2.0...v0.2.1) (2024-09-25)
+
+
+### Bug Fixes
+
+* some methods operating on wrong near call ([#69](https://github.com/matter-labs/vm2/issues/69)) ([9b36813](https://github.com/matter-labs/vm2/commit/9b36813ec6b4201396049f65b087c0bbf27d9ea2))
+
 ## [0.2.0](https://github.com/matter-labs/vm2/compare/v0.1.0...v0.2.0) (2024-09-23)
 
 
