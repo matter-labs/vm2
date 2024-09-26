@@ -69,12 +69,7 @@ where
                 abi.is_constructor_call,
             );
 
-            // calldata has to be constructed even if we already know we will panic because
-            // overflowing start + length makes the heap resize even when already panicking.
-            let already_failed = decommit_result.is_none() || IS_SHARD && abi.shard_id != 0;
-
-            let maybe_calldata =
-                get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm, already_failed);
+            let maybe_calldata = get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm);
 
             // mandated gas is passed even if it means transferring more than the 63/64 rule allows
             if let Some(gas_left) = vm.state.current_frame.gas.checked_sub(mandated_gas) {
@@ -86,6 +81,9 @@ where
                 return None;
             };
 
+            if IS_SHARD && abi.shard_id != 0 {
+                return None;
+            }
             let calldata = maybe_calldata?;
             let (unpaid_decommit, is_evm) = decommit_result?;
             let program = vm.world_diff.pay_for_decommit(
@@ -175,7 +173,6 @@ pub(crate) fn get_far_call_calldata<T, W>(
     raw_abi: U256,
     is_pointer: bool,
     vm: &mut VirtualMachine<T, W>,
-    already_failed: bool,
 ) -> Option<FatPointer> {
     let mut pointer = FatPointer::from(raw_abi);
     #[allow(clippy::cast_possible_truncation)]
@@ -184,40 +181,29 @@ pub(crate) fn get_far_call_calldata<T, W>(
 
     match FatPointerSource::from_abi(raw_source) {
         FatPointerSource::ForwardFatPointer => {
-            if !is_pointer || pointer.offset > pointer.length || already_failed {
+            if !is_pointer || pointer.offset > pointer.length {
                 return None;
             }
 
             pointer.narrow();
         }
         FatPointerSource::MakeNewPointer(target) => {
-            if let Some(bound) = pointer.start.checked_add(pointer.length) {
-                if is_pointer || pointer.offset != 0 || already_failed {
-                    return None;
-                }
-                match target {
-                    FatPointerTarget::ToHeap => {
-                        grow_heap::<_, _, Heap>(&mut vm.state, bound).ok()?;
-                        pointer.memory_page = vm.state.current_frame.heap;
-                    }
-                    FatPointerTarget::ToAuxHeap => {
-                        grow_heap::<_, _, AuxHeap>(&mut vm.state, bound).ok()?;
-                        pointer.memory_page = vm.state.current_frame.aux_heap;
-                    }
-                }
-            } else {
-                // The heap is grown even if the pointer goes out of the heap
-                // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
-                let bound = u32::MAX;
-                match target {
-                    FatPointerTarget::ToHeap => {
-                        grow_heap::<_, _, Heap>(&mut vm.state, bound).ok()?;
-                    }
-                    FatPointerTarget::ToAuxHeap => {
-                        grow_heap::<_, _, AuxHeap>(&mut vm.state, bound).ok()?;
-                    }
-                }
+            if is_pointer || pointer.offset != 0 {
                 return None;
+            }
+            let bound = pointer
+                .start
+                .checked_add(pointer.length)
+                .unwrap_or(u32::MAX);
+            match target {
+                FatPointerTarget::ToHeap => {
+                    grow_heap::<_, _, Heap>(&mut vm.state, bound).ok()?;
+                    pointer.memory_page = vm.state.current_frame.heap;
+                }
+                FatPointerTarget::ToAuxHeap => {
+                    grow_heap::<_, _, AuxHeap>(&mut vm.state, bound).ok()?;
+                    pointer.memory_page = vm.state.current_frame.aux_heap;
+                }
             }
         }
     }
