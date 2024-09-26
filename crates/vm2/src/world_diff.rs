@@ -375,7 +375,7 @@ const COLD_WRITE_AFTER_WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST;
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
+    use proptest::{bits, collection::btree_map, prelude::*};
 
     use super::*;
     use crate::StorageSlot;
@@ -507,59 +507,53 @@ mod tests {
         }
     }
 
+    /// Max items in generated initial storage / changes.
+    const MAX_ITEMS: usize = 5;
+    /// Bit mask for bytes in constrained `U256` / `H160` values.
+    const BIT_MASK: u8 = 0b_1111;
+
     fn arbitrary_initial_storage() -> impl Strategy<Value = BTreeMap<(H160, U256), StorageSlot>> {
-        any::<Vec<([u8; 20], [u8; 32], [u8; 32], bool)>>().prop_map(|vec| {
-            vec.into_iter()
-                .map(|(contract, key, value, is_write_initial)| {
-                    (
-                        (H160::from(contract), U256::from(key)),
-                        StorageSlot {
-                            value: U256::from(value),
-                            is_write_initial,
-                        },
-                    )
-                })
-                .collect()
-        })
+        btree_map(
+            any::<([u8; 20], [u8; 32])>()
+                .prop_map(|(contract, key)| (H160::from(contract), U256::from(key))),
+            any::<([u8; 32], bool)>().prop_map(|(value, is_write_initial)| StorageSlot {
+                value: U256::from(value),
+                is_write_initial,
+            }),
+            0..=MAX_ITEMS,
+        )
     }
 
     fn constrained_initial_storage() -> impl Strategy<Value = BTreeMap<(H160, U256), StorageSlot>> {
-        any::<Vec<(u8, u8, u8, bool)>>().prop_map(|vec| {
-            vec.into_iter()
-                .map(|(contract, key, value, is_write_initial)| {
-                    (
-                        (H160::repeat_byte(contract), U256::from(key)),
-                        StorageSlot {
-                            value: U256::from(value),
-                            is_write_initial,
-                        },
-                    )
-                })
-                .collect()
-        })
+        btree_map(
+            (bits::u8::masked(BIT_MASK), bits::u8::masked(BIT_MASK))
+                .prop_map(|(contract, key)| (H160::repeat_byte(contract), U256::from(key))),
+            (bits::u8::masked(BIT_MASK), any::<bool>()).prop_map(|(value, is_write_initial)| {
+                StorageSlot {
+                    value: U256::from(value),
+                    is_write_initial,
+                }
+            }),
+            0..=MAX_ITEMS,
+        )
     }
 
     fn arbitrary_storage_changes() -> impl Strategy<Value = BTreeMap<(H160, U256), U256>> {
-        any::<Vec<([u8; 20], [u8; 32], [u8; 32])>>().prop_map(|vec| {
-            vec.into_iter()
-                .map(|(contract, key, value)| {
-                    ((H160::from(contract), U256::from(key)), U256::from(value))
-                })
-                .collect()
-        })
+        btree_map(
+            any::<([u8; 20], [u8; 32])>()
+                .prop_map(|(contract, key)| (H160::from(contract), U256::from(key))),
+            any::<[u8; 32]>().prop_map(U256::from),
+            0..=MAX_ITEMS,
+        )
     }
 
     fn constrained_storage_changes() -> impl Strategy<Value = BTreeMap<(H160, U256), U256>> {
-        any::<Vec<(u8, u8, u8)>>().prop_map(|vec| {
-            vec.into_iter()
-                .map(|(contract, key, value)| {
-                    (
-                        (H160::repeat_byte(contract), U256::from(key)),
-                        U256::from(value),
-                    )
-                })
-                .collect()
-        })
+        btree_map(
+            (bits::u8::masked(BIT_MASK), bits::u8::masked(BIT_MASK))
+                .prop_map(|(contract, key)| (H160::repeat_byte(contract), U256::from(key))),
+            bits::u8::masked(BIT_MASK).prop_map(U256::from),
+            0..=MAX_ITEMS,
+        )
     }
 
     struct NoWorld;

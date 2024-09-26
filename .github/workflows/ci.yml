@@ -49,7 +49,7 @@ jobs:
         run: |
           # Check the main library with non-test features (needs to be tested in isolation since the fuzzing crate enables test features)
           cargo clippy -p zksync_vm2 --all-targets -- -D warnings
-          # The benches in `vm2` don't compile with fuzzing enabled 
+          # The benches in `vm2` don't compile with fuzzing enabled
           cargo clippy --workspace --all-features --lib --bins --tests -- -D warnings
 
       - name: Check formatting
@@ -58,6 +58,7 @@ jobs:
 
       - name: Run tests
         run: |
+          PROPTEST_CASES=10000 \
           cargo test -p zksync_vm2_interface -p zksync_vm2 --all-targets
 
       - name: Run doc tests
