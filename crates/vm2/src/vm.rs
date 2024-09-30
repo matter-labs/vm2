@@ -97,13 +97,16 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
     /// Needed to support account validation gas limit.
     /// We cannot simply reduce the available gas, as contracts might behave differently
     /// depending on remaining gas.
-    pub fn resume_with_additional_gas_limit(
+    pub fn run_with_additional_gas_limit(
         &mut self,
         world: &mut W,
         tracer: &mut T,
         gas_limit: u32,
     ) -> Option<(u32, ExecutionEnd)> {
-        let minimum_gas = self.state.total_unspent_gas().saturating_sub(gas_limit);
+        let starting_gas = self.state.total_unspent_gas();
+        // Going below this indicates that we may have reached the gas limit.
+        // But it may also be that a call that left some of the gas in the previous frame.
+        let mut minimum_gas = self.state.current_frame.gas.saturating_sub(gas_limit);
 
         let end = unsafe {
             loop {
@@ -113,15 +116,22 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
                     break end;
                 }
 
-                if self.state.total_unspent_gas() < minimum_gas {
-                    return None;
+                if self.state.current_frame.gas < minimum_gas {
+                    let spent = starting_gas.saturating_sub(self.state.total_unspent_gas());
+                    if spent > gas_limit {
+                        return None;
+                    }
+                    minimum_gas = self
+                        .state
+                        .current_frame
+                        .gas
+                        .saturating_sub(gas_limit - spent);
                 }
             }
         };
 
-        self.state
-            .total_unspent_gas()
-            .checked_sub(minimum_gas)
+        starting_gas
+            .checked_sub(self.state.total_unspent_gas())
             .map(|left| (left, end))
     }
 

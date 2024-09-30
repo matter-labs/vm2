@@ -98,7 +98,7 @@ impl<T, W> State<T, W> {
 impl<T: Tracer, W> State<T, W> {
     /// Returns the total unspent gas in the VM, including stipends.
     pub(crate) fn total_unspent_gas(&self) -> u32 {
-        self.current_frame.gas
+        self.current_frame.contained_gas()
             + self
                 .previous_frames
                 .iter()
