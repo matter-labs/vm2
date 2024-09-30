@@ -9,7 +9,7 @@ use zksync_vm2_interface::{CycleStats, Event, L2ToL1Log, Tracer};
 
 use crate::{
     rollback::{Rollback, RollbackableLog, RollbackableMap, RollbackablePod, RollbackableSet},
-    StorageInterface,
+    StorageInterface, StorageSlot,
 };
 
 /// Pending modifications to the global state that are executed at the end of a block.
@@ -35,7 +35,7 @@ pub struct WorldDiff {
     written_storage_slots: RollbackableSet<(H160, U256)>,
 
     // This is never rolled back. It is just a cache to avoid asking these from DB every time.
-    storage_initial_values: BTreeMap<(H160, U256), Option<U256>>,
+    storage_initial_values: BTreeMap<(H160, U256), StorageSlot>,
 }
 
 #[derive(Debug)]
@@ -87,7 +87,7 @@ impl WorldDiff {
             .as_ref()
             .get(&(contract, key))
             .copied()
-            .unwrap_or_else(|| world.read_storage(contract, key).unwrap_or_default());
+            .unwrap_or_else(|| world.read_storage_value(contract, key));
 
         let newly_added = self.read_storage_slots.add((contract, key));
         if newly_added {
@@ -178,17 +178,23 @@ impl WorldDiff {
     }
 
     /// Gets changes for all touched storage slots.
-    pub fn get_storage_changes(
-        &self,
-    ) -> impl Iterator<Item = ((H160, U256), (Option<U256>, U256))> + '_ {
+    pub fn get_storage_changes(&self) -> impl Iterator<Item = ((H160, U256), StorageChange)> + '_ {
         self.storage_changes
             .as_ref()
             .iter()
             .filter_map(|(key, &value)| {
-                if self.storage_initial_values[key].unwrap_or_default() == value {
+                let initial_slot = &self.storage_initial_values[key];
+                if initial_slot.value == value {
                     None
                 } else {
-                    Some((*key, (self.storage_initial_values[key], value)))
+                    Some((
+                        *key,
+                        StorageChange {
+                            before: initial_slot.value,
+                            after: value,
+                            is_initial: initial_slot.is_write_initial,
+                        },
+                    ))
                 }
             })
     }
@@ -206,9 +212,9 @@ impl WorldDiff {
                 (
                     key,
                     StorageChange {
-                        before: before.or(initial),
+                        before: before.unwrap_or(initial.value),
                         after,
-                        is_initial: initial.is_none(),
+                        is_initial: initial.is_write_initial,
                     },
                 )
             })
@@ -354,8 +360,8 @@ pub struct Snapshot {
 /// Change in a single storage slot.
 #[derive(Debug, PartialEq)]
 pub struct StorageChange {
-    /// Value before the slot was written to. `None` if the slot was not written to previously.
-    pub before: Option<U256>,
+    /// Value before the slot was written to.
+    pub before: U256,
     /// Value written to the slot.
     pub after: U256,
     /// `true` if the slot is not set in the [`World`](crate::World).
@@ -369,105 +375,195 @@ const COLD_WRITE_AFTER_WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST;
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
+    use proptest::{bits, collection::btree_map, prelude::*};
 
     use super::*;
+    use crate::StorageSlot;
+
+    fn test_storage_changes(
+        initial_values: &BTreeMap<(H160, U256), StorageSlot>,
+        first_changes: BTreeMap<(H160, U256), U256>,
+        second_changes: BTreeMap<(H160, U256), U256>,
+    ) {
+        let mut world_diff = WorldDiff {
+            storage_initial_values: initial_values.clone(),
+            ..WorldDiff::default()
+        };
+
+        let checkpoint1 = world_diff.snapshot();
+        for (key, value) in &first_changes {
+            world_diff.write_storage(&mut NoWorld, &mut (), key.0, key.1, *value);
+        }
+        let actual_changes = world_diff
+            .get_storage_changes_after(&checkpoint1)
+            .collect::<BTreeMap<_, _>>();
+        let expected_changes = first_changes
+            .iter()
+            .map(|(key, value)| {
+                let before = initial_values
+                    .get(key)
+                    .map_or_else(U256::zero, |slot| slot.value);
+                let is_initial = initial_values
+                    .get(key)
+                    .map_or(true, |slot| slot.is_write_initial);
+                (
+                    *key,
+                    StorageChange {
+                        before,
+                        after: *value,
+                        is_initial,
+                    },
+                )
+            })
+            .collect();
+        assert_eq!(actual_changes, expected_changes);
+
+        let checkpoint2 = world_diff.snapshot();
+        for (key, value) in &second_changes {
+            world_diff.write_storage(&mut NoWorld, &mut (), key.0, key.1, *value);
+        }
+        let actual_changes = world_diff
+            .get_storage_changes_after(&checkpoint2)
+            .collect::<BTreeMap<_, _>>();
+        let expected_changes = second_changes
+            .iter()
+            .map(|(key, value)| {
+                let before = first_changes
+                    .get(key)
+                    .or(initial_values.get(key).map(|slot| &slot.value))
+                    .copied()
+                    .unwrap_or_default();
+                let is_initial = initial_values
+                    .get(key)
+                    .map_or(true, |slot| slot.is_write_initial);
+                (
+                    *key,
+                    StorageChange {
+                        before,
+                        after: *value,
+                        is_initial,
+                    },
+                )
+            })
+            .collect();
+        assert_eq!(actual_changes, expected_changes);
+
+        let mut combined = first_changes
+            .into_iter()
+            .filter_map(|(key, value)| {
+                let initial = initial_values
+                    .get(&key)
+                    .copied()
+                    .unwrap_or(StorageSlot::EMPTY);
+                (initial.value != value).then_some((
+                    key,
+                    StorageChange {
+                        before: initial.value,
+                        after: value,
+                        is_initial: initial.is_write_initial,
+                    },
+                ))
+            })
+            .collect::<BTreeMap<_, _>>();
+        for (key, value) in second_changes {
+            let initial = initial_values
+                .get(&key)
+                .copied()
+                .unwrap_or(StorageSlot::EMPTY);
+            if initial.value == value {
+                combined.remove(&key);
+            } else {
+                combined.insert(
+                    key,
+                    StorageChange {
+                        before: initial.value,
+                        after: value,
+                        is_initial: initial.is_write_initial,
+                    },
+                );
+            }
+        }
+
+        assert_eq!(combined, world_diff.get_storage_changes().collect());
+    }
 
     proptest! {
         #[test]
-        fn test_storage_changes(
-            initial_values in arbitrary_storage_changes(),
+        fn storage_changes_work_as_expected(
+            initial_values in arbitrary_initial_storage(),
             first_changes in arbitrary_storage_changes(),
             second_changes in arbitrary_storage_changes(),
         ) {
-            let storage_initial_values = initial_values
-                .iter()
-                .map(|(key, value)| (*key, Some(*value)))
-                .collect();
-            let mut world_diff = WorldDiff {
-                storage_initial_values,
-                ..WorldDiff::default()
-            };
-
-            let checkpoint1 = world_diff.snapshot();
-            for (key, value) in &first_changes {
-                world_diff.write_storage(&mut NoWorld, &mut (), key.0, key.1, *value);
-            }
-            assert_eq!(
-                world_diff
-                    .get_storage_changes_after(&checkpoint1)
-                    .collect::<BTreeMap<_, _>>(),
-                first_changes
-                    .iter()
-                    .map(|(key, value)| (
-                        *key,
-                        StorageChange {
-                            before: initial_values.get(key).copied(),
-                            after: *value,
-                            is_initial: !initial_values.contains_key(key),
-                        }
-                    ))
-                    .collect()
-            );
-
-            let checkpoint2 = world_diff.snapshot();
-            for (key, value) in &second_changes {
-                world_diff.write_storage(&mut NoWorld, &mut (), key.0, key.1, *value);
-            }
-            assert_eq!(
-                world_diff
-                    .get_storage_changes_after(&checkpoint2)
-                    .collect::<BTreeMap<_, _>>(),
-                second_changes
-                    .iter()
-                    .map(|(key, value)| (
-                        *key,
-                        StorageChange {
-                            before: first_changes.get(key).or(initial_values.get(key)).copied(),
-                            after: *value,
-                            is_initial: !initial_values.contains_key(key),
-                        }
-                    ))
-                    .collect()
-            );
-
-            let mut combined = first_changes
-                .into_iter()
-                .filter_map(|(key, value)| {
-                    let initial = initial_values.get(&key).copied();
-                    (initial.unwrap_or_default() != value).then_some((key, (initial, value)))
-                })
-                .collect::<BTreeMap<_, _>>();
-            for (key, value) in second_changes {
-                let initial = initial_values.get(&key).copied();
-                if initial.unwrap_or_default() == value {
-                    combined.remove(&key);
-                } else {
-                    combined.insert(key, (initial, value));
-                }
-            }
-
-            assert_eq!(combined, world_diff.get_storage_changes().collect());
+            test_storage_changes(&initial_values, first_changes, second_changes);
         }
+
+        #[test]
+        fn storage_changes_work_with_constrained_changes(
+            initial_values in constrained_initial_storage(),
+            first_changes in constrained_storage_changes(),
+            second_changes in constrained_storage_changes(),
+        ) {
+            test_storage_changes(&initial_values, first_changes, second_changes);
+        }
+    }
+
+    /// Max items in generated initial storage / changes.
+    const MAX_ITEMS: usize = 5;
+    /// Bit mask for bytes in constrained `U256` / `H160` values.
+    const BIT_MASK: u8 = 0b_1111;
+
+    fn arbitrary_initial_storage() -> impl Strategy<Value = BTreeMap<(H160, U256), StorageSlot>> {
+        btree_map(
+            any::<([u8; 20], [u8; 32])>()
+                .prop_map(|(contract, key)| (H160::from(contract), U256::from(key))),
+            any::<([u8; 32], bool)>().prop_map(|(value, is_write_initial)| StorageSlot {
+                value: U256::from(value),
+                is_write_initial,
+            }),
+            0..=MAX_ITEMS,
+        )
+    }
+
+    fn constrained_initial_storage() -> impl Strategy<Value = BTreeMap<(H160, U256), StorageSlot>> {
+        btree_map(
+            (bits::u8::masked(BIT_MASK), bits::u8::masked(BIT_MASK))
+                .prop_map(|(contract, key)| (H160::repeat_byte(contract), U256::from(key))),
+            (bits::u8::masked(BIT_MASK), any::<bool>()).prop_map(|(value, is_write_initial)| {
+                StorageSlot {
+                    value: U256::from(value),
+                    is_write_initial,
+                }
+            }),
+            0..=MAX_ITEMS,
+        )
     }
 
     fn arbitrary_storage_changes() -> impl Strategy<Value = BTreeMap<(H160, U256), U256>> {
-        any::<Vec<(([u8; 20], [u8; 32]), [u8; 32])>>().prop_map(|vec| {
-            vec.into_iter()
-                .map(|((contract, key), value)| {
-                    ((H160::from(contract), U256::from(key)), U256::from(value))
-                })
-                .collect()
-        })
+        btree_map(
+            any::<([u8; 20], [u8; 32])>()
+                .prop_map(|(contract, key)| (H160::from(contract), U256::from(key))),
+            any::<[u8; 32]>().prop_map(U256::from),
+            0..=MAX_ITEMS,
+        )
+    }
+
+    fn constrained_storage_changes() -> impl Strategy<Value = BTreeMap<(H160, U256), U256>> {
+        btree_map(
+            (bits::u8::masked(BIT_MASK), bits::u8::masked(BIT_MASK))
+                .prop_map(|(contract, key)| (H160::repeat_byte(contract), U256::from(key))),
+            bits::u8::masked(BIT_MASK).prop_map(U256::from),
+            0..=MAX_ITEMS,
+        )
     }
 
     struct NoWorld;
+
     impl StorageInterface for NoWorld {
-        fn read_storage(&mut self, _: H160, _: U256) -> Option<U256> {
-            None
+        fn read_storage(&mut self, _: H160, _: U256) -> StorageSlot {
+            StorageSlot::EMPTY
         }
 
-        fn cost_of_writing_storage(&mut self, _: Option<U256>, _: U256) -> u32 {
+        fn cost_of_writing_storage(&mut self, _: StorageSlot, _: U256) -> u32 {
             0
         }
 

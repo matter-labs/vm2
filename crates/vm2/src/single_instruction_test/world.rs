@@ -3,7 +3,7 @@ use primitive_types::{H160, U256};
 use zksync_vm2_interface::Tracer;
 
 use super::mock_array::MockRead;
-use crate::{Program, StorageInterface, World};
+use crate::{Program, StorageInterface, StorageSlot, World};
 
 #[derive(Debug, Arbitrary, Clone)]
 pub struct MockWorld {
@@ -21,11 +21,15 @@ impl<T: Tracer> World<T> for MockWorld {
 }
 
 impl StorageInterface for MockWorld {
-    fn read_storage(&mut self, contract: H160, key: U256) -> Option<U256> {
-        *self.storage_slot.get((contract, key))
+    fn read_storage(&mut self, contract: H160, key: U256) -> StorageSlot {
+        let value = *self.storage_slot.get((contract, key));
+        StorageSlot {
+            value: value.unwrap_or_default(),
+            is_write_initial: value.is_none(),
+        }
     }
 
-    fn cost_of_writing_storage(&mut self, _: Option<U256>, _: U256) -> u32 {
+    fn cost_of_writing_storage(&mut self, _: StorageSlot, _: U256) -> u32 {
         50
     }
 

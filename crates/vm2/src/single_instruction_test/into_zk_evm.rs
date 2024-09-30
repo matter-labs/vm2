@@ -206,9 +206,7 @@ impl Storage for MockWorldWrapper {
             query.read_value = if query.aux_byte == TRANSIENT_STORAGE_AUX_BYTE {
                 U256::zero()
             } else {
-                self.0
-                    .read_storage(query.address, query.key)
-                    .unwrap_or_default()
+                self.0.read_storage_value(query.address, query.key)
             };
             (query, PubdataCost(0))
         }
