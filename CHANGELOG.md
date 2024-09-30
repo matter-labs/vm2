@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/matter-labs/vm2/compare/v0.2.1...v0.3.0) (2024-09-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* Revise VM storage interface ([#73](https://github.com/matter-labs/vm2/issues/73))
+
+### Bug Fixes
+
+* Revise VM storage interface ([#73](https://github.com/matter-labs/vm2/issues/73)) ([a233d44](https://github.com/matter-labs/vm2/commit/a233d44bbe61dc6a758a754c3b78fe4f83e56699))
+
 ## [0.2.1](https://github.com/matter-labs/vm2/compare/v0.2.0...v0.2.1) (2024-09-25)
 
 
