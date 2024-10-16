@@ -15,7 +15,6 @@ use crate::{
     instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
     predication::Flags,
-    tracing::VmAndWorld,
     Instruction, Predicate, VirtualMachine, World,
 };
 
@@ -144,13 +143,13 @@ pub(crate) fn free_panic<T: Tracer, W: World<T>>(
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    tracer.before_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world });
+    tracer.before_instruction::<opcodes::Ret<Panic>, _>(vm, world);
     // args aren't used for panics unless TO_LABEL
     let result = naked_ret::<T, W, Panic, false>(
         vm,
         &Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
     );
-    tracer.after_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world });
+    tracer.after_instruction::<opcodes::Ret<Panic>, _>(vm, world);
     result
 }
 
@@ -162,7 +161,7 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W: World<T>>(
     tracer: &mut T,
     exception_handler: u16,
 ) {
-    tracer.before_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world });
+    tracer.before_instruction::<opcodes::Ret<Panic>, _>(vm, world);
 
     // Gas is already subtracted in the far call code.
     // No need to roll back, as no changes are made in this "frame".
@@ -172,7 +171,7 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W: World<T>>(
     vm.state.flags = Flags::new(true, false, false);
     vm.state.current_frame.set_pc_from_u16(exception_handler);
 
-    tracer.after_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world });
+    tracer.after_instruction::<opcodes::Ret<Panic>, _>(vm, world);
 }
 
 fn invalid<T: Tracer, W: World<T>>(

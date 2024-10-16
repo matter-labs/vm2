@@ -57,27 +57,27 @@
 //! }
 //!
 //! trait Tracer {
-//!     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
-//!     fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
+//!     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S, storage: &mut S::StorageInterface) {}
+//!     fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S, storage: &mut S::StorageInterface) {}
 //! }
 //!
 //! impl<T: TracerV1> Tracer for T {
-//!     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S) {
+//!     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S, storage: &mut S::StorageInterface) {
 //!         match OP::VALUE {
 //!             Opcode::NewOpcode => {}
 //!             // Do this for every old opcode
 //!             Opcode::NearCall => {
-//!                 <Self as TracerV1>::before_instruction::<NearCall, _>(self, state)
+//!                 <Self as TracerV1>::before_instruction::<NearCall, _>(self, state, storage)
 //!             }
 //!         }
 //!     }
-//!     fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
+//!     fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S, storage: &mut S::StorageInterface) {}
 //! }
 //!
 //! // Now you can use the new features by implementing TracerV2
 //! struct MyTracer;
 //! impl Tracer for MyTracer {
-//!     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S) {
+//!     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S, _: &mut S::StorageInterface) {
 //!         if OP::VALUE == Opcode::NewOpcode {
 //!             state.get_some_new_field();
 //!         }

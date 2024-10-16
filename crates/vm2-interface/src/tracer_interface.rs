@@ -245,7 +245,7 @@ impl<T: opcodes::TypeLevelReturnType> OpcodeType for opcodes::Ret<T> {
 /// struct FarCallCounter(usize);
 ///
 /// impl Tracer for FarCallCounter {
-///     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S) {
+///     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S, _: &mut S::StorageInterface) {
 ///         match OP::VALUE {
 ///             Opcode::FarCall(_) => self.0 += 1,
 ///             _ => {}
@@ -257,14 +257,24 @@ pub trait Tracer {
     /// Executes logic before an instruction handler.
     ///
     /// The default implementation does nothing.
-    fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S) {
+    fn before_instruction<OP: OpcodeType, S: StateInterface>(
+        &mut self,
+        state: &mut S,
+        storage: &mut S::StorageInterface,
+    ) {
         let _ = state;
+        let _ = storage;
     }
     /// Executes logic after an instruction handler.
     ///
     /// The default implementation does nothing.
-    fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S) {
+    fn after_instruction<OP: OpcodeType, S: StateInterface>(
+        &mut self,
+        state: &mut S,
+        storage: &mut S::StorageInterface,
+    ) {
         let _ = state;
+        let _ = storage;
     }
 
     /// Provides cycle statistics for "complex" instructions from the prover perspective (mostly precompile calls).
@@ -297,14 +307,22 @@ impl Tracer for () {}
 
 // Multiple tracers can be combined by building a linked list out of tuples.
 impl<A: Tracer, B: Tracer> Tracer for (A, B) {
-    fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S) {
-        self.0.before_instruction::<OP, S>(state);
-        self.1.before_instruction::<OP, S>(state);
+    fn before_instruction<OP: OpcodeType, S: StateInterface>(
+        &mut self,
+        state: &mut S,
+        storage: &mut S::StorageInterface,
+    ) {
+        self.0.before_instruction::<OP, S>(state, storage);
+        self.1.before_instruction::<OP, S>(state, storage);
     }
 
-    fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S) {
-        self.0.after_instruction::<OP, S>(state);
-        self.1.after_instruction::<OP, S>(state);
+    fn after_instruction<OP: OpcodeType, S: StateInterface>(
+        &mut self,
+        state: &mut S,
+        storage: &mut S::StorageInterface,
+    ) {
+        self.0.after_instruction::<OP, S>(state, storage);
+        self.1.after_instruction::<OP, S>(state, storage);
     }
 
     fn on_extra_prover_cycles(&mut self, stats: CycleStats) {
@@ -321,7 +339,11 @@ mod tests {
     struct FarCallCounter(usize);
 
     impl Tracer for FarCallCounter {
-        fn before_instruction<OP: OpcodeType, S: crate::StateInterface>(&mut self, _: &mut S) {
+        fn before_instruction<OP: OpcodeType, S: crate::StateInterface>(
+            &mut self,
+            _: &mut S,
+            _: &mut S::StorageInterface,
+        ) {
             if let super::Opcode::FarCall(CallingMode::Normal) = OP::VALUE {
                 self.0 += 1;
             }
@@ -332,13 +354,13 @@ mod tests {
     fn test_tracer() {
         let mut tracer = FarCallCounter(0);
 
-        tracer.before_instruction::<opcodes::Nop, _>(&mut DummyState);
+        tracer.before_instruction::<opcodes::Nop, _>(&mut DummyState, &mut ());
         assert_eq!(tracer.0, 0);
 
-        tracer.before_instruction::<opcodes::FarCall<opcodes::Normal>, _>(&mut DummyState);
+        tracer.before_instruction::<opcodes::FarCall<opcodes::Normal>, _>(&mut DummyState, &mut ());
         assert_eq!(tracer.0, 1);
 
-        tracer.before_instruction::<opcodes::FarCall<opcodes::Mimic>, _>(&mut DummyState);
+        tracer.before_instruction::<opcodes::FarCall<opcodes::Mimic>, _>(&mut DummyState, &mut ());
         assert_eq!(tracer.0, 1);
     }
 
@@ -346,12 +368,12 @@ mod tests {
     fn test_aggregate_tracer() {
         let mut tracer = (FarCallCounter(0), (FarCallCounter(0), FarCallCounter(0)));
 
-        tracer.before_instruction::<opcodes::Nop, _>(&mut DummyState);
+        tracer.before_instruction::<opcodes::Nop, _>(&mut DummyState, &mut ());
         assert_eq!(tracer.0 .0, 0);
         assert_eq!(tracer.1 .0 .0, 0);
         assert_eq!(tracer.1 .1 .0, 0);
 
-        tracer.before_instruction::<opcodes::FarCall<opcodes::Normal>, _>(&mut DummyState);
+        tracer.before_instruction::<opcodes::FarCall<opcodes::Normal>, _>(&mut DummyState, &mut ());
         assert_eq!(tracer.0 .0, 1);
         assert_eq!(tracer.1 .0 .0, 1);
         assert_eq!(tracer.1 .1 .0, 1);

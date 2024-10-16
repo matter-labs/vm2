@@ -2,6 +2,9 @@ use primitive_types::{H160, U256};
 
 /// Public interface of the VM state. Encompasses both read and write methods.
 pub trait StateInterface {
+    /// Storage interface required for operations that read storage.
+    type StorageInterface;
+
     /// Reads a register with the specified zero-based index. Returns a value together with a pointer flag.
     fn read_register(&self, register: u8) -> (U256, bool);
     /// Sets a register with the specified zero-based index
@@ -42,7 +45,12 @@ pub trait StateInterface {
     /// Iterates over storage slots read or written during VM execution.
     fn get_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)>;
     /// Gets value of the specified storage slot.
-    fn get_storage(&mut self, address: H160, slot: U256) -> U256;
+    fn get_storage(
+        &mut self,
+        storage: &mut Self::StorageInterface,
+        address: H160,
+        slot: U256,
+    ) -> U256;
 
     /// Iterates over all transient storage slots set during VM execution.
     fn get_transient_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)>;
@@ -217,6 +225,8 @@ pub struct DummyState;
 
 #[cfg(test)]
 impl StateInterface for DummyState {
+    type StorageInterface = ();
+
     fn read_register(&self, _: u8) -> (U256, bool) {
         unimplemented!()
     }
@@ -277,7 +287,7 @@ impl StateInterface for DummyState {
         std::iter::empty()
     }
 
-    fn get_storage(&mut self, _: H160, _: U256) -> U256 {
+    fn get_storage(&mut self, _: &mut Self::StorageInterface, _: H160, _: U256) -> U256 {
         unimplemented!()
     }
 
