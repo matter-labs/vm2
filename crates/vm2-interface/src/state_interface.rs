@@ -287,7 +287,7 @@ impl StateInterface for DummyState {
         std::iter::empty()
     }
 
-    fn get_storage(&mut self, _: &mut Self::StorageInterface, _: H160, _: U256) -> U256 {
+    fn get_storage(&mut self, (): &mut Self::StorageInterface, _: H160, _: U256) -> U256 {
         unimplemented!()
     }
 
