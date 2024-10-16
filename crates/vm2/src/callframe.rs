@@ -10,7 +10,7 @@ use crate::{
     program::Program,
     stack::{Stack, StackSnapshot},
     world_diff::Snapshot,
-    Instruction,
+    Instruction, World,
 };
 
 #[derive(Debug)]
@@ -107,7 +107,7 @@ impl<T, W> Callframe<T, W> {
     }
 }
 
-impl<T: Tracer, W> Callframe<T, W> {
+impl<T: Tracer, W: World<T>> Callframe<T, W> {
     pub(crate) fn push_near_call(
         &mut self,
         gas_to_call: u32,

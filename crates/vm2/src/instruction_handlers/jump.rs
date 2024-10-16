@@ -10,10 +10,10 @@ use crate::{
         Immediate1, Register1, RelativeStack, Source,
     },
     instruction::{ExecutionStatus, Instruction},
-    VirtualMachine,
+    VirtualMachine, World,
 };
 
-fn jump<T: Tracer, W, In: Source>(
+fn jump<T: Tracer, W: World<T>, In: Source>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -29,7 +29,7 @@ fn jump<T: Tracer, W, In: Source>(
     })
 }
 
-impl<T: Tracer, W> Instruction<T, W> {
+impl<T: Tracer, W: World<T>> Instruction<T, W> {
     /// Creates a [`Jump`](opcodes::Jump) instruction with the provided params.
     pub fn from_jump(source: AnySource, destination: Register1, arguments: Arguments) -> Self {
         Self {

@@ -10,7 +10,7 @@ use crate::{
     addressing_modes::{Arguments, Destination, Register1, Source},
     instruction::ExecutionStatus,
     state::State,
-    Instruction, VirtualMachine,
+    Instruction, VirtualMachine, World,
 };
 
 pub(crate) fn address_into_u256(address: H160) -> U256 {
@@ -19,7 +19,7 @@ pub(crate) fn address_into_u256(address: H160) -> U256 {
     U256::from_big_endian(&buffer)
 }
 
-fn context<T, W, Op>(
+fn context<T, W: World<T>, Op>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -74,7 +74,7 @@ impl ContextOp for SP {
     }
 }
 
-fn context_meta<T: Tracer, W>(
+fn context_meta<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -102,7 +102,7 @@ fn context_meta<T: Tracer, W>(
     })
 }
 
-fn set_context_u128<T: Tracer, W>(
+fn set_context_u128<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -113,7 +113,7 @@ fn set_context_u128<T: Tracer, W>(
     })
 }
 
-fn increment_tx_number<T: Tracer, W>(
+fn increment_tx_number<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -123,7 +123,7 @@ fn increment_tx_number<T: Tracer, W>(
     })
 }
 
-fn aux_mutating<T: Tracer, W>(
+fn aux_mutating<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -134,7 +134,7 @@ fn aux_mutating<T: Tracer, W>(
 }
 
 /// Context-related instructions.
-impl<T: Tracer, W> Instruction<T, W> {
+impl<T: Tracer, W: World<T>> Instruction<T, W> {
     fn from_context<Op: ContextOp>(out: Register1, arguments: Arguments) -> Self {
         Self {
             handler: context::<T, W, Op>,

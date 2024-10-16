@@ -257,11 +257,15 @@ pub trait Tracer {
     /// Executes logic before an instruction handler.
     ///
     /// The default implementation does nothing.
-    fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
+    fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S) {
+        let _ = state;
+    }
     /// Executes logic after an instruction handler.
     ///
     /// The default implementation does nothing.
-    fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, _state: &mut S) {}
+    fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S) {
+        let _ = state;
+    }
 
     /// Provides cycle statistics for "complex" instructions from the prover perspective (mostly precompile calls).
     ///

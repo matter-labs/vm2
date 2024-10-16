@@ -34,7 +34,7 @@ use crate::{
 ///
 /// Even though all errors happen before the new stack frame, they cause a panic in the new frame,
 /// not in the caller!
-fn far_call<T, W, M, const IS_STATIC: bool, const IS_SHARD: bool>(
+fn far_call<T, W: World<T>, M, const IS_STATIC: bool, const IS_SHARD: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -109,7 +109,7 @@ where
 
         let Some((calldata, program, is_evm_interpreter)) = failing_part else {
             vm.state.current_frame.gas += new_frame_gas.saturating_sub(RETURN_COST);
-            panic_from_failed_far_call(vm, tracer, exception_handler);
+            panic_from_failed_far_call(vm, world, tracer, exception_handler);
             return;
         };
 

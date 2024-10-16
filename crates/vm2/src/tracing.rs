@@ -9,45 +9,51 @@ use crate::{
     callframe::{Callframe, NearCallFrame},
     decommit::is_kernel,
     predication::{self, Predicate},
-    VirtualMachine,
+    VirtualMachine, World,
 };
 
-impl<T: Tracer, W> StateInterface for VirtualMachine<T, W> {
+pub(crate) struct VmAndWorld<'a, T, W> {
+    pub vm: &'a mut VirtualMachine<T, W>,
+    pub world: &'a mut W,
+}
+
+impl<T: Tracer, W: World<T>> StateInterface for VmAndWorld<'_, T, W> {
     fn read_register(&self, register: u8) -> (U256, bool) {
         (
-            self.state.registers[register as usize],
-            self.state.register_pointer_flags & (1 << register) != 0,
+            self.vm.state.registers[register as usize],
+            self.vm.state.register_pointer_flags & (1 << register) != 0,
         )
     }
 
     fn set_register(&mut self, register: u8, value: U256, is_pointer: bool) {
-        self.state.registers[register as usize] = value;
+        self.vm.state.registers[register as usize] = value;
 
-        self.state.register_pointer_flags &= !(1 << register);
-        self.state.register_pointer_flags |= u16::from(is_pointer) << register;
+        self.vm.state.register_pointer_flags &= !(1 << register);
+        self.vm.state.register_pointer_flags |= u16::from(is_pointer) << register;
     }
 
     fn number_of_callframes(&self) -> usize {
-        self.state
+        self.vm
+            .state
             .previous_frames
             .iter()
             .map(|frame| frame.near_calls.len() + 1)
             .sum::<usize>()
-            + self.state.current_frame.near_calls.len()
+            + self.vm.state.current_frame.near_calls.len()
             + 1
     }
 
     fn current_frame(&mut self) -> impl CallframeInterface + '_ {
-        let near_call = self.state.current_frame.near_calls.len().checked_sub(1);
+        let near_call = self.vm.state.current_frame.near_calls.len().checked_sub(1);
         CallframeWrapper {
-            frame: &mut self.state.current_frame,
+            frame: &mut self.vm.state.current_frame,
             near_call,
         }
     }
 
     fn callframe(&mut self, mut n: usize) -> impl CallframeInterface + '_ {
-        for far_frame in std::iter::once(&mut self.state.current_frame)
-            .chain(self.state.previous_frames.iter_mut().rev())
+        for far_frame in std::iter::once(&mut self.vm.state.current_frame)
+            .chain(self.vm.state.previous_frames.iter_mut().rev())
         {
             let near_calls = far_frame.near_calls.len();
             match n.cmp(&near_calls) {
@@ -70,19 +76,19 @@ impl<T: Tracer, W> StateInterface for VirtualMachine<T, W> {
     }
 
     fn read_heap_byte(&self, heap: HeapId, index: u32) -> u8 {
-        self.state.heaps[heap].read_byte(index)
+        self.vm.state.heaps[heap].read_byte(index)
     }
 
     fn read_heap_u256(&self, heap: HeapId, index: u32) -> U256 {
-        self.state.heaps[heap].read_u256(index)
+        self.vm.state.heaps[heap].read_u256(index)
     }
 
     fn write_heap_u256(&mut self, heap: HeapId, index: u32, value: U256) {
-        self.state.heaps.write_u256(heap, index, value);
+        self.vm.state.heaps.write_u256(heap, index, value);
     }
 
     fn flags(&self) -> Flags {
-        let flags = &self.state.flags;
+        let flags = &self.vm.state.flags;
         Flags {
             less_than: Predicate::IfLT.satisfied(flags),
             greater: Predicate::IfGT.satisfied(flags),
@@ -91,41 +97,50 @@ impl<T: Tracer, W> StateInterface for VirtualMachine<T, W> {
     }
 
     fn set_flags(&mut self, flags: Flags) {
-        self.state.flags = predication::Flags::new(flags.less_than, flags.equal, flags.greater);
+        self.vm.state.flags = predication::Flags::new(flags.less_than, flags.equal, flags.greater);
     }
 
     fn transaction_number(&self) -> u16 {
-        self.state.transaction_number
+        self.vm.state.transaction_number
     }
 
     fn set_transaction_number(&mut self, value: u16) {
-        self.state.transaction_number = value;
+        self.vm.state.transaction_number = value;
     }
 
     fn context_u128_register(&self) -> u128 {
-        self.state.context_u128
+        self.vm.state.context_u128
     }
 
     fn set_context_u128_register(&mut self, value: u128) {
-        self.state.context_u128 = value;
+        self.vm.state.context_u128 = value;
     }
 
     fn get_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)> {
-        self.world_diff
+        self.vm
+            .world_diff
             .get_storage_state()
             .iter()
             .map(|(key, value)| (*key, *value))
     }
 
+    fn get_storage(&mut self, address: H160, slot: U256) -> U256 {
+        self.vm
+            .world_diff
+            .just_read_storage(self.world, address, slot)
+    }
+
     fn get_transient_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)> {
-        self.world_diff
+        self.vm
+            .world_diff
             .get_transient_storage_state()
             .iter()
             .map(|(key, value)| (*key, *value))
     }
 
     fn get_transient_storage(&self, address: H160, slot: U256) -> U256 {
-        self.world_diff
+        self.vm
+            .world_diff
             .get_transient_storage_state()
             .get(&(address, slot))
             .copied()
@@ -133,24 +148,25 @@ impl<T: Tracer, W> StateInterface for VirtualMachine<T, W> {
     }
 
     fn write_transient_storage(&mut self, address: H160, slot: U256, value: U256) {
-        self.world_diff
+        self.vm
+            .world_diff
             .write_transient_storage(address, slot, value);
     }
 
     fn events(&self) -> impl Iterator<Item = Event> {
-        self.world_diff.events().iter().copied()
+        self.vm.world_diff.events().iter().copied()
     }
 
     fn l2_to_l1_logs(&self) -> impl Iterator<Item = L2ToL1Log> {
-        self.world_diff.l2_to_l1_logs().iter().copied()
+        self.vm.world_diff.l2_to_l1_logs().iter().copied()
     }
 
     fn pubdata(&self) -> i32 {
-        self.world_diff.pubdata()
+        self.vm.world_diff.pubdata()
     }
 
     fn set_pubdata(&mut self, value: i32) {
-        self.world_diff.pubdata.0 = value;
+        self.vm.world_diff.pubdata.0 = value;
     }
 }
 
@@ -159,7 +175,7 @@ struct CallframeWrapper<'a, T, W> {
     near_call: Option<usize>,
 }
 
-impl<T: Tracer, W> CallframeInterface for CallframeWrapper<'_, T, W> {
+impl<T: Tracer, W: World<T>> CallframeInterface for CallframeWrapper<'_, T, W> {
     fn address(&self) -> H160 {
         self.frame.address
     }

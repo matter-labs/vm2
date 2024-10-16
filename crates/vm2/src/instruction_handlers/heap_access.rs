@@ -14,7 +14,7 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
     state::State,
-    ExecutionEnd, Instruction, VirtualMachine,
+    ExecutionEnd, Instruction, VirtualMachine, World,
 };
 
 pub(crate) trait HeapFromState {
@@ -64,7 +64,7 @@ fn bigger_than_last_address(x: U256) -> bool {
     x.0[0] > LAST_ADDRESS.into() || x.0[1] != 0 || x.0[2] != 0 || x.0[3] != 0
 }
 
-fn load<T: Tracer, W, H: HeapFromState, In: Source, const INCREMENT: bool>(
+fn load<T: Tracer, W: World<T>, H: HeapFromState, In: Source, const INCREMENT: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -100,7 +100,7 @@ fn load<T: Tracer, W, H: HeapFromState, In: Source, const INCREMENT: bool>(
     })
 }
 
-fn store<T, W, H, In, const INCREMENT: bool, const HOOKING_ENABLED: bool>(
+fn store<T, W: World<T>, H, In, const INCREMENT: bool, const HOOKING_ENABLED: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -163,7 +163,7 @@ pub(crate) fn grow_heap<T, W, H: HeapFromState>(
     Ok(())
 }
 
-fn load_pointer<T: Tracer, W, const INCREMENT: bool>(
+fn load_pointer<T: Tracer, W: World<T>, const INCREMENT: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -197,7 +197,7 @@ fn load_pointer<T: Tracer, W, const INCREMENT: bool>(
     })
 }
 
-impl<T: Tracer, W> Instruction<T, W> {
+impl<T: Tracer, W: World<T>> Instruction<T, W> {
     /// Creates a [`HeapRead`](opcodes::HeapRead) instruction with the provided params.
     pub fn from_heap_read(
         src: RegisterOrImmediate,

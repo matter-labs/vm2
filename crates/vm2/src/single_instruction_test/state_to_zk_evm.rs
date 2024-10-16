@@ -12,9 +12,10 @@ use crate::{
     callframe::{Callframe, NearCallFrame},
     instruction_handlers::spontaneous_panic,
     state::State,
+    World,
 };
 
-pub(crate) fn vm2_state_to_zk_evm_state<T: Tracer, W>(
+pub(crate) fn vm2_state_to_zk_evm_state<T: Tracer, W: World<T>>(
     state: &State<T, W>,
 ) -> VmLocalState<8, EncodingModeProduction> {
     // zk_evm requires an unused bottom frame

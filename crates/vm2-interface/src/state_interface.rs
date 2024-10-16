@@ -41,6 +41,9 @@ pub trait StateInterface {
 
     /// Iterates over storage slots read or written during VM execution.
     fn get_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)>;
+    /// Gets value of the specified storage slot.
+    fn get_storage(&mut self, address: H160, slot: U256) -> U256;
+
     /// Iterates over all transient storage slots set during VM execution.
     fn get_transient_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)>;
     /// Gets value of the specified transient storage slot.
@@ -272,6 +275,10 @@ impl StateInterface for DummyState {
 
     fn get_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)> {
         std::iter::empty()
+    }
+
+    fn get_storage(&mut self, _: H160, _: U256) -> U256 {
+        unimplemented!()
     }
 
     fn get_transient_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)> {
