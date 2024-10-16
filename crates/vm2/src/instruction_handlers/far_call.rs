@@ -34,7 +34,7 @@ use crate::{
 ///
 /// Even though all errors happen before the new stack frame, they cause a panic in the new frame,
 /// not in the caller!
-fn far_call<T, W: World<T>, M, const IS_STATIC: bool, const IS_SHARD: bool>(
+fn far_call<T, W, M, const IS_STATIC: bool, const IS_SHARD: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
