@@ -1,7 +1,10 @@
 use zksync_vm2_interface::{opcodes, OpcodeType, Tracer};
 
 use super::ret::free_panic;
-use crate::{addressing_modes::Arguments, instruction::ExecutionStatus, VirtualMachine, World};
+use crate::{
+    addressing_modes::Arguments, instruction::ExecutionStatus, tracing::VmAndWorld, VirtualMachine,
+    World,
+};
 
 #[inline(always)]
 pub(crate) fn boilerplate<Opcode: OpcodeType, T: Tracer, W: World<T>>(
@@ -53,15 +56,15 @@ pub(crate) fn full_boilerplate<Opcode: OpcodeType, T: Tracer, W: World<T>>(
     }
 
     if args.predicate().satisfied(&vm.state.flags) {
-        tracer.before_instruction::<Opcode, _>(vm, world);
+        tracer.before_instruction::<Opcode, _>(&mut VmAndWorld { vm, world });
         vm.state.current_frame.pc = unsafe { vm.state.current_frame.pc.add(1) };
         let result = business_logic(vm, args, world, tracer);
-        tracer.after_instruction::<Opcode, _>(vm, world);
+        tracer.after_instruction::<Opcode, _>(&mut VmAndWorld { vm, world });
         result
     } else {
-        tracer.before_instruction::<opcodes::Nop, _>(vm, world);
+        tracer.before_instruction::<opcodes::Nop, _>(&mut VmAndWorld { vm, world });
         vm.state.current_frame.pc = unsafe { vm.state.current_frame.pc.add(1) };
-        tracer.after_instruction::<opcodes::Nop, _>(vm, world);
+        tracer.after_instruction::<opcodes::Nop, _>(&mut VmAndWorld { vm, world });
         ExecutionStatus::Running
     }
 }

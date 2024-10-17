@@ -1,4 +1,4 @@
-use crate::StateInterface;
+use crate::GlobalStateInterface;
 
 macro_rules! forall_simple_opcodes {
     ($m:ident) => {
@@ -241,11 +241,11 @@ impl<T: opcodes::TypeLevelReturnType> OpcodeType for opcodes::Ret<T> {
 /// Here `FarCallCounter` counts the number of far calls.
 ///
 /// ```
-/// # use zksync_vm2_interface::{Tracer, StateInterface, OpcodeType, Opcode};
+/// # use zksync_vm2_interface::{Tracer, GlobalStateInterface, OpcodeType, Opcode};
 /// struct FarCallCounter(usize);
 ///
 /// impl Tracer for FarCallCounter {
-///     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S, _: &mut S::StorageInterface) {
+///     fn before_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S, _: &mut S::StorageInterface) {
 ///         match OP::VALUE {
 ///             Opcode::FarCall(_) => self.0 += 1,
 ///             _ => {}
@@ -257,24 +257,14 @@ pub trait Tracer {
     /// Executes logic before an instruction handler.
     ///
     /// The default implementation does nothing.
-    fn before_instruction<OP: OpcodeType, S: StateInterface>(
-        &mut self,
-        state: &mut S,
-        storage: &mut S::StorageInterface,
-    ) {
+    fn before_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {
         let _ = state;
-        let _ = storage;
     }
     /// Executes logic after an instruction handler.
     ///
     /// The default implementation does nothing.
-    fn after_instruction<OP: OpcodeType, S: StateInterface>(
-        &mut self,
-        state: &mut S,
-        storage: &mut S::StorageInterface,
-    ) {
+    fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {
         let _ = state;
-        let _ = storage;
     }
 
     /// Provides cycle statistics for "complex" instructions from the prover perspective (mostly precompile calls).
@@ -307,22 +297,14 @@ impl Tracer for () {}
 
 // Multiple tracers can be combined by building a linked list out of tuples.
 impl<A: Tracer, B: Tracer> Tracer for (A, B) {
-    fn before_instruction<OP: OpcodeType, S: StateInterface>(
-        &mut self,
-        state: &mut S,
-        storage: &mut S::StorageInterface,
-    ) {
-        self.0.before_instruction::<OP, S>(state, storage);
-        self.1.before_instruction::<OP, S>(state, storage);
+    fn before_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {
+        self.0.before_instruction::<OP, S>(state);
+        self.1.before_instruction::<OP, S>(state);
     }
 
-    fn after_instruction<OP: OpcodeType, S: StateInterface>(
-        &mut self,
-        state: &mut S,
-        storage: &mut S::StorageInterface,
-    ) {
-        self.0.after_instruction::<OP, S>(state, storage);
-        self.1.after_instruction::<OP, S>(state, storage);
+    fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {
+        self.0.after_instruction::<OP, S>(state);
+        self.1.after_instruction::<OP, S>(state);
     }
 
     fn on_extra_prover_cycles(&mut self, stats: CycleStats) {
@@ -334,16 +316,12 @@ impl<A: Tracer, B: Tracer> Tracer for (A, B) {
 #[cfg(test)]
 mod tests {
     use super::{CallingMode, OpcodeType};
-    use crate::{opcodes, DummyState, Tracer};
+    use crate::{opcodes, tests::DummyState, GlobalStateInterface, Tracer};
 
     struct FarCallCounter(usize);
 
     impl Tracer for FarCallCounter {
-        fn before_instruction<OP: OpcodeType, S: crate::StateInterface>(
-            &mut self,
-            _: &mut S,
-            _: &mut S::StorageInterface,
-        ) {
+        fn before_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, _: &mut S) {
             if let super::Opcode::FarCall(CallingMode::Normal) = OP::VALUE {
                 self.0 += 1;
             }
@@ -354,13 +332,13 @@ mod tests {
     fn test_tracer() {
         let mut tracer = FarCallCounter(0);
 
-        tracer.before_instruction::<opcodes::Nop, _>(&mut DummyState, &mut ());
+        tracer.before_instruction::<opcodes::Nop, _>(&mut DummyState);
         assert_eq!(tracer.0, 0);
 
-        tracer.before_instruction::<opcodes::FarCall<opcodes::Normal>, _>(&mut DummyState, &mut ());
+        tracer.before_instruction::<opcodes::FarCall<opcodes::Normal>, _>(&mut DummyState);
         assert_eq!(tracer.0, 1);
 
-        tracer.before_instruction::<opcodes::FarCall<opcodes::Mimic>, _>(&mut DummyState, &mut ());
+        tracer.before_instruction::<opcodes::FarCall<opcodes::Mimic>, _>(&mut DummyState);
         assert_eq!(tracer.0, 1);
     }
 
@@ -368,12 +346,12 @@ mod tests {
     fn test_aggregate_tracer() {
         let mut tracer = (FarCallCounter(0), (FarCallCounter(0), FarCallCounter(0)));
 
-        tracer.before_instruction::<opcodes::Nop, _>(&mut DummyState, &mut ());
+        tracer.before_instruction::<opcodes::Nop, _>(&mut DummyState);
         assert_eq!(tracer.0 .0, 0);
         assert_eq!(tracer.1 .0 .0, 0);
         assert_eq!(tracer.1 .1 .0, 0);
 
-        tracer.before_instruction::<opcodes::FarCall<opcodes::Normal>, _>(&mut DummyState, &mut ());
+        tracer.before_instruction::<opcodes::FarCall<opcodes::Normal>, _>(&mut DummyState);
         assert_eq!(tracer.0 .0, 1);
         assert_eq!(tracer.1 .0 .0, 1);
         assert_eq!(tracer.1 .1 .0, 1);
