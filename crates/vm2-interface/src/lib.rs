@@ -27,12 +27,14 @@
 //! ```
 //! # use zksync_vm2_interface as zksync_vm2_interface_v1;
 //! use zksync_vm2_interface_v1::{
-//!     StateInterface as StateInterfaceV1, Tracer as TracerV1, opcodes::NearCall,
+//!     StateInterface as StateInterfaceV1, GlobalStateInterface as GlobalStateInterfaceV1, Tracer as TracerV1, opcodes::NearCall,
 //! };
 //!
 //! trait StateInterface: StateInterfaceV1 {
 //!     fn get_some_new_field(&self) -> u32;
 //! }
+//!
+//! trait GlobalStateInterface: StateInterface + GlobalStateInterfaceV1 {}
 //!
 //! pub struct NewOpcode;
 //!
@@ -57,27 +59,27 @@
 //! }
 //!
 //! trait Tracer {
-//!     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S, storage: &mut S::StorageInterface) {}
-//!     fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S, storage: &mut S::StorageInterface) {}
+//!     fn before_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {}
+//!     fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {}
 //! }
 //!
 //! impl<T: TracerV1> Tracer for T {
-//!     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S, storage: &mut S::StorageInterface) {
+//!     fn before_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {
 //!         match OP::VALUE {
 //!             Opcode::NewOpcode => {}
 //!             // Do this for every old opcode
 //!             Opcode::NearCall => {
-//!                 <Self as TracerV1>::before_instruction::<NearCall, _>(self, state, storage)
+//!                 <Self as TracerV1>::before_instruction::<NearCall, _>(self, state)
 //!             }
 //!         }
 //!     }
-//!     fn after_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S, storage: &mut S::StorageInterface) {}
+//!     fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {}
 //! }
 //!
 //! // Now you can use the new features by implementing TracerV2
 //! struct MyTracer;
 //! impl Tracer for MyTracer {
-//!     fn before_instruction<OP: OpcodeType, S: StateInterface>(&mut self, state: &mut S, _: &mut S::StorageInterface) {
+//!     fn before_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {
 //!         if OP::VALUE == Opcode::NewOpcode {
 //!             state.get_some_new_field();
 //!         }

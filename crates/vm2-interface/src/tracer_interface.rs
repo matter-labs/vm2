@@ -245,7 +245,7 @@ impl<T: opcodes::TypeLevelReturnType> OpcodeType for opcodes::Ret<T> {
 /// struct FarCallCounter(usize);
 ///
 /// impl Tracer for FarCallCounter {
-///     fn before_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S, _: &mut S::StorageInterface) {
+///     fn before_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {
 ///         match OP::VALUE {
 ///             Opcode::FarCall(_) => self.0 += 1,
 ///             _ => {}
