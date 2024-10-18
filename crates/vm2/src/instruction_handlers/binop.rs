@@ -28,6 +28,7 @@ fn binop<T, W, Op, In1, Out, const SWAP: bool, const SET_FLAGS: bool>(
 ) -> ExecutionStatus
 where
     T: Tracer,
+    W: World<T>,
     Op: Binop,
     In1: Source,
     Out: Destination,

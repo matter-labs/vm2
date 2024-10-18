@@ -1,10 +1,13 @@
 use zksync_vm2_interface::{opcodes, OpcodeType, Tracer};
 
 use super::ret::free_panic;
-use crate::{addressing_modes::Arguments, instruction::ExecutionStatus, VirtualMachine};
+use crate::{
+    addressing_modes::Arguments, instruction::ExecutionStatus, tracing::VmAndWorld, VirtualMachine,
+    World,
+};
 
 #[inline(always)]
-pub(crate) fn boilerplate<Opcode: OpcodeType, T: Tracer, W>(
+pub(crate) fn boilerplate<Opcode: OpcodeType, T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -17,7 +20,7 @@ pub(crate) fn boilerplate<Opcode: OpcodeType, T: Tracer, W>(
 }
 
 #[inline(always)]
-pub(crate) fn boilerplate_ext<Opcode: OpcodeType, T: Tracer, W>(
+pub(crate) fn boilerplate_ext<Opcode: OpcodeType, T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -30,7 +33,7 @@ pub(crate) fn boilerplate_ext<Opcode: OpcodeType, T: Tracer, W>(
 }
 
 #[inline(always)]
-pub(crate) fn full_boilerplate<Opcode: OpcodeType, T: Tracer, W>(
+pub(crate) fn full_boilerplate<Opcode: OpcodeType, T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -49,19 +52,19 @@ pub(crate) fn full_boilerplate<Opcode: OpcodeType, T: Tracer, W>(
             vm.state.current_frame.is_static,
         )
     {
-        return free_panic(vm, tracer);
+        return free_panic(vm, world, tracer);
     }
 
     if args.predicate().satisfied(&vm.state.flags) {
-        tracer.before_instruction::<Opcode, _>(vm);
+        tracer.before_instruction::<Opcode, _>(&mut VmAndWorld { vm, world });
         vm.state.current_frame.pc = unsafe { vm.state.current_frame.pc.add(1) };
         let result = business_logic(vm, args, world, tracer);
-        tracer.after_instruction::<Opcode, _>(vm);
+        tracer.after_instruction::<Opcode, _>(&mut VmAndWorld { vm, world });
         result
     } else {
-        tracer.before_instruction::<opcodes::Nop, _>(vm);
+        tracer.before_instruction::<opcodes::Nop, _>(&mut VmAndWorld { vm, world });
         vm.state.current_frame.pc = unsafe { vm.state.current_frame.pc.add(1) };
-        tracer.after_instruction::<opcodes::Nop, _>(vm);
+        tracer.after_instruction::<opcodes::Nop, _>(&mut VmAndWorld { vm, world });
         ExecutionStatus::Running
     }
 }

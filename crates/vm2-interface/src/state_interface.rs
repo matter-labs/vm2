@@ -41,6 +41,7 @@ pub trait StateInterface {
 
     /// Iterates over storage slots read or written during VM execution.
     fn get_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)>;
+
     /// Iterates over all transient storage slots set during VM execution.
     fn get_transient_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)>;
     /// Gets value of the specified transient storage slot.
@@ -57,6 +58,12 @@ pub trait StateInterface {
     fn pubdata(&self) -> i32;
     /// Sets the current amount of published pubdata.
     fn set_pubdata(&mut self, value: i32);
+}
+
+/// State interface with access to global state like storage.
+pub trait GlobalStateInterface: StateInterface {
+    /// Gets value of the specified storage slot.
+    fn get_storage(&mut self, address: H160, slot: U256) -> U256;
 }
 
 /// VM execution flags. See the EraVM reference for more details.
@@ -209,215 +216,227 @@ pub struct L2ToL1Log {
 }
 
 #[cfg(test)]
-#[derive(Debug)]
-pub struct DummyState;
+pub mod tests {
+    use primitive_types::{H160, U256};
 
-#[cfg(test)]
-impl StateInterface for DummyState {
-    fn read_register(&self, _: u8) -> (U256, bool) {
-        unimplemented!()
+    use super::{
+        CallframeInterface, Event, Flags, GlobalStateInterface, HeapId, L2ToL1Log, StateInterface,
+    };
+
+    #[derive(Debug)]
+    pub struct DummyState;
+
+    impl StateInterface for DummyState {
+        fn read_register(&self, _: u8) -> (U256, bool) {
+            unimplemented!()
+        }
+
+        fn set_register(&mut self, _: u8, _: U256, _: bool) {
+            unimplemented!()
+        }
+
+        fn current_frame(&mut self) -> impl CallframeInterface + '_ {
+            DummyState
+        }
+
+        fn number_of_callframes(&self) -> usize {
+            unimplemented!()
+        }
+
+        fn callframe(&mut self, _: usize) -> impl CallframeInterface + '_ {
+            DummyState
+        }
+
+        fn read_heap_byte(&self, _: HeapId, _: u32) -> u8 {
+            unimplemented!()
+        }
+
+        fn read_heap_u256(&self, _: HeapId, _: u32) -> U256 {
+            unimplemented!()
+        }
+
+        fn write_heap_u256(&mut self, _: HeapId, _: u32, _: U256) {
+            unimplemented!()
+        }
+
+        fn flags(&self) -> Flags {
+            unimplemented!()
+        }
+
+        fn set_flags(&mut self, _: Flags) {
+            unimplemented!()
+        }
+
+        fn transaction_number(&self) -> u16 {
+            unimplemented!()
+        }
+
+        fn set_transaction_number(&mut self, _: u16) {
+            unimplemented!()
+        }
+
+        fn context_u128_register(&self) -> u128 {
+            unimplemented!()
+        }
+
+        fn set_context_u128_register(&mut self, _: u128) {
+            unimplemented!()
+        }
+
+        fn get_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)> {
+            std::iter::empty()
+        }
+
+        fn get_transient_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)> {
+            std::iter::empty()
+        }
+
+        fn get_transient_storage(&self, _: H160, _: U256) -> U256 {
+            unimplemented!()
+        }
+
+        fn write_transient_storage(&mut self, _: H160, _: U256, _: U256) {
+            unimplemented!()
+        }
+
+        fn events(&self) -> impl Iterator<Item = Event> {
+            std::iter::empty()
+        }
+
+        fn l2_to_l1_logs(&self) -> impl Iterator<Item = L2ToL1Log> {
+            std::iter::empty()
+        }
+
+        fn pubdata(&self) -> i32 {
+            unimplemented!()
+        }
+
+        fn set_pubdata(&mut self, _: i32) {
+            unimplemented!()
+        }
     }
 
-    fn set_register(&mut self, _: u8, _: U256, _: bool) {
-        unimplemented!()
+    impl GlobalStateInterface for DummyState {
+        fn get_storage(&mut self, _: H160, _: U256) -> U256 {
+            unimplemented!()
+        }
     }
 
-    fn current_frame(&mut self) -> impl CallframeInterface + '_ {
-        DummyState
-    }
+    impl CallframeInterface for DummyState {
+        fn address(&self) -> H160 {
+            unimplemented!()
+        }
 
-    fn number_of_callframes(&self) -> usize {
-        unimplemented!()
-    }
+        fn set_address(&mut self, _: H160) {
+            unimplemented!()
+        }
 
-    fn callframe(&mut self, _: usize) -> impl CallframeInterface + '_ {
-        DummyState
-    }
+        fn code_address(&self) -> H160 {
+            unimplemented!()
+        }
 
-    fn read_heap_byte(&self, _: HeapId, _: u32) -> u8 {
-        unimplemented!()
-    }
+        fn set_code_address(&mut self, _: H160) {
+            unimplemented!()
+        }
 
-    fn read_heap_u256(&self, _: HeapId, _: u32) -> U256 {
-        unimplemented!()
-    }
+        fn caller(&self) -> H160 {
+            unimplemented!()
+        }
 
-    fn write_heap_u256(&mut self, _: HeapId, _: u32, _: U256) {
-        unimplemented!()
-    }
+        fn set_caller(&mut self, _: H160) {
+            unimplemented!()
+        }
 
-    fn flags(&self) -> Flags {
-        unimplemented!()
-    }
+        fn program_counter(&self) -> Option<u16> {
+            unimplemented!()
+        }
 
-    fn set_flags(&mut self, _: Flags) {
-        unimplemented!()
-    }
+        fn set_program_counter(&mut self, _: u16) {
+            unimplemented!()
+        }
 
-    fn transaction_number(&self) -> u16 {
-        unimplemented!()
-    }
+        fn exception_handler(&self) -> u16 {
+            unimplemented!()
+        }
 
-    fn set_transaction_number(&mut self, _: u16) {
-        unimplemented!()
-    }
+        fn set_exception_handler(&mut self, _: u16) {
+            unimplemented!()
+        }
 
-    fn context_u128_register(&self) -> u128 {
-        unimplemented!()
-    }
+        fn is_static(&self) -> bool {
+            unimplemented!()
+        }
 
-    fn set_context_u128_register(&mut self, _: u128) {
-        unimplemented!()
-    }
+        fn is_kernel(&self) -> bool {
+            unimplemented!()
+        }
 
-    fn get_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)> {
-        std::iter::empty()
-    }
+        fn gas(&self) -> u32 {
+            unimplemented!()
+        }
 
-    fn get_transient_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)> {
-        std::iter::empty()
-    }
+        fn set_gas(&mut self, _: u32) {
+            unimplemented!()
+        }
 
-    fn get_transient_storage(&self, _: H160, _: U256) -> U256 {
-        unimplemented!()
-    }
+        fn stipend(&self) -> u32 {
+            unimplemented!()
+        }
 
-    fn write_transient_storage(&mut self, _: H160, _: U256, _: U256) {
-        unimplemented!()
-    }
+        fn context_u128(&self) -> u128 {
+            unimplemented!()
+        }
 
-    fn events(&self) -> impl Iterator<Item = Event> {
-        std::iter::empty()
-    }
+        fn set_context_u128(&mut self, _: u128) {
+            unimplemented!()
+        }
 
-    fn l2_to_l1_logs(&self) -> impl Iterator<Item = L2ToL1Log> {
-        std::iter::empty()
-    }
+        fn is_near_call(&self) -> bool {
+            unimplemented!()
+        }
 
-    fn pubdata(&self) -> i32 {
-        unimplemented!()
-    }
+        fn read_stack(&self, _: u16) -> (U256, bool) {
+            unimplemented!()
+        }
 
-    fn set_pubdata(&mut self, _: i32) {
-        unimplemented!()
-    }
-}
+        fn write_stack(&mut self, _: u16, _: U256, _: bool) {
+            unimplemented!()
+        }
 
-#[cfg(test)]
-impl CallframeInterface for DummyState {
-    fn address(&self) -> H160 {
-        unimplemented!()
-    }
+        fn stack_pointer(&self) -> u16 {
+            unimplemented!()
+        }
 
-    fn set_address(&mut self, _: H160) {
-        unimplemented!()
-    }
+        fn set_stack_pointer(&mut self, _: u16) {
+            unimplemented!()
+        }
 
-    fn code_address(&self) -> H160 {
-        unimplemented!()
-    }
+        fn heap(&self) -> HeapId {
+            unimplemented!()
+        }
 
-    fn set_code_address(&mut self, _: H160) {
-        unimplemented!()
-    }
+        fn heap_bound(&self) -> u32 {
+            unimplemented!()
+        }
 
-    fn caller(&self) -> H160 {
-        unimplemented!()
-    }
+        fn set_heap_bound(&mut self, _: u32) {
+            unimplemented!()
+        }
 
-    fn set_caller(&mut self, _: H160) {
-        unimplemented!()
-    }
+        fn aux_heap(&self) -> HeapId {
+            unimplemented!()
+        }
 
-    fn program_counter(&self) -> Option<u16> {
-        unimplemented!()
-    }
+        fn aux_heap_bound(&self) -> u32 {
+            unimplemented!()
+        }
 
-    fn set_program_counter(&mut self, _: u16) {
-        unimplemented!()
-    }
+        fn set_aux_heap_bound(&mut self, _: u32) {
+            unimplemented!()
+        }
 
-    fn exception_handler(&self) -> u16 {
-        unimplemented!()
-    }
-
-    fn set_exception_handler(&mut self, _: u16) {
-        unimplemented!()
-    }
-
-    fn is_static(&self) -> bool {
-        unimplemented!()
-    }
-
-    fn is_kernel(&self) -> bool {
-        unimplemented!()
-    }
-
-    fn gas(&self) -> u32 {
-        unimplemented!()
-    }
-
-    fn set_gas(&mut self, _: u32) {
-        unimplemented!()
-    }
-
-    fn stipend(&self) -> u32 {
-        unimplemented!()
-    }
-
-    fn context_u128(&self) -> u128 {
-        unimplemented!()
-    }
-
-    fn set_context_u128(&mut self, _: u128) {
-        unimplemented!()
-    }
-
-    fn is_near_call(&self) -> bool {
-        unimplemented!()
-    }
-
-    fn read_stack(&self, _: u16) -> (U256, bool) {
-        unimplemented!()
-    }
-
-    fn write_stack(&mut self, _: u16, _: U256, _: bool) {
-        unimplemented!()
-    }
-
-    fn stack_pointer(&self) -> u16 {
-        unimplemented!()
-    }
-
-    fn set_stack_pointer(&mut self, _: u16) {
-        unimplemented!()
-    }
-
-    fn heap(&self) -> HeapId {
-        unimplemented!()
-    }
-
-    fn heap_bound(&self) -> u32 {
-        unimplemented!()
-    }
-
-    fn set_heap_bound(&mut self, _: u32) {
-        unimplemented!()
-    }
-
-    fn aux_heap(&self) -> HeapId {
-        unimplemented!()
-    }
-
-    fn aux_heap_bound(&self) -> u32 {
-        unimplemented!()
-    }
-
-    fn set_aux_heap_bound(&mut self, _: u32) {
-        unimplemented!()
-    }
-
-    fn read_contract_code(&self, _: u16) -> U256 {
-        unimplemented!()
+        fn read_contract_code(&self, _: u16) -> U256 {
+            unimplemented!()
+        }
     }
 }

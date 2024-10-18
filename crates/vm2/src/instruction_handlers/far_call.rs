@@ -109,7 +109,7 @@ where
 
         let Some((calldata, program, is_evm_interpreter)) = failing_part else {
             vm.state.current_frame.gas += new_frame_gas.saturating_sub(RETURN_COST);
-            panic_from_failed_far_call(vm, tracer, exception_handler);
+            panic_from_failed_far_call(vm, world, tracer, exception_handler);
             return;
         };
 

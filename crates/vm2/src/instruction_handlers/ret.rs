@@ -15,10 +15,11 @@ use crate::{
     instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
     predication::Flags,
-    Instruction, Predicate, VirtualMachine,
+    tracing::VmAndWorld,
+    Instruction, Predicate, VirtualMachine, World,
 };
 
-fn naked_ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
+fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bool>(
     vm: &mut VirtualMachine<T, W>,
     args: &Arguments,
 ) -> ExecutionStatus {
@@ -119,7 +120,7 @@ fn naked_ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
     ExecutionStatus::Running
 }
 
-fn ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
+fn ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -138,28 +139,30 @@ fn ret<T: Tracer, W, RT: TypeLevelReturnType, const TO_LABEL: bool>(
 /// - the far call stack overflows
 ///
 /// For all other panics, point the instruction pointer at [PANIC] instead.
-pub(crate) fn free_panic<T: Tracer, W>(
+pub(crate) fn free_panic<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    tracer.before_instruction::<opcodes::Ret<Panic>, _>(vm);
+    tracer.before_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world });
     // args aren't used for panics unless TO_LABEL
     let result = naked_ret::<T, W, Panic, false>(
         vm,
         &Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
     );
-    tracer.after_instruction::<opcodes::Ret<Panic>, _>(vm);
+    tracer.after_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world });
     result
 }
 
 /// Formally, a far call pushes a new frame and returns from it immediately if it panics.
 /// This function instead panics without popping a frame to save on allocation.
-pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
+pub(crate) fn panic_from_failed_far_call<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
     tracer: &mut T,
     exception_handler: u16,
 ) {
-    tracer.before_instruction::<opcodes::Ret<Panic>, _>(vm);
+    tracer.before_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world });
 
     // Gas is already subtracted in the far call code.
     // No need to roll back, as no changes are made in this "frame".
@@ -169,16 +172,16 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W>(
     vm.state.flags = Flags::new(true, false, false);
     vm.state.current_frame.set_pc_from_u16(exception_handler);
 
-    tracer.after_instruction::<opcodes::Ret<Panic>, _>(vm);
+    tracer.after_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world });
 }
 
-fn invalid<T: Tracer, W>(
+fn invalid<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
-    _: &mut W,
+    world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
     vm.state.current_frame.gas = 0;
-    free_panic(vm, tracer)
+    free_panic(vm, world, tracer)
 }
 
 trait GenericStatics<T, W> {
@@ -186,7 +189,7 @@ trait GenericStatics<T, W> {
     const INVALID: Instruction<T, W>;
 }
 
-impl<T: Tracer, W> GenericStatics<T, W> for () {
+impl<T: Tracer, W: World<T>> GenericStatics<T, W> for () {
     const PANIC: Instruction<T, W> = Instruction {
         handler: ret::<T, W, Panic, false>,
         arguments: Arguments::new(Predicate::Always, RETURN_COST, ModeRequirements::none()),
@@ -198,19 +201,19 @@ impl<T: Tracer, W> GenericStatics<T, W> for () {
 // They aren't marked as such because returning any lifetime is more ergonomic.
 
 /// Point the program counter at this instruction when a panic occurs during the logic of and instruction.
-pub(crate) fn spontaneous_panic<'a, T: Tracer, W>() -> &'a Instruction<T, W> {
+pub(crate) fn spontaneous_panic<'a, T: Tracer, W: World<T>>() -> &'a Instruction<T, W> {
     &<()>::PANIC
 }
 
 /// Panics, burning all available gas.
-pub(crate) fn invalid_instruction<'a, T: Tracer, W>() -> &'a Instruction<T, W> {
+pub(crate) fn invalid_instruction<'a, T: Tracer, W: World<T>>() -> &'a Instruction<T, W> {
     &<()>::INVALID
 }
 
 pub(crate) const RETURN_COST: u32 = 5;
 
 /// Variations of [`Ret`](opcodes::Ret) instructions.
-impl<T: Tracer, W> Instruction<T, W> {
+impl<T: Tracer, W: World<T>> Instruction<T, W> {
     /// Creates a normal [`Ret`](opcodes::Ret) instruction with the provided params.
     pub fn from_ret(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();

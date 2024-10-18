@@ -57,7 +57,12 @@ impl WorldDiff {
         contract: H160,
         key: U256,
     ) -> (U256, u32) {
-        let (value, refund) = self.read_storage_inner(world, tracer, contract, key);
+        let (value, newly_added) = self.read_storage_inner(world, tracer, contract, key);
+        let refund = if !newly_added || world.is_free_storage_slot(&contract, &key) {
+            WARM_READ_REFUND
+        } else {
+            0
+        };
         self.storage_refunds.push(refund);
         (value, refund)
     }
@@ -81,26 +86,29 @@ impl WorldDiff {
         tracer: &mut impl Tracer,
         contract: H160,
         key: U256,
-    ) -> (U256, u32) {
-        let value = self
-            .storage_changes
-            .as_ref()
-            .get(&(contract, key))
-            .copied()
-            .unwrap_or_else(|| world.read_storage_value(contract, key));
-
+    ) -> (U256, bool) {
         let newly_added = self.read_storage_slots.add((contract, key));
         if newly_added {
             tracer.on_extra_prover_cycles(CycleStats::StorageRead);
         }
 
-        let refund = if !newly_added || world.is_free_storage_slot(&contract, &key) {
-            WARM_READ_REFUND
-        } else {
-            0
-        };
         self.pubdata_costs.push(0);
-        (value, refund)
+        (self.just_read_storage(world, contract, key), newly_added)
+    }
+
+    /// Reads the value of a storage slot without any extra bookkeeping.
+    /// Should only be used for tracers.
+    pub(crate) fn just_read_storage(
+        &self,
+        world: &mut impl StorageInterface,
+        contract: H160,
+        key: U256,
+    ) -> U256 {
+        self.storage_changes
+            .as_ref()
+            .get(&(contract, key))
+            .copied()
+            .unwrap_or_else(|| world.read_storage_value(contract, key))
     }
 
     /// Returns the refund based the hot/cold status of the storage slot and the change in pubdata.

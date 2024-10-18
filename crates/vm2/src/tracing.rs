@@ -2,17 +2,18 @@ use std::cmp::Ordering;
 
 use primitive_types::{H160, U256};
 use zksync_vm2_interface::{
-    CallframeInterface, Event, Flags, HeapId, L2ToL1Log, StateInterface, Tracer,
+    CallframeInterface, Event, Flags, GlobalStateInterface, HeapId, L2ToL1Log, StateInterface,
+    Tracer,
 };
 
 use crate::{
     callframe::{Callframe, NearCallFrame},
     decommit::is_kernel,
     predication::{self, Predicate},
-    VirtualMachine,
+    VirtualMachine, World,
 };
 
-impl<T: Tracer, W> StateInterface for VirtualMachine<T, W> {
+impl<T: Tracer, W: World<T>> StateInterface for VirtualMachine<T, W> {
     fn read_register(&self, register: u8) -> (U256, bool) {
         (
             self.state.registers[register as usize],
@@ -159,7 +160,7 @@ struct CallframeWrapper<'a, T, W> {
     near_call: Option<usize>,
 }
 
-impl<T: Tracer, W> CallframeInterface for CallframeWrapper<'_, T, W> {
+impl<T: Tracer, W: World<T>> CallframeInterface for CallframeWrapper<'_, T, W> {
     fn address(&self) -> H160 {
         self.frame.address
     }
@@ -343,6 +344,89 @@ impl<T, W> CallframeWrapper<'_, T, W> {
     fn near_call_on_top_mut(&mut self) -> Option<&mut NearCallFrame> {
         let index = self.near_call.map_or(0, |i| i + 1);
         self.frame.near_calls.get_mut(index)
+    }
+}
+
+pub(crate) struct VmAndWorld<'a, T, W> {
+    pub vm: &'a mut VirtualMachine<T, W>,
+    pub world: &'a mut W,
+}
+
+impl<T: Tracer, W: World<T>> GlobalStateInterface for VmAndWorld<'_, T, W> {
+    fn get_storage(&mut self, address: H160, slot: U256) -> U256 {
+        self.vm
+            .world_diff
+            .just_read_storage(self.world, address, slot)
+    }
+}
+
+// This impl just forwards all calls to the VM part of VmAndWorld
+impl<T: Tracer, W: World<T>> StateInterface for VmAndWorld<'_, T, W> {
+    fn read_register(&self, register: u8) -> (U256, bool) {
+        self.vm.read_register(register)
+    }
+    fn set_register(&mut self, register: u8, value: U256, is_pointer: bool) {
+        self.vm.set_register(register, value, is_pointer);
+    }
+    fn current_frame(&mut self) -> impl CallframeInterface + '_ {
+        self.vm.current_frame()
+    }
+    fn number_of_callframes(&self) -> usize {
+        self.vm.number_of_callframes()
+    }
+    fn callframe(&mut self, n: usize) -> impl CallframeInterface + '_ {
+        self.vm.callframe(n)
+    }
+    fn read_heap_byte(&self, heap: HeapId, offset: u32) -> u8 {
+        self.vm.read_heap_byte(heap, offset)
+    }
+    fn read_heap_u256(&self, heap: HeapId, offset: u32) -> U256 {
+        self.vm.read_heap_u256(heap, offset)
+    }
+    fn write_heap_u256(&mut self, heap: HeapId, offset: u32, value: U256) {
+        self.vm.write_heap_u256(heap, offset, value);
+    }
+    fn flags(&self) -> Flags {
+        self.vm.flags()
+    }
+    fn set_flags(&mut self, flags: Flags) {
+        self.vm.set_flags(flags);
+    }
+    fn transaction_number(&self) -> u16 {
+        self.vm.transaction_number()
+    }
+    fn set_transaction_number(&mut self, value: u16) {
+        self.vm.set_transaction_number(value);
+    }
+    fn context_u128_register(&self) -> u128 {
+        self.vm.context_u128_register()
+    }
+    fn set_context_u128_register(&mut self, value: u128) {
+        self.vm.set_context_u128_register(value);
+    }
+    fn get_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)> {
+        self.vm.get_storage_state()
+    }
+    fn get_transient_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)> {
+        self.vm.get_transient_storage_state()
+    }
+    fn get_transient_storage(&self, address: H160, slot: U256) -> U256 {
+        self.vm.get_transient_storage(address, slot)
+    }
+    fn write_transient_storage(&mut self, address: H160, slot: U256, value: U256) {
+        self.vm.write_transient_storage(address, slot, value);
+    }
+    fn events(&self) -> impl Iterator<Item = Event> {
+        self.vm.events()
+    }
+    fn l2_to_l1_logs(&self) -> impl Iterator<Item = L2ToL1Log> {
+        self.vm.l2_to_l1_logs()
+    }
+    fn pubdata(&self) -> i32 {
+        self.vm.pubdata()
+    }
+    fn set_pubdata(&mut self, value: i32) {
+        self.vm.set_pubdata(value);
     }
 }
 

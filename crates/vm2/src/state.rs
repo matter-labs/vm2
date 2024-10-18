@@ -10,6 +10,7 @@ use crate::{
     program::Program,
     stack::Stack,
     world_diff::Snapshot,
+    World,
 };
 
 /// State of a [`VirtualMachine`](crate::VirtualMachine).
@@ -95,7 +96,7 @@ impl<T, W> State<T, W> {
     }
 }
 
-impl<T: Tracer, W> State<T, W> {
+impl<T: Tracer, W: World<T>> State<T, W> {
     /// Returns the total unspent gas in the VM, including stipends.
     pub(crate) fn total_unspent_gas(&self) -> u32 {
         self.current_frame.gas

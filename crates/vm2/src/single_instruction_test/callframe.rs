@@ -65,7 +65,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for Callframe<T, W> {
     }
 }
 
-impl<T: Tracer, W> Callframe<T, W> {
+impl<T: Tracer, W: World<T>> Callframe<T, W> {
     pub(crate) fn dummy() -> Self {
         Self {
             address: H160::zero(),
