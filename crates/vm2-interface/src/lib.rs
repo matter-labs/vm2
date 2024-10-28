@@ -92,7 +92,7 @@ pub use self::{state_interface::*, tracer_interface::*};
 mod state_interface;
 mod tracer_interface;
 
-/// Returned from [Tracer::after_instruction] to indicate whether the VM should continue execution.
+/// Returned from [`Tracer::after_instruction`] to indicate whether the VM should continue execution.
 #[derive(Debug)]
 pub enum ExecutionStatus {
     /// Continue execution.
@@ -102,16 +102,14 @@ pub enum ExecutionStatus {
 }
 
 impl ExecutionStatus {
-    /// Combines [ExecutionStatus] values from two sources, choosing the most severe one.
+    /// Combines [`ExecutionStatus`] values from two sources, choosing the most severe one.
     /// So if one tracer wants to suspend but the other wants to panic, the VM will panic.
     #[must_use]
     pub fn merge(self, other: Self) -> Self {
-        use ExecutionStatus::*;
+        use ExecutionStatus::{Running, Stopped};
         match (self, other) {
-            (Stopped(ExecutionEnd::SuspendedOnHook(_)), Stopped(end)) | (Running, Stopped(end)) => {
-                Stopped(end)
-            }
-            (Stopped(end), _) => Stopped(end),
+            (Running | Stopped(ExecutionEnd::SuspendedOnHook(_)), other @ Stopped(_)) => other,
+            (me @ Stopped(_), _) => me,
             _ => Running,
         }
     }
