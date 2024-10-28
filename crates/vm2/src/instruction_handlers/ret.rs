@@ -1,7 +1,7 @@
 use primitive_types::U256;
 use zksync_vm2_interface::{
     opcodes::{self, Normal, Panic, Revert, TypeLevelReturnType},
-    ReturnType, Tracer,
+    ExecutionEnd, ReturnType, Tracer,
 };
 
 use super::{
@@ -12,7 +12,7 @@ use super::{
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     callframe::FrameRemnant,
-    instruction::{ExecutionEnd, ExecutionStatus},
+    instruction::ExecutionStatus,
     mode_requirements::ModeRequirements,
     predication::Flags,
     tracing::VmAndWorld,

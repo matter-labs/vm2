@@ -13,13 +13,14 @@ use zksync_vm2_interface::Tracer;
 pub(crate) use self::single_instruction_test::{heap, program, stack};
 pub use self::{
     fat_pointer::FatPointer,
-    instruction::{ExecutionEnd, Instruction},
+    instruction::Instruction,
     mode_requirements::ModeRequirements,
     predication::Predicate,
     program::Program,
     vm::{Settings, VirtualMachine},
     world_diff::{Snapshot, StorageChange, WorldDiff},
 };
+pub use zksync_vm2_interface::ExecutionEnd;
 
 pub mod addressing_modes;
 #[cfg(not(feature = "single_instruction_test"))]

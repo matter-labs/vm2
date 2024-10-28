@@ -1,4 +1,4 @@
-use crate::GlobalStateInterface;
+use crate::{ExecutionStatus, GlobalStateInterface};
 
 macro_rules! forall_simple_opcodes {
     ($m:ident) => {
@@ -263,8 +263,12 @@ pub trait Tracer {
     /// Executes logic after an instruction handler.
     ///
     /// The default implementation does nothing.
-    fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {
+    fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(
+        &mut self,
+        state: &mut S,
+    ) -> ExecutionStatus {
         let _ = state;
+        ExecutionStatus::Running
     }
 
     /// Provides cycle statistics for "complex" instructions from the prover perspective (mostly precompile calls).
@@ -302,9 +306,13 @@ impl<A: Tracer, B: Tracer> Tracer for (A, B) {
         self.1.before_instruction::<OP, S>(state);
     }
 
-    fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {
-        self.0.after_instruction::<OP, S>(state);
-        self.1.after_instruction::<OP, S>(state);
+    fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(
+        &mut self,
+        state: &mut S,
+    ) -> ExecutionStatus {
+        self.0
+            .after_instruction::<OP, S>(state)
+            .merge(self.1.after_instruction::<OP, S>(state))
     }
 
     fn on_extra_prover_cycles(&mut self, stats: CycleStats) {

@@ -11,7 +11,7 @@ use zksync_vm2_interface::{
         self, Add, And, Div, Mul, Or, PointerAdd, PointerPack, PointerShrink, PointerSub,
         RotateLeft, RotateRight, ShiftLeft, ShiftRight, Sub, Xor,
     },
-    Tracer,
+    ExecutionEnd, ExecutionStatus, Tracer,
 };
 
 use crate::{
@@ -20,7 +20,6 @@ use crate::{
         Immediate1, Immediate2, Register, Register1, Register2, RegisterAndImmediate,
         RelativeStack, SourceWriter,
     },
-    instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
     Instruction, Predicate, VirtualMachine, World,
 };
