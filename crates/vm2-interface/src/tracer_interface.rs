@@ -263,6 +263,7 @@ pub trait Tracer {
     /// Executes logic after an instruction handler.
     ///
     /// The default implementation does nothing.
+    #[must_use]
     fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(
         &mut self,
         state: &mut S,
