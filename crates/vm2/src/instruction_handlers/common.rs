@@ -59,12 +59,12 @@ pub(crate) fn full_boilerplate<Opcode: OpcodeType, T: Tracer, W: World<T>>(
         tracer.before_instruction::<Opcode, _>(&mut VmAndWorld { vm, world });
         vm.state.current_frame.pc = unsafe { vm.state.current_frame.pc.add(1) };
         let result = business_logic(vm, args, world, tracer);
-        tracer.after_instruction::<Opcode, _>(&mut VmAndWorld { vm, world });
-        result
+        tracer
+            .after_instruction::<Opcode, _>(&mut VmAndWorld { vm, world })
+            .merge(result)
     } else {
         tracer.before_instruction::<opcodes::Nop, _>(&mut VmAndWorld { vm, world });
         vm.state.current_frame.pc = unsafe { vm.state.current_frame.pc.add(1) };
-        tracer.after_instruction::<opcodes::Nop, _>(&mut VmAndWorld { vm, world });
-        ExecutionStatus::Running
+        tracer.after_instruction::<opcodes::Nop, _>(&mut VmAndWorld { vm, world })
     }
 }
