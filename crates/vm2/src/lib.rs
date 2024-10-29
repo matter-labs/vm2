@@ -6,6 +6,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use primitive_types::{H160, U256};
 pub use zksync_vm2_interface as interface;
+pub use zksync_vm2_interface::ExecutionEnd;
 use zksync_vm2_interface::Tracer;
 
 // Re-export missing modules if single instruction testing is enabled
@@ -20,7 +21,6 @@ pub use self::{
     vm::{Settings, VirtualMachine},
     world_diff::{Snapshot, StorageChange, WorldDiff},
 };
-pub use zksync_vm2_interface::ExecutionEnd;
 
 pub mod addressing_modes;
 #[cfg(not(feature = "single_instruction_test"))]
