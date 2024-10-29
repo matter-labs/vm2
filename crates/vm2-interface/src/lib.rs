@@ -105,6 +105,7 @@ impl ExecutionStatus {
     /// Combines [`ExecutionStatus`] values from two sources, choosing the most severe one.
     /// So if one tracer wants to suspend but the other wants to panic, the VM will panic.
     #[must_use]
+    #[inline(always)]
     pub fn merge(self, other: Self) -> Self {
         use ExecutionStatus::{Running, Stopped};
         match (self, other) {
