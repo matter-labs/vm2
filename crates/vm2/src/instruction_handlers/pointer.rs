@@ -17,7 +17,6 @@ use crate::{
         Destination, Immediate1, Register1, Register2, RelativeStack, Source,
     },
     fat_pointer::FatPointer,
-    instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
 
@@ -25,7 +24,7 @@ fn ptr<T: Tracer, W: World<T>, Op: PtrOp, In1: Source, Out: Destination, const S
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) {
     boilerplate::<Op, _, _>(vm, world, tracer, |vm, args| {
         let ((a, a_is_pointer), (b, b_is_pointer)) = if SWAP {
             (
@@ -50,7 +49,7 @@ fn ptr<T: Tracer, W: World<T>, Op: PtrOp, In1: Source, Out: Destination, const S
         };
 
         Out::set_fat_ptr(args, &mut vm.state, result);
-    })
+    });
 }
 
 pub(crate) trait PtrOp: OpcodeType {

@@ -5,15 +5,10 @@ use crate::{
     addressing_modes::{
         Arguments, Destination, Register1, Register2, Source, SLOAD_COST, SSTORE_COST,
     },
-    instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
 
-fn sstore<T: Tracer, W: World<T>>(
-    vm: &mut VirtualMachine<T, W>,
-    world: &mut W,
-    tracer: &mut T,
-) -> ExecutionStatus {
+fn sstore<T: Tracer, W: World<T>>(vm: &mut VirtualMachine<T, W>, world: &mut W, tracer: &mut T) {
     boilerplate_ext::<opcodes::StorageWrite, _, _>(vm, world, tracer, |vm, args, world, tracer| {
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
@@ -24,28 +19,24 @@ fn sstore<T: Tracer, W: World<T>>(
 
         assert!(refund <= SSTORE_COST);
         vm.state.current_frame.gas += refund;
-    })
+    });
 }
 
 fn sstore_transient<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) {
     boilerplate::<opcodes::TransientStorageWrite, _, _>(vm, world, tracer, |vm, args| {
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
 
         vm.world_diff
             .write_transient_storage(vm.state.current_frame.address, key, value);
-    })
+    });
 }
 
-fn sload<T: Tracer, W: World<T>>(
-    vm: &mut VirtualMachine<T, W>,
-    world: &mut W,
-    tracer: &mut T,
-) -> ExecutionStatus {
+fn sload<T: Tracer, W: World<T>>(vm: &mut VirtualMachine<T, W>, world: &mut W, tracer: &mut T) {
     boilerplate_ext::<opcodes::StorageRead, _, _>(vm, world, tracer, |vm, args, world, tracer| {
         let key = Register1::get(args, &mut vm.state);
 
@@ -57,14 +48,14 @@ fn sload<T: Tracer, W: World<T>>(
         vm.state.current_frame.gas += refund;
 
         Register1::set(args, &mut vm.state, value);
-    })
+    });
 }
 
 fn sload_transient<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) {
     boilerplate::<opcodes::TransientStorageRead, _, _>(vm, world, tracer, |vm, args| {
         let key = Register1::get(args, &mut vm.state);
         let value = vm
@@ -72,7 +63,7 @@ fn sload_transient<T: Tracer, W: World<T>>(
             .read_transient_storage(vm.state.current_frame.address, key);
 
         Register1::set(args, &mut vm.state, value);
-    })
+    });
 }
 
 impl<T: Tracer, W: World<T>> Instruction<T, W> {

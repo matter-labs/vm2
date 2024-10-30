@@ -9,7 +9,7 @@ use crate::{
         AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Destination,
         Immediate1, Register1, RelativeStack, Source,
     },
-    instruction::{ExecutionStatus, Instruction},
+    instruction::Instruction,
     VirtualMachine, World,
 };
 
@@ -17,7 +17,7 @@ fn jump<T: Tracer, W: World<T>, In: Source>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) {
     boilerplate::<opcodes::Jump, _, _>(vm, world, tracer, |vm, args| {
         #[allow(clippy::cast_possible_truncation)] // intentional
         let target = In::get(args, &mut vm.state).low_u32() as u16;
@@ -26,7 +26,7 @@ fn jump<T: Tracer, W: World<T>, In: Source>(
         Register1::set(args, &mut vm.state, next_instruction.into());
 
         vm.state.current_frame.set_pc_from_u16(target);
-    })
+    });
 }
 
 impl<T: Tracer, W: World<T>> Instruction<T, W> {

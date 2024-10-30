@@ -68,7 +68,7 @@ fn load<T: Tracer, W: World<T>, H: HeapFromState, In: Source, const INCREMENT: b
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) {
     boilerplate::<H::Read, _, _>(vm, world, tracer, |vm, args| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
@@ -97,15 +97,14 @@ fn load<T: Tracer, W: World<T>, H: HeapFromState, In: Source, const INCREMENT: b
         if INCREMENT {
             Register2::set(args, &mut vm.state, pointer + 32);
         }
-    })
+    });
 }
 
 fn store<T, W: World<T>, H, In, const INCREMENT: bool, const HOOKING_ENABLED: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus
-where
+) where
     T: Tracer,
     H: HeapFromState,
     In: Source,
@@ -121,7 +120,7 @@ where
         let new_bound = address.wrapping_add(32);
         if grow_heap::<_, _, H>(&mut vm.state, new_bound).is_err() {
             vm.state.current_frame.pc = spontaneous_panic();
-            return ExecutionStatus::Running;
+            return;
         }
 
         // The heap is always grown even when the index nonsensical.
@@ -129,7 +128,7 @@ where
         if bigger_than_last_address(pointer) {
             let _ = vm.state.use_gas(u32::MAX);
             vm.state.current_frame.pc = spontaneous_panic();
-            return ExecutionStatus::Running;
+            return;
         }
 
         let heap = H::get_heap(&vm.state);
@@ -140,11 +139,10 @@ where
         }
 
         if HOOKING_ENABLED && address == vm.settings.hook_address {
-            ExecutionStatus::Stopped(ExecutionEnd::SuspendedOnHook(value.as_u32()))
-        } else {
-            ExecutionStatus::Running
+            vm.state.status =
+                ExecutionStatus::Stopped(ExecutionEnd::SuspendedOnHook(value.as_u32()));
         }
-    })
+    });
 }
 
 /// Pays for more heap space. Doesn't acually grow the heap.
@@ -167,7 +165,7 @@ fn load_pointer<T: Tracer, W: World<T>, const INCREMENT: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) {
     boilerplate::<opcodes::PointerRead, _, _>(vm, world, tracer, |vm, args| {
         let (input, input_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
         if !input_is_pointer {
@@ -194,7 +192,7 @@ fn load_pointer<T: Tracer, W: World<T>, const INCREMENT: bool>(
             // This addition does not overflow because we checked that the offset is small enough above.
             Register2::set_fat_ptr(args, &mut vm.state, input + 32);
         }
-    })
+    });
 }
 
 impl<T: Tracer, W: World<T>> Instruction<T, W> {

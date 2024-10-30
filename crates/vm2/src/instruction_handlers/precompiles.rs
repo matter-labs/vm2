@@ -21,7 +21,6 @@ use super::{common::boilerplate_ext, ret::spontaneous_panic};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     heap::Heaps,
-    instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
 
@@ -29,7 +28,7 @@ fn precompile_call<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) {
     boilerplate_ext::<opcodes::PrecompileCall, _, _>(vm, world, tracer, |vm, args, _, tracer| {
         // The user gets to decide how much gas to burn
         // This is safe because system contracts are trusted
@@ -100,7 +99,7 @@ fn precompile_call<T: Tracer, W: World<T>>(
         }
 
         Register1::set(args, &mut vm.state, 1.into());
-    })
+    });
 }
 
 impl Memory for Heaps {

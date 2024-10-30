@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, mem};
 
 use primitive_types::H160;
 use zksync_vm2_interface::{opcodes::TypeLevelCallingMode, CallingMode, HeapId, Tracer};
@@ -82,10 +82,18 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
     pub fn run(&mut self, world: &mut W, tracer: &mut T) -> ExecutionEnd {
         unsafe {
             loop {
-                if let ExecutionStatus::Stopped(end) =
-                    ((*self.state.current_frame.pc).handler)(self, world, tracer)
-                {
-                    return end;
+                ((*self.state.current_frame.pc).handler)(self, world, tracer);
+                // Instruction-counting benchmarks show that matching the enum discriminant is ~5–10% faster than
+                // using a simpler construction:
+                //
+                // if let ExecutionStatus::Stopped(end) = mem::take(&mut self.state.status) {
+                //     return end;
+                // }
+                if matches!(&self.state.status, ExecutionStatus::Stopped(_)) {
+                    return match mem::take(&mut self.state.status) {
+                        ExecutionStatus::Stopped(end) => end,
+                        ExecutionStatus::Running => unreachable!(),
+                    };
                 }
             }
         }
@@ -107,10 +115,12 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
 
         let end = unsafe {
             loop {
-                if let ExecutionStatus::Stopped(end) =
-                    ((*self.state.current_frame.pc).handler)(self, world, tracer)
-                {
-                    break end;
+                ((*self.state.current_frame.pc).handler)(self, world, tracer);
+                if matches!(&self.state.status, ExecutionStatus::Stopped(_)) {
+                    break match mem::take(&mut self.state.status) {
+                        ExecutionStatus::Stopped(end) => end,
+                        ExecutionStatus::Running => unreachable!(),
+                    };
                 }
 
                 if self.state.total_unspent_gas() < minimum_gas {

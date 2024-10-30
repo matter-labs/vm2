@@ -6,15 +6,10 @@ use super::common::boilerplate_ext;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     fat_pointer::FatPointer,
-    instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
 
-fn decommit<T: Tracer, W: World<T>>(
-    vm: &mut VirtualMachine<T, W>,
-    world: &mut W,
-    tracer: &mut T,
-) -> ExecutionStatus {
+fn decommit<T: Tracer, W: World<T>>(vm: &mut VirtualMachine<T, W>, world: &mut W, tracer: &mut T) {
     boilerplate_ext::<opcodes::Decommit, _, _>(vm, world, tracer, |vm, args, world, tracer| {
         let code_hash = Register1::get(args, &mut vm.state);
         let extra_cost = Register2::get(args, &mut vm.state).low_u32();
@@ -49,7 +44,7 @@ fn decommit<T: Tracer, W: World<T>>(
         };
         let value = value.into_u256();
         Register1::set_fat_ptr(args, &mut vm.state, value);
-    })
+    });
 }
 
 impl<T: Tracer, W: World<T>> Instruction<T, W> {

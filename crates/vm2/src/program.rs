@@ -4,8 +4,8 @@ use primitive_types::U256;
 use zksync_vm2_interface::Tracer;
 
 use crate::{
-    addressing_modes::Arguments, decode::decode, hash_for_debugging, instruction::ExecutionStatus,
-    Instruction, ModeRequirements, Predicate, VirtualMachine, World,
+    addressing_modes::Arguments, decode::decode, hash_for_debugging, Instruction, ModeRequirements,
+    Predicate, VirtualMachine, World,
 };
 
 /// Compiled EraVM bytecode.
@@ -128,14 +128,9 @@ fn jump_to_beginning<T, W>() -> Instruction<T, W> {
     }
 }
 
-fn jump_to_beginning_handler<T, W>(
-    vm: &mut VirtualMachine<T, W>,
-    _: &mut W,
-    _: &mut T,
-) -> ExecutionStatus {
+fn jump_to_beginning_handler<T, W>(vm: &mut VirtualMachine<T, W>, _: &mut W, _: &mut T) {
     let first_instruction = vm.state.current_frame.program.instruction(0).unwrap();
     vm.state.current_frame.pc = first_instruction;
-    ExecutionStatus::Running
 }
 
 fn decode_program<T: Tracer, W: World<T>>(

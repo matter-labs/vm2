@@ -19,7 +19,6 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
     decommit::{is_kernel, u256_into_address},
     fat_pointer::FatPointer,
-    instruction::ExecutionStatus,
     predication::Flags,
     Instruction, VirtualMachine, World,
 };
@@ -38,8 +37,7 @@ fn far_call<T, W, M, const IS_STATIC: bool, const IS_SHARD: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus
-where
+) where
     T: Tracer,
     W: World<T>,
     M: TypeLevelCallingMode,
@@ -155,7 +153,7 @@ where
             | u8::from(abi.is_constructor_call);
 
         vm.state.registers[2] = call_type.into();
-    })
+    });
 }
 
 #[derive(Debug)]

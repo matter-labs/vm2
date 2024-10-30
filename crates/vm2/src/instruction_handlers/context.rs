@@ -8,7 +8,6 @@ use zksync_vm2_interface::{
 use super::common::boilerplate;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Source},
-    instruction::ExecutionStatus,
     state::State,
     Instruction, VirtualMachine, World,
 };
@@ -19,11 +18,7 @@ pub(crate) fn address_into_u256(address: H160) -> U256 {
     U256::from_big_endian(&buffer)
 }
 
-fn context<T, W: World<T>, Op>(
-    vm: &mut VirtualMachine<T, W>,
-    world: &mut W,
-    tracer: &mut T,
-) -> ExecutionStatus
+fn context<T, W: World<T>, Op>(vm: &mut VirtualMachine<T, W>, world: &mut W, tracer: &mut T)
 where
     T: Tracer,
     Op: ContextOp,
@@ -31,7 +26,7 @@ where
     boilerplate::<Op, _, _>(vm, world, tracer, |vm, args| {
         let result = Op::get(&vm.state);
         Register1::set(args, &mut vm.state, result);
-    })
+    });
 }
 
 trait ContextOp: OpcodeType {
@@ -78,7 +73,7 @@ fn context_meta<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) {
     boilerplate::<opcodes::ContextMeta, _, _>(vm, world, tracer, |vm, args| {
         let result = VmMetaParameters {
             heap_size: vm.state.current_frame.heap_size,
@@ -99,38 +94,38 @@ fn context_meta<T: Tracer, W: World<T>>(
         .to_u256();
 
         Register1::set(args, &mut vm.state, result);
-    })
+    });
 }
 
 fn set_context_u128<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) {
     boilerplate::<opcodes::SetContextU128, _, _>(vm, world, tracer, |vm, args| {
         let value = Register1::get(args, &mut vm.state).low_u128();
         vm.state.set_context_u128(value);
-    })
+    });
 }
 
 fn increment_tx_number<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) {
     boilerplate::<opcodes::IncrementTxNumber, _, _>(vm, world, tracer, |vm, _| {
         vm.start_new_tx();
-    })
+    });
 }
 
 fn aux_mutating<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) {
     boilerplate::<opcodes::AuxMutating0, _, _>(vm, world, tracer, |_, _| {
         // This instruction just crashes or nops
-    })
+    });
 }
 
 /// Context-related instructions.

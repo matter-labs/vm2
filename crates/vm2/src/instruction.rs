@@ -20,16 +20,17 @@ impl<T, W> fmt::Debug for Instruction<T, W> {
     }
 }
 
-pub(crate) type Handler<T, W> = fn(&mut VirtualMachine<T, W>, &mut W, &mut T) -> ExecutionStatus;
+pub(crate) type Handler<T, W> = fn(&mut VirtualMachine<T, W>, &mut W, &mut T);
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Default)]
 pub(crate) enum ExecutionStatus {
+    #[default]
     Running,
     Stopped(ExecutionEnd),
 }
 
 /// VM stop reason returned from [`VirtualMachine::run()`].
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ExecutionEnd {
     /// The executed program has finished and returned the specified data.
     ProgramFinished(Vec<u8>),

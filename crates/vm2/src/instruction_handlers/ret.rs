@@ -22,7 +22,7 @@ use crate::{
 fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bool>(
     vm: &mut VirtualMachine<T, W>,
     args: &Arguments,
-) -> ExecutionStatus {
+) {
     let mut return_type = RT::VALUE;
     let near_call_leftover_gas = vm.state.current_frame.gas;
 
@@ -79,7 +79,7 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
             // is no next instruction after a panic arising from some other instruction.
             vm.state.current_frame.pc = invalid_instruction();
 
-            return if let Some(return_value) = return_value_or_panic {
+            vm.state.status = if let Some(return_value) = return_value_or_panic {
                 let output = vm.state.heaps[return_value.memory_page]
                     .read_range_big_endian(
                         return_value.start..return_value.start + return_value.length,
@@ -93,6 +93,7 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
             } else {
                 ExecutionStatus::Stopped(ExecutionEnd::Panicked)
             };
+            return;
         };
 
         vm.state.set_context_u128(0);
@@ -116,18 +117,16 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
 
     vm.state.flags = Flags::new(return_type == ReturnType::Panic, false, false);
     vm.state.current_frame.gas += leftover_gas;
-
-    ExecutionStatus::Running
 }
 
 fn ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) {
     full_boilerplate::<opcodes::Ret<RT>, _, _>(vm, world, tracer, |vm, args, _, _| {
-        naked_ret::<T, W, RT, TO_LABEL>(vm, args)
-    })
+        naked_ret::<T, W, RT, TO_LABEL>(vm, args);
+    });
 }
 
 /// Turn the current instruction into a panic at no extra cost. (Great value, I know.)
@@ -143,15 +142,14 @@ pub(crate) fn free_panic<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus {
+) {
     tracer.before_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world });
     // args aren't used for panics unless TO_LABEL
-    let result = naked_ret::<T, W, Panic, false>(
+    naked_ret::<T, W, Panic, false>(
         vm,
         &Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
     );
     tracer.after_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world });
-    result
 }
 
 /// Formally, a far call pushes a new frame and returns from it immediately if it panics.
@@ -175,13 +173,9 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W: World<T>>(
     tracer.after_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world });
 }
 
-fn invalid<T: Tracer, W: World<T>>(
-    vm: &mut VirtualMachine<T, W>,
-    world: &mut W,
-    tracer: &mut T,
-) -> ExecutionStatus {
+fn invalid<T: Tracer, W: World<T>>(vm: &mut VirtualMachine<T, W>, world: &mut W, tracer: &mut T) {
     vm.state.current_frame.gas = 0;
-    free_panic(vm, world, tracer)
+    free_panic(vm, world, tracer);
 }
 
 trait GenericStatics<T, W> {

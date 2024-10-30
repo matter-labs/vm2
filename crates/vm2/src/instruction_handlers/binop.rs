@@ -16,7 +16,7 @@ use crate::{
         CodePage, Destination, DestinationWriter, Immediate1, Register1, Register2, RelativeStack,
         Source,
     },
-    instruction::{ExecutionStatus, Instruction},
+    instruction::Instruction,
     predication::Flags,
     VirtualMachine, World,
 };
@@ -25,8 +25,7 @@ fn binop<T, W, Op, In1, Out, const SWAP: bool, const SET_FLAGS: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
-) -> ExecutionStatus
-where
+) where
     T: Tracer,
     W: World<T>,
     Op: Binop,
@@ -44,7 +43,7 @@ where
         if SET_FLAGS {
             vm.state.flags = flags;
         }
-    })
+    });
 }
 
 pub(crate) trait Binop: OpcodeType {

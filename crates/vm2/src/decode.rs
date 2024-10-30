@@ -35,16 +35,12 @@ fn unimplemented_instruction<T, W>(variant: Opcode) -> Instruction<T, W> {
     }
 }
 
-fn unimplemented_handler<T, W>(
-    vm: &mut VirtualMachine<T, W>,
-    _: &mut W,
-    _: &mut T,
-) -> ExecutionStatus {
+fn unimplemented_handler<T, W>(vm: &mut VirtualMachine<T, W>, _: &mut W, _: &mut T) {
     let variant: Opcode = unsafe {
         std::mem::transmute(Immediate1::get_u16(&(*vm.state.current_frame.pc).arguments))
     };
     eprintln!("Unimplemented instruction: {variant:?}");
-    ExecutionStatus::Stopped(ExecutionEnd::Panicked)
+    vm.state.status = ExecutionStatus::Stopped(ExecutionEnd::Panicked);
 }
 
 #[allow(clippy::too_many_lines)]

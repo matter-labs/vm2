@@ -5,15 +5,10 @@ use zksync_vm2_interface::{opcodes, Event, L2ToL1Log, Tracer};
 use super::common::boilerplate_ext;
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
-    instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
 
-fn event<T: Tracer, W: World<T>>(
-    vm: &mut VirtualMachine<T, W>,
-    world: &mut W,
-    tracer: &mut T,
-) -> ExecutionStatus {
+fn event<T: Tracer, W: World<T>>(vm: &mut VirtualMachine<T, W>, world: &mut W, tracer: &mut T) {
     boilerplate_ext::<opcodes::Event, _, _>(vm, world, tracer, |vm, args, _, _| {
         if vm.state.current_frame.address == H160::from_low_u64_be(ADDRESS_EVENT_WRITER.into()) {
             let key = Register1::get(args, &mut vm.state);
@@ -28,14 +23,10 @@ fn event<T: Tracer, W: World<T>>(
                 tx_number: vm.state.transaction_number,
             });
         }
-    })
+    });
 }
 
-fn l2_to_l1<T: Tracer, W: World<T>>(
-    vm: &mut VirtualMachine<T, W>,
-    world: &mut W,
-    tracer: &mut T,
-) -> ExecutionStatus {
+fn l2_to_l1<T: Tracer, W: World<T>>(vm: &mut VirtualMachine<T, W>, world: &mut W, tracer: &mut T) {
     boilerplate_ext::<opcodes::L2ToL1Message, _, _>(vm, world, tracer, |vm, args, _, _| {
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
@@ -48,7 +39,7 @@ fn l2_to_l1<T: Tracer, W: World<T>>(
             shard_id: 0,
             tx_number: vm.state.transaction_number,
         });
-    })
+    });
 }
 
 impl<T: Tracer, W: World<T>> Instruction<T, W> {

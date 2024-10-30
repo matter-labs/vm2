@@ -6,6 +6,7 @@ use crate::{
     callframe::{Callframe, CallframeSnapshot},
     fat_pointer::FatPointer,
     heap::Heaps,
+    instruction::ExecutionStatus,
     predication::Flags,
     program::Program,
     stack::Stack,
@@ -26,6 +27,7 @@ pub(crate) struct State<T, W> {
     pub(crate) heaps: Heaps,
     pub(crate) transaction_number: u16,
     pub(crate) context_u128: u128,
+    pub(crate) status: ExecutionStatus,
 }
 
 impl<T, W> State<T, W> {
@@ -73,6 +75,7 @@ impl<T, W> State<T, W> {
 
             transaction_number: 0,
             context_u128: 0,
+            status: ExecutionStatus::Running,
         }
     }
 
@@ -157,6 +160,7 @@ impl<T, W> Clone for State<T, W> {
             heaps: self.heaps.clone(),
             transaction_number: self.transaction_number,
             context_u128: self.context_u128,
+            status: self.status.clone(),
         }
     }
 }

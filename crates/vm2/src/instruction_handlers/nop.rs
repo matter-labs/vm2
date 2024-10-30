@@ -3,15 +3,10 @@ use zksync_vm2_interface::{opcodes, Tracer};
 use super::common::boilerplate;
 use crate::{
     addressing_modes::{destination_stack_address, AdvanceStackPointer, Arguments, Source},
-    instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
 
-fn nop<T: Tracer, W: World<T>>(
-    vm: &mut VirtualMachine<T, W>,
-    world: &mut W,
-    tracer: &mut T,
-) -> ExecutionStatus {
+fn nop<T: Tracer, W: World<T>>(vm: &mut VirtualMachine<T, W>, world: &mut W, tracer: &mut T) {
     boilerplate::<opcodes::Nop, _, _>(vm, world, tracer, |vm, args| {
         // nop's addressing modes can move the stack pointer!
         AdvanceStackPointer::get(args, &mut vm.state);
@@ -20,7 +15,7 @@ fn nop<T: Tracer, W: World<T>>(
             .current_frame
             .sp
             .wrapping_add(destination_stack_address(args, &mut vm.state));
-    })
+    });
 }
 
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
