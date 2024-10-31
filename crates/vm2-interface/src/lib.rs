@@ -28,6 +28,7 @@
 //! # use zksync_vm2_interface as zksync_vm2_interface_v1;
 //! use zksync_vm2_interface_v1::{
 //!     StateInterface as StateInterfaceV1, GlobalStateInterface as GlobalStateInterfaceV1, Tracer as TracerV1, opcodes::NearCall,
+//!     ShouldStop,
 //! };
 //!
 //! trait StateInterface: StateInterfaceV1 {
@@ -60,7 +61,9 @@
 //!
 //! trait Tracer {
 //!     fn before_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {}
-//!     fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {}
+//!     fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) -> ShouldStop {
+//!         ShouldStop::Continue
+//!     }
 //! }
 //!
 //! impl<T: TracerV1> Tracer for T {
@@ -73,7 +76,9 @@
 //!             }
 //!         }
 //!     }
-//!     fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {}
+//!     fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) -> ShouldStop {
+//!         todo!()
+//!     }
 //! }
 //!
 //! // Now you can use the new features by implementing TracerV2

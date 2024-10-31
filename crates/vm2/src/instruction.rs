@@ -1,5 +1,7 @@
 use std::fmt;
 
+use zksync_vm2_interface::ShouldStop;
+
 use crate::{addressing_modes::Arguments, vm::VirtualMachine};
 
 /// Single EraVM instruction (an opcode + [`Arguments`]).
@@ -28,6 +30,26 @@ pub(crate) enum ExecutionStatus {
     Stopped(ExecutionEnd),
 }
 
+impl ExecutionStatus {
+    #[must_use]
+    #[inline(always)]
+    pub(crate) fn merge_tracer(self, should_stop: ShouldStop) -> Self {
+        match (&self, should_stop) {
+            (Self::Running, ShouldStop::Stop) => Self::Stopped(ExecutionEnd::StoppedByTracer),
+            _ => self,
+        }
+    }
+}
+
+impl From<ShouldStop> for ExecutionStatus {
+    fn from(should_stop: ShouldStop) -> Self {
+        match should_stop {
+            ShouldStop::Stop => Self::Stopped(ExecutionEnd::StoppedByTracer),
+            ShouldStop::Continue => Self::Running,
+        }
+    }
+}
+
 /// VM stop reason returned from [`VirtualMachine::run()`].
 #[derive(Debug, PartialEq)]
 pub enum ExecutionEnd {
@@ -39,4 +61,6 @@ pub enum ExecutionEnd {
     Panicked,
     /// Returned when the bootloader writes to the heap location specified by [`hook_address`](crate::Settings.hook_address).
     SuspendedOnHook(u32),
+    /// One of the tracers decided it is time to stop the VM.
+    StoppedByTracer,
 }

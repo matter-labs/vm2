@@ -254,23 +254,52 @@ impl<T: opcodes::TypeLevelReturnType> OpcodeType for opcodes::Ret<T> {
 /// }
 /// ```
 pub trait Tracer {
-    /// Executes logic before an instruction handler.
+    /// This method is executed before an instruction handler.
     ///
     /// The default implementation does nothing.
     fn before_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {
         let _ = state;
     }
-    /// Executes logic after an instruction handler.
+    /// This method is executed after an instruction handler.
+    ///
+    /// The return value indicates whether the VM should continue or stop execution.
+    /// The tracer's return value takes precedence over the VM but only if it is at least as severe.
+    /// For example, if the VM wants to stop and the tracer wants to suspend, the VM will still stop.
     ///
     /// The default implementation does nothing.
-    fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {
+    #[must_use]
+    fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(
+        &mut self,
+        state: &mut S,
+    ) -> ShouldStop {
         let _ = state;
+        ShouldStop::Continue
     }
 
     /// Provides cycle statistics for "complex" instructions from the prover perspective (mostly precompile calls).
     ///
     /// The default implementation does nothing.
     fn on_extra_prover_cycles(&mut self, _stats: CycleStats) {}
+}
+
+/// Returned from [`Tracer::after_instruction`] to indicate if the VM should stop.
+#[derive(Debug)]
+pub enum ShouldStop {
+    /// The VM should stop.
+    Stop,
+    /// The VM should continue.
+    Continue,
+}
+
+impl ShouldStop {
+    #[must_use]
+    #[inline(always)]
+    fn merge(self, other: ShouldStop) -> ShouldStop {
+        match (self, other) {
+            (ShouldStop::Continue, ShouldStop::Continue) => ShouldStop::Continue,
+            _ => ShouldStop::Stop,
+        }
+    }
 }
 
 /// Cycle statistics emitted by the VM and supplied to [`Tracer::on_extra_prover_cycles()`].
@@ -302,9 +331,13 @@ impl<A: Tracer, B: Tracer> Tracer for (A, B) {
         self.1.before_instruction::<OP, S>(state);
     }
 
-    fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {
-        self.0.after_instruction::<OP, S>(state);
-        self.1.after_instruction::<OP, S>(state);
+    fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(
+        &mut self,
+        state: &mut S,
+    ) -> ShouldStop {
+        self.0
+            .after_instruction::<OP, S>(state)
+            .merge(self.1.after_instruction::<OP, S>(state))
     }
 
     fn on_extra_prover_cycles(&mut self, stats: CycleStats) {

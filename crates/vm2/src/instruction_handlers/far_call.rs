@@ -9,7 +9,7 @@ use zksync_vm2_interface::{
 };
 
 use super::{
-    common::boilerplate_ext,
+    common::full_boilerplate,
     heap_access::grow_heap,
     monomorphization::{match_boolean, monomorphize, parameterize},
     ret::{panic_from_failed_far_call, RETURN_COST},
@@ -44,7 +44,7 @@ where
     W: World<T>,
     M: TypeLevelCallingMode,
 {
-    boilerplate_ext::<FarCall<M>, _, _>(vm, world, tracer, |vm, args, world, tracer| {
+    full_boilerplate::<FarCall<M>, _, _>(vm, world, tracer, |vm, args, world, tracer| {
         let (raw_abi, raw_abi_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
 
         let address_mask: U256 = U256::MAX >> (256 - 160);
@@ -109,8 +109,7 @@ where
 
         let Some((calldata, program, is_evm_interpreter)) = failing_part else {
             vm.state.current_frame.gas += new_frame_gas.saturating_sub(RETURN_COST);
-            panic_from_failed_far_call(vm, world, tracer, exception_handler);
-            return;
+            return panic_from_failed_far_call(vm, world, tracer, exception_handler);
         };
 
         let stipend = if is_evm_interpreter {
@@ -155,6 +154,8 @@ where
             | u8::from(abi.is_constructor_call);
 
         vm.state.registers[2] = call_type.into();
+
+        ExecutionStatus::Running
     })
 }
 
