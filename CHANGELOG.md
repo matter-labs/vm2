@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0](https://github.com/matter-labs/vm2/compare/v0.2.1...v0.3.0) (2024-10-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* Revise VM storage interface ([#73](https://github.com/matter-labs/vm2/issues/73))
+
+### Features
+
+* allow tracers to stop/suspend execution ([#78](https://github.com/matter-labs/vm2/issues/78)) ([457d8a7](https://github.com/matter-labs/vm2/commit/457d8a7eea9093af9440662e33e598c13ba41633))
+* expose storage to tracers ([#77](https://github.com/matter-labs/vm2/issues/77)) ([df5bec3](https://github.com/matter-labs/vm2/commit/df5bec3d04d64d434f9b0ccb285ba4681008f7b3))
+
+
+### Bug Fixes
+
+* Revise VM storage interface ([#73](https://github.com/matter-labs/vm2/issues/73)) ([a233d44](https://github.com/matter-labs/vm2/commit/a233d44bbe61dc6a758a754c3b78fe4f83e56699))
+
 ## [0.2.1](https://github.com/matter-labs/vm2/compare/v0.2.0...v0.2.1) (2024-09-25)
 
 
