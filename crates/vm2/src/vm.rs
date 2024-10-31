@@ -1,13 +1,12 @@
 use std::fmt;
 
 use primitive_types::H160;
-use zksync_vm2_interface::{
-    opcodes::TypeLevelCallingMode, CallingMode, ExecutionStatus, HeapId, Tracer,
-};
+use zksync_vm2_interface::{opcodes::TypeLevelCallingMode, CallingMode, HeapId, Tracer};
 
 use crate::{
     callframe::{Callframe, FrameRemnant},
     decommit::u256_into_address,
+    instruction::ExecutionStatus,
     stack::StackPool,
     state::{State, StateSnapshot},
     world_diff::{ExternalSnapshot, Snapshot, WorldDiff},

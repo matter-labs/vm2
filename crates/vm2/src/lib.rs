@@ -6,7 +6,6 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use primitive_types::{H160, U256};
 pub use zksync_vm2_interface as interface;
-pub use zksync_vm2_interface::ExecutionEnd;
 use zksync_vm2_interface::Tracer;
 
 // Re-export missing modules if single instruction testing is enabled
@@ -14,7 +13,7 @@ use zksync_vm2_interface::Tracer;
 pub(crate) use self::single_instruction_test::{heap, program, stack};
 pub use self::{
     fat_pointer::FatPointer,
-    instruction::Instruction,
+    instruction::{ExecutionEnd, Instruction},
     mode_requirements::ModeRequirements,
     predication::Predicate,
     program::Program,

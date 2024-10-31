@@ -28,6 +28,7 @@
 //! # use zksync_vm2_interface as zksync_vm2_interface_v1;
 //! use zksync_vm2_interface_v1::{
 //!     StateInterface as StateInterfaceV1, GlobalStateInterface as GlobalStateInterfaceV1, Tracer as TracerV1, opcodes::NearCall,
+//!     ShouldStop,
 //! };
 //!
 //! trait StateInterface: StateInterfaceV1 {
@@ -60,7 +61,9 @@
 //!
 //! trait Tracer {
 //!     fn before_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {}
-//!     fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {}
+//!     fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) -> ShouldStop {
+//!         ShouldStop::Continue
+//!     }
 //! }
 //!
 //! impl<T: TracerV1> Tracer for T {
@@ -73,7 +76,9 @@
 //!             }
 //!         }
 //!     }
-//!     fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) {}
+//!     fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(&mut self, state: &mut S) -> ShouldStop {
+//!         todo!()
+//!     }
 //! }
 //!
 //! // Now you can use the new features by implementing TracerV2
@@ -91,40 +96,3 @@ pub use self::{state_interface::*, tracer_interface::*};
 
 mod state_interface;
 mod tracer_interface;
-
-/// Returned from [`Tracer::after_instruction`] to indicate whether the VM should continue execution.
-#[derive(Debug)]
-pub enum ExecutionStatus {
-    /// Continue execution.
-    Running,
-    /// Stop or suspend execution.
-    Stopped(ExecutionEnd),
-}
-
-impl ExecutionStatus {
-    /// Combines [`ExecutionStatus`] values from two sources, choosing the most severe one.
-    /// So if one tracer wants to suspend but the other wants to panic, the VM will panic.
-    #[must_use]
-    #[inline(always)]
-    pub fn merge(self, other: Self) -> Self {
-        use ExecutionStatus::{Running, Stopped};
-        match (self, other) {
-            (Running | Stopped(ExecutionEnd::SuspendedOnHook(_)), other @ Stopped(_)) => other,
-            (me @ Stopped(_), _) => me,
-            _ => Running,
-        }
-    }
-}
-
-/// VM stop reason and return value.
-#[derive(Debug, PartialEq)]
-pub enum ExecutionEnd {
-    /// The executed program has finished and returned the specified data.
-    ProgramFinished(Vec<u8>),
-    /// The executed program has reverted returning the specified data.
-    Reverted(Vec<u8>),
-    /// The executed program has panicked.
-    Panicked,
-    /// Returned when the bootloader writes to the heap location specified by [`hook_address`](crate::Settings.hook_address).
-    SuspendedOnHook(u32),
-}

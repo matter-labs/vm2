@@ -1,7 +1,7 @@
 use primitive_types::U256;
 use zksync_vm2_interface::{
     opcodes::{self, Normal, Panic, Revert, TypeLevelReturnType},
-    ExecutionEnd, ReturnType, Tracer,
+    ReturnType, Tracer,
 };
 
 use super::{
@@ -12,7 +12,7 @@ use super::{
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     callframe::FrameRemnant,
-    instruction::ExecutionStatus,
+    instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
     predication::Flags,
     tracing::VmAndWorld,
@@ -146,13 +146,11 @@ pub(crate) fn free_panic<T: Tracer, W: World<T>>(
 ) -> ExecutionStatus {
     tracer.before_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world });
     // args aren't used for panics unless TO_LABEL
-    let result = naked_ret::<T, W, Panic, false>(
+    naked_ret::<T, W, Panic, false>(
         vm,
         &Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
-    );
-    tracer
-        .after_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world })
-        .merge(result)
+    )
+    .merge_tracer(tracer.after_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world }))
 }
 
 /// Formally, a far call pushes a new frame and returns from it immediately if it panics.
@@ -173,7 +171,9 @@ pub(crate) fn panic_from_failed_far_call<T: Tracer, W: World<T>>(
     vm.state.flags = Flags::new(true, false, false);
     vm.state.current_frame.set_pc_from_u16(exception_handler);
 
-    tracer.after_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world })
+    tracer
+        .after_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world })
+        .into()
 }
 
 fn invalid<T: Tracer, W: World<T>>(

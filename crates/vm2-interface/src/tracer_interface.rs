@@ -1,4 +1,4 @@
-use crate::{ExecutionStatus, GlobalStateInterface};
+use crate::GlobalStateInterface;
 
 macro_rules! forall_simple_opcodes {
     ($m:ident) => {
@@ -271,15 +271,35 @@ pub trait Tracer {
     fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(
         &mut self,
         state: &mut S,
-    ) -> ExecutionStatus {
+    ) -> ShouldStop {
         let _ = state;
-        ExecutionStatus::Running
+        ShouldStop::Continue
     }
 
     /// Provides cycle statistics for "complex" instructions from the prover perspective (mostly precompile calls).
     ///
     /// The default implementation does nothing.
     fn on_extra_prover_cycles(&mut self, _stats: CycleStats) {}
+}
+
+/// Returned from [`Tracer::after_instruction`] to indicate if the VM should stop.
+#[derive(Debug)]
+pub enum ShouldStop {
+    /// The VM should stop.
+    Stop,
+    /// The VM should continue.
+    Continue,
+}
+
+impl ShouldStop {
+    #[must_use]
+    #[inline(always)]
+    fn merge(self, other: ShouldStop) -> ShouldStop {
+        match (self, other) {
+            (ShouldStop::Continue, ShouldStop::Continue) => ShouldStop::Continue,
+            _ => ShouldStop::Stop,
+        }
+    }
 }
 
 /// Cycle statistics emitted by the VM and supplied to [`Tracer::on_extra_prover_cycles()`].
@@ -314,7 +334,7 @@ impl<A: Tracer, B: Tracer> Tracer for (A, B) {
     fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(
         &mut self,
         state: &mut S,
-    ) -> ExecutionStatus {
+    ) -> ShouldStop {
         self.0
             .after_instruction::<OP, S>(state)
             .merge(self.1.after_instruction::<OP, S>(state))
