@@ -17,6 +17,10 @@ zkevm_opcode_defs.workspace = true
 zk_evm_abstractions.workspace = true
 primitive-types.workspace = true
 enum_dispatch.workspace = true
+k256.workspace = true
+p256.workspace = true
+sha2.workspace = true
+sha3.workspace = true
 
 # Optional dependencies (used for fuzzing)
 arbitrary = { workspace = true, features = ["derive"], optional = true }
@@ -26,6 +30,7 @@ anyhow = { workspace = true, optional = true }
 [dev-dependencies]
 divan.workspace = true
 proptest.workspace = true
+rand.workspace = true
 
 [lints]
 workspace = true
