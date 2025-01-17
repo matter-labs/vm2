@@ -5,7 +5,7 @@ use super::{common::boilerplate_ext, ret::spontaneous_panic};
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     instruction::ExecutionStatus,
-    precompiles::{PrecompileMemoryReader, KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS},
+    precompiles::{PrecompileMemoryReader, Precompiles},
     Instruction, VirtualMachine, World,
 };
 
@@ -73,7 +73,7 @@ fn precompile_call<T: Tracer, W: World<T>>(
         vm,
         world,
         tracer,
-        |vm, args, world, _tracer| {
+        |vm, args, world, tracer| {
             // The user gets to decide how much gas to burn
             // This is safe because system contracts are trusted
             let aux_data = PrecompileAuxData::from_u256(Register2::get(args, &mut vm.state));
@@ -98,19 +98,20 @@ fn precompile_call<T: Tracer, W: World<T>>(
             let address_bytes = vm.state.current_frame.address.0;
             let address_low = u16::from_le_bytes([address_bytes[19], address_bytes[18]]);
             let heap_to_read = &vm.state.heaps[abi.memory_page_to_read];
-            let (read_offset, read_len) =
-                if address_low == KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS {
-                    // keccak is the only precompile that interprets input offset / length as bytes
-                    (abi.input_memory_offset, abi.input_memory_length)
-                } else {
-                    // Everything else interprets input offset / length as words
-                    (abi.input_memory_offset * 32, abi.input_memory_length * 32)
-                };
-            let output = world.call_precompile(
-                address_low,
-                abi.precompile_interpreted_data,
-                PrecompileMemoryReader::new(heap_to_read, read_offset, read_len),
+            let memory = PrecompileMemoryReader::new(
+                heap_to_read,
+                abi.input_memory_offset,
+                abi.input_memory_length,
             );
+            let output = world.precompiles().call_precompile(
+                address_low,
+                memory,
+                abi.precompile_interpreted_data,
+            );
+
+            if let Some(cycle_stats) = output.cycle_stats {
+                tracer.on_extra_prover_cycles(cycle_stats);
+            }
 
             let mut write_offset = abi.output_memory_offset * 32;
             for i in 0..output.len.min(abi.output_memory_length) {

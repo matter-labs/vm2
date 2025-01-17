@@ -20,7 +20,7 @@ pub use self::{
     vm::{Settings, VirtualMachine},
     world_diff::{Snapshot, StorageChange, WorldDiff},
 };
-use crate::precompiles::PrecompileMemoryReader;
+use crate::precompiles::{LegacyPrecompiles, Precompiles};
 
 pub mod addressing_modes;
 #[cfg(not(feature = "single_instruction_test"))]
@@ -101,13 +101,9 @@ pub trait World<T: Tracer>: StorageInterface + Sized {
     /// Loads bytecode bytes for the `decommit` opcode.
     fn decommit_code(&mut self, hash: U256) -> Vec<u8>;
 
-    fn call_precompile(
-        &mut self,
-        address: u16,
-        aux_data: u64,
-        memory: PrecompileMemoryReader<'_>,
-    ) -> precompiles::PrecompileOutput {
-        precompiles::default_call_precompile(address, aux_data, memory)
+    /// Returns precompiles to be used.
+    fn precompiles(&self) -> &impl Precompiles {
+        &LegacyPrecompiles
     }
 }
 

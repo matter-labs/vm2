@@ -303,7 +303,7 @@ impl ShouldStop {
 }
 
 /// Cycle statistics emitted by the VM and supplied to [`Tracer::on_extra_prover_cycles()`].
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CycleStats {
     /// Call to the `keccak256` precompile with the specified number of hash cycles.
     Keccak256(u32),

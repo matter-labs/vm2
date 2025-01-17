@@ -23,16 +23,13 @@ categories = ["cryptography"]
 afl = "0.15"
 anyhow = "1"
 arbitrary = "1"
+assert_matches = "1.5.0"
 divan = "0.1"
 enum_dispatch = "0.3"
-k256 = "0.13"
-p256 = "0.13"
 pretty_assertions = "1.4.0"
 primitive-types = "0.12.1"
 proptest = "1.4"
 rand = "0.8.5"
-sha2 = "0.10"
-sha3 = "0.10"
 
 # "Internal" dependencies
 zkevm_opcode_defs = "0.150.0"
