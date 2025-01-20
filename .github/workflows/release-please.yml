@@ -39,7 +39,7 @@ jobs:
         run: echo "$OUTPUTS"
 
   process-release:
-    runs-on: [ubuntu-22.04-github-hosted-32core]
+    runs-on: [ubuntu-24.04-github-hosted-32core]
     needs: [release-please]
     if: ${{ needs.release-please.outputs.releases_created == 'true' }}
     steps:
