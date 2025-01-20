@@ -349,7 +349,7 @@ impl<A: Tracer, B: Tracer> Tracer for (A, B) {
 #[cfg(test)]
 mod tests {
     use super::{CallingMode, OpcodeType};
-    use crate::{opcodes, tests::DummyState, GlobalStateInterface, Tracer};
+    use crate::{opcodes, testonly::DummyState, GlobalStateInterface, Tracer};
 
     struct FarCallCounter(usize);
 

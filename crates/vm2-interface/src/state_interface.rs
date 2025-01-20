@@ -216,7 +216,7 @@ pub struct L2ToL1Log {
 }
 
 #[cfg(test)]
-pub mod tests {
+pub(crate) mod testonly {
     use primitive_types::{H160, U256};
 
     use super::{
@@ -224,7 +224,7 @@ pub mod tests {
     };
 
     #[derive(Debug)]
-    pub struct DummyState;
+    pub(crate) struct DummyState;
 
     impl StateInterface for DummyState {
         fn read_register(&self, _: u8) -> (U256, bool) {
