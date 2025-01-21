@@ -93,5 +93,5 @@ fn trace_failing_far_call() {
     ]);
     vm.run(&mut world, &mut tracer);
 
-    assert!(tracer.witnessed_all_opcodes())
+    assert!(tracer.witnessed_all_opcodes());
 }
