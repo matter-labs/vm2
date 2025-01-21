@@ -153,29 +153,6 @@ pub(crate) fn free_panic<T: Tracer, W: World<T>>(
     .merge_tracer(tracer.after_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world }))
 }
 
-/// Formally, a far call pushes a new frame and returns from it immediately if it panics.
-/// This function instead panics without popping a frame to save on allocation.
-pub(crate) fn panic_from_failed_far_call<T: Tracer, W: World<T>>(
-    vm: &mut VirtualMachine<T, W>,
-    world: &mut W,
-    tracer: &mut T,
-    exception_handler: u16,
-) -> ExecutionStatus {
-    tracer.before_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world });
-
-    // Gas is already subtracted in the far call code.
-    // No need to roll back, as no changes are made in this "frame".
-    vm.state.set_context_u128(0);
-    vm.state.registers = [U256::zero(); 16];
-    vm.state.register_pointer_flags = 2;
-    vm.state.flags = Flags::new(true, false, false);
-    vm.state.current_frame.set_pc_from_u16(exception_handler);
-
-    tracer
-        .after_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world })
-        .into()
-}
-
 fn invalid<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
@@ -191,10 +168,7 @@ trait GenericStatics<T, W> {
 }
 
 impl<T: Tracer, W: World<T>> GenericStatics<T, W> for () {
-    const PANIC: Instruction<T, W> = Instruction {
-        handler: ret::<T, W, Panic, false>,
-        arguments: Arguments::new(Predicate::Always, RETURN_COST, ModeRequirements::none()),
-    };
+    const PANIC: Instruction<T, W> = Instruction::from_spontaneous_panic();
     const INVALID: Instruction<T, W> = Instruction::from_invalid();
 }
 
@@ -239,6 +213,15 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
         Self {
             handler: monomorphize!(ret [T W Panic] match_boolean to_label),
             arguments: arguments.write_source(&label),
+        }
+    }
+
+    /// Creates the instruction that is executed when anonther instruction encounters
+    /// an error.
+    pub(crate) const fn from_spontaneous_panic() -> Self {
+        Self {
+            handler: ret::<T, W, Panic, false>,
+            arguments: Arguments::new(Predicate::Always, RETURN_COST, ModeRequirements::none()),
         }
     }
 

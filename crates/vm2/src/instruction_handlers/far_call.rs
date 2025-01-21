@@ -12,7 +12,6 @@ use super::{
     common::full_boilerplate,
     heap_access::grow_heap,
     monomorphization::{match_boolean, monomorphize, parameterize},
-    ret::{panic_from_failed_far_call, RETURN_COST},
     AuxHeap, Heap,
 };
 use crate::{
@@ -21,7 +20,7 @@ use crate::{
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
     predication::Flags,
-    Instruction, VirtualMachine, World,
+    Instruction, Program, VirtualMachine, World,
 };
 
 /// A call to another contract.
@@ -107,10 +106,9 @@ where
         vm.state.current_frame.gas -= normally_passed_gas;
         let new_frame_gas = normally_passed_gas + mandated_gas;
 
-        let Some((calldata, program, is_evm_interpreter)) = failing_part else {
-            vm.state.current_frame.gas += new_frame_gas.saturating_sub(RETURN_COST);
-            return panic_from_failed_far_call(vm, world, tracer, exception_handler);
-        };
+        // A far call pushes a new frame and returns from it in the next instruction if it panics.
+        let (calldata, program, is_evm_interpreter) =
+            failing_part.unwrap_or((U256::zero().into(), Program::new_panicking(), false));
 
         let stipend = if is_evm_interpreter {
             EVM_SIMULATOR_STIPEND

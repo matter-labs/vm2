@@ -87,6 +87,10 @@ impl<T: Tracer, W: World<T>> Program<T, W> {
         }
     }
 
+    pub(crate) fn new_panicking() -> Self {
+        Self::from_raw(vec![Instruction::from_spontaneous_panic()], vec![])
+    }
+
     #[doc(hidden)] // should only be used in low-level tests / benchmarks
     pub fn from_raw(instructions: Vec<Instruction<T, W>>, code_page: Vec<U256>) -> Self {
         Self {

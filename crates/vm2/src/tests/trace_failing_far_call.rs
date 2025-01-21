@@ -23,6 +23,10 @@ impl ExpectingTracer {
             current: None,
         }
     }
+
+    fn witnessed_all_opcodes(self) -> bool {
+        self.future.is_empty() && self.current.is_none()
+    }
 }
 
 impl Tracer for ExpectingTracer {
@@ -47,14 +51,21 @@ impl Tracer for ExpectingTracer {
 
 #[test]
 fn trace_failing_far_call() {
-    let instructions = vec![Instruction::from_far_call::<Normal>(
-        Register1(Register::new(0)),
-        Register2(Register::new(1)),
-        Immediate1(1),
-        false,
-        false,
-        Arguments::new(Predicate::Always, 25, ModeRequirements::none()),
-    )];
+    let instructions = vec![
+        Instruction::from_far_call::<Normal>(
+            Register1(Register::new(0)),
+            Register2(Register::new(1)),
+            Immediate1(1),
+            false,
+            false,
+            Arguments::new(Predicate::Always, 25, ModeRequirements::none()),
+        ),
+        Instruction::from_ret(
+            Register1(Register::new(0)),
+            None,
+            Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+        ),
+    ];
 
     let program = Program::from_raw(instructions, vec![]);
 
@@ -75,11 +86,12 @@ fn trace_failing_far_call() {
         },
     );
 
-    vm.run(
-        &mut world,
-        &mut ExpectingTracer::new(vec![
-            Opcode::FarCall(CallingMode::Normal),
-            Opcode::Ret(ReturnType::Panic),
-        ]),
-    );
+    let mut tracer = ExpectingTracer::new(vec![
+        Opcode::FarCall(CallingMode::Normal),
+        Opcode::Ret(ReturnType::Panic),
+        Opcode::Ret(ReturnType::Normal),
+    ]);
+    vm.run(&mut world, &mut tracer);
+
+    assert!(tracer.witnessed_all_opcodes())
 }
