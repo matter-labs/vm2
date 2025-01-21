@@ -20,6 +20,7 @@ pub use self::{
     vm::{Settings, VirtualMachine},
     world_diff::{Snapshot, StorageChange, WorldDiff},
 };
+use crate::precompiles::{LegacyPrecompiles, Precompiles};
 
 pub mod addressing_modes;
 #[cfg(not(feature = "single_instruction_test"))]
@@ -33,6 +34,7 @@ mod heap;
 mod instruction;
 mod instruction_handlers;
 mod mode_requirements;
+pub mod precompiles;
 mod predication;
 #[cfg(not(feature = "single_instruction_test"))]
 mod program;
@@ -98,6 +100,11 @@ pub trait World<T: Tracer>: StorageInterface + Sized {
 
     /// Loads bytecode bytes for the `decommit` opcode.
     fn decommit_code(&mut self, hash: U256) -> Vec<u8>;
+
+    /// Returns precompiles to be used.
+    fn precompiles(&self) -> &impl Precompiles {
+        &LegacyPrecompiles
+    }
 }
 
 /// Deterministic (across program runs and machines) hash that can be used for `Debug` implementations
