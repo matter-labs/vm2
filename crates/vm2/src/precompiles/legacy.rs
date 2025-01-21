@@ -134,10 +134,10 @@ impl Precompiles for LegacyPrecompiles {
 #[allow(clippy::cast_possible_truncation)] // OK for tests
 #[cfg(test)]
 mod tests {
-    use assert_matches::assert_matches;
-    use rand::Rng;
+    use proptest::{array, collection, num, option, prelude::*};
     use zkevm_opcode_defs::{
-        k256::ecdsa::{SigningKey, VerifyingKey},
+        k256::ecdsa::{SigningKey as K256SigningKey, VerifyingKey as K256VerifyingKey},
+        p256::ecdsa::SigningKey as P256SigningKey,
         sha3::{self, Digest},
     };
     use zksync_vm2_interface::HeapId;
@@ -145,7 +145,15 @@ mod tests {
     use super::*;
     use crate::heap::Heaps;
 
-    fn key_to_address(key: &VerifyingKey) -> U256 {
+    const MAX_LEN: usize = 2_048;
+
+    fn arbitrary_aligned_bytes(alignment: usize) -> impl Strategy<Value = Vec<u8>> {
+        (0..=(MAX_LEN / alignment)).prop_flat_map(move |len_in_words| {
+            collection::vec(num::u8::ANY, len_in_words * alignment)
+        })
+    }
+
+    fn key_to_address(key: &K256VerifyingKey) -> U256 {
         let encoded_key = key.to_encoded_point(false);
         let encoded_key = &encoded_key.as_bytes()[1..];
         debug_assert_eq!(encoded_key.len(), 64);
@@ -155,54 +163,48 @@ mod tests {
         address_u256 & U256::MAX >> (256 - 160)
     }
 
-    #[test]
-    fn keccak_precompile_works() {
-        let mut heaps = Heaps::new(&[]);
-        let bytes: Vec<_> = (0_u32..2_048).map(|i| i as u8).collect();
+    fn test_keccak_precompile(input: &[u8], initial_offset: u32) -> Result<(), TestCaseError> {
+        let input_len = input.len() as u32;
+        assert_eq!(input_len % 32, 0);
 
-        let initial_offset = 12;
-        for (i, u256_chunk) in bytes.chunks(32).enumerate() {
+        let mut heaps = Heaps::new(&[]);
+        for (i, u256_chunk) in input.chunks(32).enumerate() {
             let offset = i as u32 * 32 + initial_offset;
             heaps.write_u256(HeapId::FIRST, offset, U256::from_big_endian(u256_chunk));
         }
 
-        for input_len in 0..=bytes.len() as u32 {
-            println!("testing input with length {input_len}");
+        let memory = PrecompileMemoryReader::new(&heaps[HeapId::FIRST], initial_offset, input_len);
+        let output = LegacyPrecompiles.call_precompile(
+            KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
+            memory,
+            0,
+        );
 
-            let memory =
-                PrecompileMemoryReader::new(&heaps[HeapId::FIRST], initial_offset, input_len);
-            let output = LegacyPrecompiles.call_precompile(
-                KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
-                memory,
-                0,
-            );
-
-            assert_eq!(output.len, 1);
-            let expected_hash = sha3::Keccak256::digest(&bytes[..input_len as usize]);
-            let expected_hash = U256::from_big_endian(&expected_hash);
-            assert_eq!(output.buffer[0], expected_hash);
-            assert_matches!(output.cycle_stats, Some(CycleStats::Keccak256(_)));
-        }
+        prop_assert_eq!(output.len, 1);
+        let expected_hash = sha3::Keccak256::digest(input);
+        let expected_hash = U256::from_big_endian(&expected_hash);
+        prop_assert_eq!(output.buffer[0], expected_hash);
+        prop_assert!(matches!(output.cycle_stats, Some(CycleStats::Keccak256(_))));
+        Ok(())
     }
 
-    #[test]
-    fn sha256_precompile_works() {
+    fn test_sha256_precompile(
+        input: &[u8],
+        initial_offset_in_words: u32,
+    ) -> Result<(), TestCaseError> {
+        assert_eq!(input.len() % 64, 0);
         let mut heaps = Heaps::new(&[]);
-        let bytes: Vec<_> = (0_u32..2_048).map(|i| i as u8).collect();
 
-        let initial_offset_words = 12;
-        for (i, u256_chunk) in bytes.chunks(32).enumerate() {
-            let offset = i as u32 * 32 + initial_offset_words * 32;
+        for (i, u256_chunk) in input.chunks(32).enumerate() {
+            let offset = i as u32 * 32 + initial_offset_in_words * 32;
             heaps.write_u256(HeapId::FIRST, offset, U256::from_big_endian(u256_chunk));
         }
 
-        let max_round_count = bytes.len() as u32 / 64;
+        let max_round_count = input.len() as u32 / 64;
         for round_count in 0..=max_round_count {
-            println!("testing input with {round_count} round(s)");
-
             let memory = PrecompileMemoryReader::new(
                 &heaps[HeapId::FIRST],
-                initial_offset_words,
+                initial_offset_in_words,
                 round_count * 2,
             );
             let output = LegacyPrecompiles.call_precompile(
@@ -212,206 +214,257 @@ mod tests {
             );
 
             if round_count == 0 {
-                assert_eq!(output.len, 0);
+                prop_assert_eq!(output.len, 0);
             } else {
-                assert_eq!(output.len, 1);
-                assert_ne!(output.buffer[0], U256::zero());
+                prop_assert_eq!(output.len, 1);
+                prop_assert_ne!(output.buffer[0], U256::zero());
             }
-            assert_matches!(output.cycle_stats, Some(CycleStats::Sha256(_)));
+            prop_assert!(matches!(output.cycle_stats, Some(CycleStats::Sha256(_))));
         }
+        Ok(())
     }
 
-    #[derive(Debug)]
-    enum Mutation {
+    #[derive(Debug, Clone, Copy)]
+    enum EcRecoverMutation {
         RecoveryId,
-        Digest,
-        R,
-        S,
-        Key,
+        Digest(usize),
+        R(usize),
+        S(usize),
     }
 
-    #[test]
-    fn ecrecover_precompile_works() {
-        let mut rng = rand::thread_rng();
-        let mut heaps = Heaps::new(&[]);
-        let initial_offset_in_words = 3;
-        let initial_offset = initial_offset_in_words * 32;
-
-        for _ in 0..500 {
-            let mutation = match rng.gen_range(0..10) {
-                0 => Some(Mutation::RecoveryId),
-                1 => Some(Mutation::Digest),
-                2 => Some(Mutation::R),
-                3 => Some(Mutation::S),
-                _ => None,
-            };
-
-            let signing_key = SigningKey::random(&mut rng);
-            let message = "test message!";
-            let mut message_digest = sha3::Keccak256::digest(message);
-
-            let (signature, recovery_id) = signing_key
-                .sign_prehash_recoverable(&message_digest)
-                .unwrap();
-            if recovery_id.is_x_reduced() {
-                continue;
-            }
-            let mut recovery_id = recovery_id.to_byte();
-
-            println!(
-                "testing key {:?} with mutation {mutation:?}",
-                signing_key.verifying_key().to_encoded_point(true)
-            );
-            let mut signature_bytes = signature.to_bytes();
-
-            match mutation {
-                Some(Mutation::Digest) => {
-                    message_digest[rng.gen_range(0..32)] ^= 1;
-                }
-                Some(Mutation::RecoveryId) => {
-                    recovery_id = 1 - recovery_id;
-                }
-                Some(Mutation::R) => {
-                    signature_bytes[rng.gen_range(0..32)] ^= 1;
-                }
-                Some(Mutation::S) => {
-                    signature_bytes[rng.gen_range(32..64)] ^= 1;
-                }
-                _ => { /* Do nothing */ }
-            }
-
-            heaps.write_u256(
-                HeapId::FIRST,
-                initial_offset,
-                U256::from_big_endian(&message_digest),
-            );
-            heaps.write_u256(HeapId::FIRST, initial_offset + 32, recovery_id.into());
-            heaps.write_u256(
-                HeapId::FIRST,
-                initial_offset + 64,
-                U256::from_big_endian(&signature_bytes[..32]),
-            );
-            heaps.write_u256(
-                HeapId::FIRST,
-                initial_offset + 96,
-                U256::from_big_endian(&signature_bytes[32..]),
-            );
-
-            let memory =
-                PrecompileMemoryReader::new(&heaps[HeapId::FIRST], initial_offset_in_words, 4);
-            let output = LegacyPrecompiles.call_precompile(
-                ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS,
-                memory,
-                0,
-            );
-
-            assert_eq!(output.len, 2);
-            let expected_address = key_to_address(signing_key.verifying_key());
-            let [is_success, address] = output.buffer;
-            if mutation.is_some() {
-                assert_ne!(address, expected_address);
-            } else {
-                assert_eq!(is_success, U256::one());
-                assert_eq!(address, expected_address);
-            }
-            assert_matches!(output.cycle_stats, Some(CycleStats::EcRecover(1)));
+    impl EcRecoverMutation {
+        fn gen() -> impl Strategy<Value = Self> {
+            (0..4).prop_flat_map(|raw| match raw {
+                0 => Just(Self::RecoveryId).boxed(),
+                1 => (0_usize..32).prop_map(Self::Digest).boxed(),
+                2 => (0_usize..32).prop_map(Self::R).boxed(),
+                3 => (0_usize..32).prop_map(Self::S).boxed(),
+                _ => unreachable!(),
+            })
         }
     }
 
-    #[test]
-    fn secp256r1_precompile_works() {
-        use zkevm_opcode_defs::p256::ecdsa::{
-            signature::hazmat::PrehashSigner, Signature, SigningKey,
-        };
-
-        let mut rng = rand::thread_rng();
+    fn test_ecrecover_precompile(
+        signing_key: &K256SigningKey,
+        mutation: Option<EcRecoverMutation>,
+        initial_offset_in_words: u32,
+    ) -> Result<(), TestCaseError> {
         let mut heaps = Heaps::new(&[]);
-        let initial_offset_in_words = 3;
         let initial_offset = initial_offset_in_words * 32;
 
-        for _ in 0..500 {
-            let mutation = match rng.gen_range(0..10) {
-                0 => Some(Mutation::Key),
-                1 => Some(Mutation::Digest),
-                2 => Some(Mutation::R),
-                3 => Some(Mutation::S),
-                _ => None,
-            };
+        let message = "test message!";
+        let mut message_digest = sha3::Keccak256::digest(message);
 
-            let signing_key = SigningKey::random(&mut rng);
-            let message = "test message!";
-            let mut message_digest = sha3::Keccak256::digest(message);
+        let (signature, recovery_id) = signing_key
+            .sign_prehash_recoverable(&message_digest)
+            .unwrap();
+        if recovery_id.is_x_reduced() {
+            return Ok(());
+        }
+        let mut recovery_id = recovery_id.to_byte();
 
-            let signature: Signature = signing_key.sign_prehash(&message_digest).unwrap();
+        println!(
+            "testing key {:?} with mutation {mutation:?}",
+            signing_key.verifying_key().to_encoded_point(true)
+        );
+        let mut signature_bytes = signature.to_bytes();
 
-            println!(
-                "testing key {:?} with mutation {mutation:?}",
-                signing_key.verifying_key().to_encoded_point(true)
-            );
-            let mut signature_bytes = signature.to_bytes();
-            let mut key_bytes = signing_key
-                .verifying_key()
-                .to_encoded_point(false)
-                .as_bytes()[1..]
-                .to_vec();
-            assert_eq!(key_bytes.len(), 64);
-
-            match mutation {
-                Some(Mutation::Digest) => {
-                    message_digest[rng.gen_range(0..32)] ^= 1;
-                }
-                Some(Mutation::R) => {
-                    signature_bytes[rng.gen_range(0..32)] ^= 1;
-                }
-                Some(Mutation::S) => {
-                    signature_bytes[rng.gen_range(32..64)] ^= 1;
-                }
-                Some(Mutation::Key) => {
-                    key_bytes[rng.gen_range(0..64)] ^= 1;
-                }
-                _ => { /* Do nothing */ }
+        match mutation {
+            Some(EcRecoverMutation::Digest(byte)) => {
+                message_digest[byte] ^= 1;
             }
-
-            heaps.write_u256(
-                HeapId::FIRST,
-                initial_offset,
-                U256::from_big_endian(&message_digest),
-            );
-            heaps.write_u256(
-                HeapId::FIRST,
-                initial_offset + 32,
-                U256::from_big_endian(&signature_bytes[..32]),
-            );
-            heaps.write_u256(
-                HeapId::FIRST,
-                initial_offset + 64,
-                U256::from_big_endian(&signature_bytes[32..]),
-            );
-            heaps.write_u256(
-                HeapId::FIRST,
-                initial_offset + 96,
-                U256::from_big_endian(&key_bytes[..32]),
-            );
-            heaps.write_u256(
-                HeapId::FIRST,
-                initial_offset + 128,
-                U256::from_big_endian(&key_bytes[32..]),
-            );
-
-            let memory =
-                PrecompileMemoryReader::new(&heaps[HeapId::FIRST], initial_offset_in_words, 5);
-            let output =
-                LegacyPrecompiles.call_precompile(SECP256R1_VERIFY_PRECOMPILE_ADDRESS, memory, 0);
-
-            assert_eq!(output.len, 2);
-            let [is_ok, is_verified] = output.buffer;
-            if mutation.is_none() {
-                assert_eq!(is_ok, U256::one());
-                assert_eq!(is_verified, U256::one());
-            } else {
-                assert!(is_ok.is_zero() || is_verified.is_zero());
+            Some(EcRecoverMutation::RecoveryId) => {
+                recovery_id = 1 - recovery_id;
             }
-            assert_matches!(output.cycle_stats, Some(CycleStats::Secp256r1Verify(1)));
+            Some(EcRecoverMutation::R(byte)) => {
+                signature_bytes[byte] ^= 1;
+            }
+            Some(EcRecoverMutation::S(byte)) => {
+                signature_bytes[byte + 32] ^= 1;
+            }
+            None => { /* Do nothing */ }
+        }
+
+        heaps.write_u256(
+            HeapId::FIRST,
+            initial_offset,
+            U256::from_big_endian(&message_digest),
+        );
+        heaps.write_u256(HeapId::FIRST, initial_offset + 32, recovery_id.into());
+        heaps.write_u256(
+            HeapId::FIRST,
+            initial_offset + 64,
+            U256::from_big_endian(&signature_bytes[..32]),
+        );
+        heaps.write_u256(
+            HeapId::FIRST,
+            initial_offset + 96,
+            U256::from_big_endian(&signature_bytes[32..]),
+        );
+
+        let memory = PrecompileMemoryReader::new(&heaps[HeapId::FIRST], initial_offset_in_words, 4);
+        let output = LegacyPrecompiles.call_precompile(
+            ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS,
+            memory,
+            0,
+        );
+
+        prop_assert_eq!(output.len, 2);
+        let expected_address = key_to_address(signing_key.verifying_key());
+        let [is_success, address] = output.buffer;
+        if mutation.is_some() {
+            prop_assert_ne!(address, expected_address);
+        } else {
+            prop_assert_eq!(is_success, U256::one());
+            prop_assert_eq!(address, expected_address);
+        }
+        prop_assert!(matches!(output.cycle_stats, Some(CycleStats::EcRecover(1))));
+        Ok(())
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum P256Mutation {
+        Digest(usize),
+        R(usize),
+        S(usize),
+        Key(usize),
+    }
+
+    impl P256Mutation {
+        fn gen() -> impl Strategy<Value = Self> {
+            (0..4).prop_flat_map(|raw| match raw {
+                0 => (0_usize..32).prop_map(Self::Digest).boxed(),
+                1 => (0_usize..32).prop_map(Self::R).boxed(),
+                2 => (0_usize..32).prop_map(Self::S).boxed(),
+                3 => (0_usize..64).prop_map(Self::Key).boxed(),
+                _ => unreachable!(),
+            })
+        }
+    }
+
+    fn test_secp256r1_precompile(
+        signing_key: &P256SigningKey,
+        mutation: Option<P256Mutation>,
+        initial_offset_in_words: u32,
+    ) -> Result<(), TestCaseError> {
+        use zkevm_opcode_defs::p256::ecdsa::{signature::hazmat::PrehashSigner, Signature};
+
+        let mut heaps = Heaps::new(&[]);
+        let initial_offset = initial_offset_in_words * 32;
+
+        let message = "test message!";
+        let mut message_digest = sha3::Keccak256::digest(message);
+
+        let signature: Signature = signing_key.sign_prehash(&message_digest).unwrap();
+
+        println!(
+            "testing key {:?} with mutation {mutation:?}",
+            signing_key.verifying_key().to_encoded_point(true)
+        );
+        let mut signature_bytes = signature.to_bytes();
+        let mut key_bytes = signing_key
+            .verifying_key()
+            .to_encoded_point(false)
+            .as_bytes()[1..]
+            .to_vec();
+        assert_eq!(key_bytes.len(), 64);
+
+        match mutation {
+            Some(P256Mutation::Digest(byte)) => {
+                message_digest[byte] ^= 1;
+            }
+            Some(P256Mutation::R(byte)) => {
+                signature_bytes[byte] ^= 1;
+            }
+            Some(P256Mutation::S(byte)) => {
+                signature_bytes[byte + 32] ^= 1;
+            }
+            Some(P256Mutation::Key(byte)) => {
+                key_bytes[byte] ^= 1;
+            }
+            None => { /* Do nothing */ }
+        }
+
+        heaps.write_u256(
+            HeapId::FIRST,
+            initial_offset,
+            U256::from_big_endian(&message_digest),
+        );
+        heaps.write_u256(
+            HeapId::FIRST,
+            initial_offset + 32,
+            U256::from_big_endian(&signature_bytes[..32]),
+        );
+        heaps.write_u256(
+            HeapId::FIRST,
+            initial_offset + 64,
+            U256::from_big_endian(&signature_bytes[32..]),
+        );
+        heaps.write_u256(
+            HeapId::FIRST,
+            initial_offset + 96,
+            U256::from_big_endian(&key_bytes[..32]),
+        );
+        heaps.write_u256(
+            HeapId::FIRST,
+            initial_offset + 128,
+            U256::from_big_endian(&key_bytes[32..]),
+        );
+
+        let memory = PrecompileMemoryReader::new(&heaps[HeapId::FIRST], initial_offset_in_words, 5);
+        let output =
+            LegacyPrecompiles.call_precompile(SECP256R1_VERIFY_PRECOMPILE_ADDRESS, memory, 0);
+
+        prop_assert_eq!(output.len, 2);
+        let [is_ok, is_verified] = output.buffer;
+        if mutation.is_none() {
+            prop_assert_eq!(is_ok, U256::one());
+            prop_assert_eq!(is_verified, U256::one());
+        } else {
+            prop_assert!(is_ok.is_zero() || is_verified.is_zero());
+        }
+        prop_assert!(matches!(
+            output.cycle_stats,
+            Some(CycleStats::Secp256r1Verify(1))
+        ));
+        Ok(())
+    }
+
+    proptest! {
+        #[test]
+        fn keccak_precompile_works(
+            bytes in arbitrary_aligned_bytes(32),
+            initial_offset in 0..u32::MAX / 2,
+        ) {
+            test_keccak_precompile(&bytes, initial_offset)?;
+        }
+
+        #[test]
+        fn sha256_precompile_works(
+            bytes in arbitrary_aligned_bytes(64),
+            initial_offset_in_words in 0..u32::MAX / 64,
+        ) {
+            test_sha256_precompile(&bytes, initial_offset_in_words)?;
+        }
+
+        #[test]
+        fn ecrecover_precompile_works(
+            signing_key in array::uniform32(num::u8::ANY)
+                .prop_filter_map("not a key", |bytes| K256SigningKey::from_bytes(&bytes.into()).ok()),
+            mutation in option::of(EcRecoverMutation::gen()),
+            initial_offset_in_words in 0..u32::MAX / 64,
+        ) {
+            test_ecrecover_precompile(&signing_key, mutation, initial_offset_in_words)?;
+        }
+
+        #[test]
+        fn secp256r1_precompile_works(
+            signing_key in array::uniform32(num::u8::ANY)
+                .prop_filter_map("not a key", |bytes| P256SigningKey::from_bytes(&bytes.into()).ok()),
+            mutation in option::of(P256Mutation::gen()),
+            initial_offset_in_words in 0..u32::MAX / 64,
+        ) {
+            test_secp256r1_precompile(&signing_key, mutation, initial_offset_in_words)?;
         }
     }
 }

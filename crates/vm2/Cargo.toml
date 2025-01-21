@@ -24,10 +24,8 @@ zk_evm = { workspace = true, optional = true }
 anyhow = { workspace = true, optional = true }
 
 [dev-dependencies]
-assert_matches.workspace = true
 divan.workspace = true
 proptest.workspace = true
-rand.workspace = true
 
 [lints]
 workspace = true
