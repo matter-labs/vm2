@@ -108,7 +108,7 @@ where
 
         // A far call pushes a new frame and returns from it in the next instruction if it panics.
         let (calldata, program, is_evm_interpreter) =
-            failing_part.unwrap_or((U256::zero().into(), Program::new_panicking(), false));
+            failing_part.unwrap_or_else(|| (U256::zero().into(), Program::new_panicking(), false));
 
         let stipend = if is_evm_interpreter {
             EVM_SIMULATOR_STIPEND
