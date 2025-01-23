@@ -4,3 +4,4 @@ mod bytecode_behaviour;
 mod far_call_decommitment;
 mod panic;
 mod stipend;
+mod trace_failing_far_call;

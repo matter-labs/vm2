@@ -82,6 +82,21 @@ impl<T: Tracer, W: World<T>> Program<T, W> {
             code_page: Arc::new([U256::zero(); 1]),
         }
     }
+
+    pub(crate) fn new_panicking() -> Self {
+        Self {
+            raw_first_instruction: 0,
+            first_instruction: MockRead::new(Rc::new([
+                Instruction::from_spontaneous_panic(),
+                Instruction::from_invalid(),
+            ])),
+            other_instruction: MockRead::new(Rc::new(Some([
+                Instruction::from_invalid(),
+                Instruction::from_invalid(),
+            ]))),
+            code_page: Arc::new([U256::zero(); 1]),
+        }
+    }
 }
 
 impl<T, W> PartialEq for Program<T, W> {
