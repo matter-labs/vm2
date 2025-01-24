@@ -194,10 +194,6 @@ impl<T: Tracer, W: World<T>> CallframeInterface for CallframeWrapper<'_, T, W> {
         self.frame.is_kernel
     }
 
-    fn stipend(&self) -> u32 {
-        0 // stipend is no longer used
-    }
-
     fn context_u128(&self) -> u128 {
         self.frame.context_u128
     }
