@@ -25,7 +25,6 @@ pub(crate) struct Callframe<T, W> {
     pub(crate) stack: Box<Stack>,
     pub(crate) sp: u16,
     pub(crate) gas: u32,
-    pub(crate) stipend: u32,
     pub(crate) near_calls: Vec<NearCallFrame>,
     pub(crate) pc: *const Instruction<T, W>,
     pub(crate) program: Program<T, W>,
@@ -68,7 +67,6 @@ impl<T, W> Callframe<T, W> {
         aux_heap: HeapId,
         calldata_heap: HeapId,
         gas: u32,
-        stipend: u32,
         exception_handler: u16,
         context_u128: u128,
         is_static: bool,
@@ -99,7 +97,6 @@ impl<T, W> Callframe<T, W> {
             heaps_i_am_keeping_alive: vec![],
             sp: 0,
             gas,
-            stipend,
             exception_handler,
             near_calls: vec![],
             world_before_this_frame,
@@ -253,7 +250,6 @@ impl<T, W> Clone for Callframe<T, W> {
             stack: self.stack.clone(),
             sp: self.sp,
             gas: self.gas,
-            stipend: self.stipend,
             near_calls: self.near_calls.clone(),
             pc: self.pc,
             program: self.program.clone(),
@@ -279,7 +275,6 @@ impl<T, W> PartialEq for Callframe<T, W> {
             && self.stack == other.stack
             && self.sp == other.sp
             && self.gas == other.gas
-            && self.stipend == other.stipend
             && self.near_calls == other.near_calls
             && self.pc == other.pc
             && self.program == other.program

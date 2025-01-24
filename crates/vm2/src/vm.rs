@@ -197,7 +197,6 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
         code_address: H160,
         program: Program<T, W>,
         gas: u32,
-        stipend: u32,
         exception_handler: u16,
         is_static: bool,
         calldata_heap: HeapId,
@@ -221,7 +220,6 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
             self.state.heaps.allocate(),
             calldata_heap,
             gas,
-            stipend,
             exception_handler,
             if M::VALUE == CallingMode::Delegate {
                 self.state.current_frame.context_u128

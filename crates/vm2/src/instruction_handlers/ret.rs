@@ -55,11 +55,7 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
             result
         };
 
-        let leftover_gas = vm
-            .state
-            .current_frame
-            .gas
-            .saturating_sub(vm.state.current_frame.stipend);
+        let leftover_gas = vm.state.current_frame.gas;
 
         let Some(FrameRemnant {
             exception_handler,
