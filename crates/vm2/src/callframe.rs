@@ -13,6 +13,9 @@ use crate::{
     Instruction, World,
 };
 
+// FIXME: use `zkevm_opcode_defs::system_params` once it's released
+const NEW_EVM_FRAME_MEMORY_STIPEND: u32 = 56 << 10;
+
 #[derive(Debug)]
 pub(crate) struct Callframe<T, W> {
     pub(crate) address: H160,
@@ -70,11 +73,14 @@ impl<T, W> Callframe<T, W> {
         exception_handler: u16,
         context_u128: u128,
         is_static: bool,
+        is_evm_interpreter: bool,
         world_before_this_frame: Snapshot,
     ) -> Self {
         let is_kernel = is_kernel(address);
         let heap_size = if is_kernel {
             NEW_KERNEL_FRAME_MEMORY_STIPEND
+        } else if is_evm_interpreter {
+            NEW_EVM_FRAME_MEMORY_STIPEND
         } else {
             NEW_FRAME_MEMORY_STIPEND
         };

@@ -474,6 +474,7 @@ mod test {
                 (*counter).into(),
                 *counter,
                 false,
+                false,
                 HeapId::from_u32_unchecked(5),
                 vm.world_diff.snapshot(),
             );

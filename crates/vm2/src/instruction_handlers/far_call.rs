@@ -59,7 +59,7 @@ where
                 0
             };
 
-        let failing_part = (|| {
+        let fallible_part = (|| {
             let decommit_result = vm.world_diff.decommit(
                 world,
                 tracer,
@@ -105,7 +105,7 @@ where
 
         // A far call pushes a new frame and returns from it in the next instruction if it panics.
         let (calldata, program, is_evm_interpreter) =
-            failing_part.unwrap_or_else(|| (U256::zero().into(), Program::new_panicking(), false));
+            fallible_part.unwrap_or_else(|| (U256::zero().into(), Program::new_panicking(), false));
 
         let new_frame_is_static = IS_STATIC || vm.state.current_frame.is_static;
         vm.push_frame::<M>(
@@ -114,6 +114,7 @@ where
             new_frame_gas,
             exception_handler,
             new_frame_is_static && !is_evm_interpreter,
+            is_evm_interpreter,
             calldata.memory_page,
             vm.world_diff.snapshot(),
         );
