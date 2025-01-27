@@ -86,7 +86,7 @@ fn vm2_frame_to_zk_evm_frames<T, W>(
         heap_bound: frame.heap_size,
         aux_heap_bound: frame.aux_heap_size,
         total_pubdata_spent: PubdataCost(0),
-        stipend: frame.stipend,
+        stipend: 0,
     };
 
     let mut result = vec![far_frame];

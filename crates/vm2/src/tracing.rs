@@ -194,10 +194,6 @@ impl<T: Tracer, W: World<T>> CallframeInterface for CallframeWrapper<'_, T, W> {
         self.frame.is_kernel
     }
 
-    fn stipend(&self) -> u32 {
-        self.frame.stipend
-    }
-
     fn context_u128(&self) -> u128 {
         self.frame.context_u128
     }
@@ -472,8 +468,8 @@ mod test {
                 H160::from_low_u64_be(1),
                 program.clone(),
                 (*counter).into(),
-                0,
                 *counter,
+                false,
                 false,
                 HeapId::from_u32_unchecked(5),
                 vm.world_diff.snapshot(),

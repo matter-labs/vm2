@@ -13,6 +13,9 @@ use crate::{
     Instruction, World,
 };
 
+// FIXME: use `zkevm_opcode_defs::system_params` once it's released
+const NEW_EVM_FRAME_MEMORY_STIPEND: u32 = 56 << 10;
+
 #[derive(Debug)]
 pub(crate) struct Callframe<T, W> {
     pub(crate) address: H160,
@@ -25,7 +28,6 @@ pub(crate) struct Callframe<T, W> {
     pub(crate) stack: Box<Stack>,
     pub(crate) sp: u16,
     pub(crate) gas: u32,
-    pub(crate) stipend: u32,
     pub(crate) near_calls: Vec<NearCallFrame>,
     pub(crate) pc: *const Instruction<T, W>,
     pub(crate) program: Program<T, W>,
@@ -68,15 +70,17 @@ impl<T, W> Callframe<T, W> {
         aux_heap: HeapId,
         calldata_heap: HeapId,
         gas: u32,
-        stipend: u32,
         exception_handler: u16,
         context_u128: u128,
         is_static: bool,
+        is_evm_interpreter: bool,
         world_before_this_frame: Snapshot,
     ) -> Self {
         let is_kernel = is_kernel(address);
         let heap_size = if is_kernel {
             NEW_KERNEL_FRAME_MEMORY_STIPEND
+        } else if is_evm_interpreter {
+            NEW_EVM_FRAME_MEMORY_STIPEND
         } else {
             NEW_FRAME_MEMORY_STIPEND
         };
@@ -99,7 +103,6 @@ impl<T, W> Callframe<T, W> {
             heaps_i_am_keeping_alive: vec![],
             sp: 0,
             gas,
-            stipend,
             exception_handler,
             near_calls: vec![],
             world_before_this_frame,
@@ -253,7 +256,6 @@ impl<T, W> Clone for Callframe<T, W> {
             stack: self.stack.clone(),
             sp: self.sp,
             gas: self.gas,
-            stipend: self.stipend,
             near_calls: self.near_calls.clone(),
             pc: self.pc,
             program: self.program.clone(),
@@ -279,7 +281,6 @@ impl<T, W> PartialEq for Callframe<T, W> {
             && self.stack == other.stack
             && self.sp == other.sp
             && self.gas == other.gas
-            && self.stipend == other.stipend
             && self.near_calls == other.near_calls
             && self.pc == other.pc
             && self.program == other.program

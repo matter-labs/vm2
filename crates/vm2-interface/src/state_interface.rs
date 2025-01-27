@@ -115,8 +115,6 @@ pub trait CallframeInterface {
     fn gas(&self) -> u32;
     /// Sets the remaining amount of gas.
     fn set_gas(&mut self, new_gas: u32);
-    /// Additional gas provided for the duration of this callframe.
-    fn stipend(&self) -> u32;
 
     /// Returns the context value for this call. This context is accessible via [`ContextU128`](crate::opcodes::ContextU128) opcode.
     fn context_u128(&self) -> u128;
@@ -376,10 +374,6 @@ pub(crate) mod testonly {
         }
 
         fn set_gas(&mut self, _: u32) {
-            unimplemented!()
-        }
-
-        fn stipend(&self) -> u32 {
             unimplemented!()
         }
 

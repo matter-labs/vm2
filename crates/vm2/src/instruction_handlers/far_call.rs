@@ -1,8 +1,5 @@
 use primitive_types::U256;
-use zkevm_opcode_defs::{
-    system_params::{EVM_SIMULATOR_STIPEND, MSG_VALUE_SIMULATOR_ADDITIVE_COST},
-    ADDRESS_MSG_VALUE,
-};
+use zkevm_opcode_defs::{system_params::MSG_VALUE_SIMULATOR_ADDITIVE_COST, ADDRESS_MSG_VALUE};
 use zksync_vm2_interface::{
     opcodes::{FarCall, TypeLevelCallingMode},
     Tracer,
@@ -62,7 +59,7 @@ where
                 0
             };
 
-        let failing_part = (|| {
+        let fallible_part = (|| {
             let decommit_result = vm.world_diff.decommit(
                 world,
                 tracer,
@@ -108,25 +105,16 @@ where
 
         // A far call pushes a new frame and returns from it in the next instruction if it panics.
         let (calldata, program, is_evm_interpreter) =
-            failing_part.unwrap_or_else(|| (U256::zero().into(), Program::new_panicking(), false));
-
-        let stipend = if is_evm_interpreter {
-            EVM_SIMULATOR_STIPEND
-        } else {
-            0
-        };
-        let new_frame_gas = new_frame_gas
-            .checked_add(stipend)
-            .expect("stipend must not cause overflow");
+            fallible_part.unwrap_or_else(|| (U256::zero().into(), Program::new_panicking(), false));
 
         let new_frame_is_static = IS_STATIC || vm.state.current_frame.is_static;
         vm.push_frame::<M>(
             u256_into_address(destination_address),
             program,
             new_frame_gas,
-            stipend,
             exception_handler,
             new_frame_is_static && !is_evm_interpreter,
+            is_evm_interpreter,
             calldata.memory_page,
             vm.world_diff.snapshot(),
         );

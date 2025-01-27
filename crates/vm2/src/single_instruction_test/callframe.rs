@@ -1,6 +1,5 @@
 use arbitrary::Arbitrary;
 use primitive_types::H160;
-use zkevm_opcode_defs::EVM_SIMULATOR_STIPEND;
 use zksync_vm2_interface::{HeapId, Tracer};
 
 use super::stack::{Stack, StackPool};
@@ -40,9 +39,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for Callframe<T, W> {
             is_kernel: is_kernel(address),
             stack: Box::new(Stack::new_arbitrary(u, calldata_heap, base_page)?),
             sp: u.arbitrary()?,
-            // It is assumed that it is always possible to add the stipend
-            gas: u.int_in_range(0..=u32::MAX - EVM_SIMULATOR_STIPEND)?,
-            stipend: u.arbitrary()?,
+            gas: u.arbitrary()?,
             near_calls: vec![],
             pc: program.instruction(0).unwrap(),
             program,
@@ -78,7 +75,6 @@ impl<T: Tracer, W: World<T>> Callframe<T, W> {
             stack: StackPool {}.get(),
             sp: 0,
             gas: 0,
-            stipend: 0,
             near_calls: vec![],
             pc: std::ptr::null(),
             program: Program::for_decommit(),
