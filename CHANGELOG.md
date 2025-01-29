@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.3.0](https://github.com/matter-labs/vm2/compare/v0.2.1...v0.3.0) (2025-01-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* Remove EVM emulator gas stipend ([#82](https://github.com/matter-labs/vm2/issues/82))
+* Revise VM storage interface ([#73](https://github.com/matter-labs/vm2/issues/73))
+
+### Features
+
+* Allow customizing precompiles logic ([#79](https://github.com/matter-labs/vm2/issues/79)) ([3841f5a](https://github.com/matter-labs/vm2/commit/3841f5a430288a63c8207853eca11560bf7a5712))
+* allow tracers to stop/suspend execution ([#78](https://github.com/matter-labs/vm2/issues/78)) ([457d8a7](https://github.com/matter-labs/vm2/commit/457d8a7eea9093af9440662e33e598c13ba41633))
+* expose storage to tracers ([#77](https://github.com/matter-labs/vm2/issues/77)) ([df5bec3](https://github.com/matter-labs/vm2/commit/df5bec3d04d64d434f9b0ccb285ba4681008f7b3))
+
+
+### Bug Fixes
+
+* **ci:** Update github-hosted runner label ([#80](https://github.com/matter-labs/vm2/issues/80)) ([70a6e30](https://github.com/matter-labs/vm2/commit/70a6e301b12d98db13fd91f67a505441c0defe9a))
+* failing far call tracing ([#81](https://github.com/matter-labs/vm2/issues/81)) ([5df8c33](https://github.com/matter-labs/vm2/commit/5df8c33f8a1f7bf25724554fea959ea3731550b7))
+* Remove EVM emulator gas stipend ([#82](https://github.com/matter-labs/vm2/issues/82)) ([bf63339](https://github.com/matter-labs/vm2/commit/bf63339292c8847a81a9d85c5cebda7822f62be4))
+* Revise VM storage interface ([#73](https://github.com/matter-labs/vm2/issues/73)) ([a233d44](https://github.com/matter-labs/vm2/commit/a233d44bbe61dc6a758a754c3b78fe4f83e56699))
+
 ## [0.2.1](https://github.com/matter-labs/vm2/compare/v0.2.0...v0.2.1) (2024-09-25)
 
 
