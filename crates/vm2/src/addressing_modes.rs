@@ -121,7 +121,7 @@ impl Arguments {
             destination_registers: PackedRegisters(0),
             immediate1: 0,
             immediate2: 0,
-            predicate_and_mode_requirements: (predicate as u8) << 2 | mode_requirements.0,
+            predicate_and_mode_requirements: ((predicate as u8) << 2) | mode_requirements.0,
             static_gas_cost: Self::encode_static_gas_cost(gas_cost),
         }
     }
