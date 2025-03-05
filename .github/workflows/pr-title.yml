@@ -8,7 +8,7 @@ on:
       - synchronize
 
 jobs:
-  lint:
+  conventional-pr-title:
     runs-on: ubuntu-latest
     permissions:
       statuses: write
@@ -18,15 +18,6 @@ jobs:
         id: lint_pr_title
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: guibranco/github-status-action-v2@v1.1.13
-        if: always()
-        with:
-          authToken: ${{ secrets.GITHUB_TOKEN }}
-          state: ${{ (steps.lint_pr_title.outputs.error_message != null) && 'error' || 'success' }}
-          context: 'conventional-pr-title'
-          description: PR title ${{ (steps.lint_pr_title.outputs.error_message != null) && 'does not match' || 'matches' }} Conventional Commits spec
-          sha: ${{ github.event.pull_request.head.sha }}
 
       - uses: marocchino/sticky-pull-request-comment@v2
         # When the previous steps fails, the workflow would stop. By adding this
