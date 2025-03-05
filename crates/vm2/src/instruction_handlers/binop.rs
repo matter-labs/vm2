@@ -127,7 +127,7 @@ impl Binop for RotateLeft {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
         let shift = b.low_u32() % 256;
-        let result = *a << shift | *a >> (256 - shift);
+        let result = (*a << shift) | (*a >> (256 - shift));
         (result, (), Flags::new(false, result.is_zero(), false))
     }
     type Out2 = ();
@@ -137,7 +137,7 @@ impl Binop for RotateRight {
     #[inline(always)]
     fn perform(a: &U256, b: &U256) -> (U256, (), Flags) {
         let shift = b.low_u32() % 256;
-        let result = *a >> shift | *a << (256 - shift);
+        let result = (*a >> shift) | (*a << (256 - shift));
         (result, (), Flags::new(false, result.is_zero(), false))
     }
     type Out2 = ();
