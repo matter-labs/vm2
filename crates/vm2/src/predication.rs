@@ -31,7 +31,7 @@ pub enum Predicate {
     /// Execute the associated instruction if either of "less than" or "equal" execution flags are set.
     IfLE = LT_BIT | EQ_BIT,
     /// Execute the associated instruction if the "equal" execution flag is not set.
-    IfNotEQ = EQ_BIT << 4 | ALWAYS_BIT,
+    IfNotEQ = (EQ_BIT << 4) | ALWAYS_BIT,
     /// Execute the associated instruction if either of "less than" or "greater than" execution flags are set.
     IfGTOrLT = GT_BIT | LT_BIT,
 }

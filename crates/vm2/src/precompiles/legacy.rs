@@ -160,7 +160,7 @@ mod tests {
         let address_digest = sha3::Keccak256::digest(encoded_key);
         let address_u256 = U256::from_big_endian(&address_digest);
         // Mask out upper bytes of the hash.
-        address_u256 & U256::MAX >> (256 - 160)
+        address_u256 & (U256::MAX >> (256 - 160))
     }
 
     fn test_keccak_precompile(input: &[u8], initial_offset: u32) -> Result<(), TestCaseError> {

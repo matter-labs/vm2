@@ -413,7 +413,7 @@ mod tests {
                     .map_or_else(U256::zero, |slot| slot.value);
                 let is_initial = initial_values
                     .get(key)
-                    .map_or(true, |slot| slot.is_write_initial);
+                    .is_none_or(|slot| slot.is_write_initial);
                 (
                     *key,
                     StorageChange {
@@ -443,7 +443,7 @@ mod tests {
                     .unwrap_or_default();
                 let is_initial = initial_values
                     .get(key)
-                    .map_or(true, |slot| slot.is_write_initial);
+                    .is_none_or(|slot| slot.is_write_initial);
                 (
                     *key,
                     StorageChange {
