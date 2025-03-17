@@ -148,10 +148,11 @@ pub(crate) fn grow_heap<T, W, H: HeapFromState>(
     state: &mut State<T, W>,
     new_bound: u32,
 ) -> Result<(), ()> {
-    let to_pay = new_bound.saturating_sub(*H::get_heap_size(state));
-    state.use_gas(to_pay)?;
+    if let Some(to_pay) = new_bound.checked_sub(*H::get_heap_size(state)) {
+        state.use_gas(to_pay)?;
+        *H::get_heap_size(state) = new_bound;
+    }
 
-    *H::get_heap_size(state) = new_bound;
     Ok(())
 }
 
