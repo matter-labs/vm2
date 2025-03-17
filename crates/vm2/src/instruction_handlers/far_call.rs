@@ -69,7 +69,7 @@ where
                 abi.is_constructor_call,
             );
 
-            let maybe_calldata = get_far_call_calldata(raw_abi, raw_abi_is_pointer, vm);
+            let maybe_calldata = get_calldata(raw_abi, raw_abi_is_pointer, vm);
 
             // mandated gas is passed even if it means transferring more than the 63/64 rule allows
             if let Some(gas_left) = vm.state.current_frame.gas.checked_sub(mandated_gas) {
@@ -169,7 +169,7 @@ fn get_far_call_arguments(abi: U256) -> FarCallABI {
 ///
 /// This function needs to be called even if we already know we will panic because
 /// overflowing start + length makes the heap resize even when already panicking.
-pub(crate) fn get_far_call_calldata<T, W>(
+pub(crate) fn get_calldata<T, W>(
     raw_abi: U256,
     is_pointer: bool,
     vm: &mut VirtualMachine<T, W>,
@@ -188,22 +188,30 @@ pub(crate) fn get_far_call_calldata<T, W>(
             pointer.narrow();
         }
         FatPointerSource::MakeNewPointer(target) => {
-            if is_pointer || pointer.offset != 0 {
+            let mut grow = |size| {
+                match target {
+                    FatPointerTarget::ToHeap => {
+                        grow_heap::<_, _, Heap>(&mut vm.state, size).ok()?;
+                        pointer.memory_page = vm.state.current_frame.heap;
+                    }
+                    FatPointerTarget::ToAuxHeap => {
+                        grow_heap::<_, _, AuxHeap>(&mut vm.state, size).ok()?;
+                        pointer.memory_page = vm.state.current_frame.aux_heap;
+                    }
+                }
+                Some(())
+            };
+
+            // A pointer whose start + length > u32::MAX always causes the heap to grow,
+            // even if it doesn't fullfill any other validity criteria.
+            if let Some(bound) = pointer.start.checked_add(pointer.length) {
+                if is_pointer || pointer.offset != 0 {
+                    return None;
+                }
+                grow(bound)?;
+            } else {
+                grow(u32::MAX);
                 return None;
-            }
-            let bound = pointer
-                .start
-                .checked_add(pointer.length)
-                .unwrap_or(u32::MAX);
-            match target {
-                FatPointerTarget::ToHeap => {
-                    grow_heap::<_, _, Heap>(&mut vm.state, bound).ok()?;
-                    pointer.memory_page = vm.state.current_frame.heap;
-                }
-                FatPointerTarget::ToAuxHeap => {
-                    grow_heap::<_, _, AuxHeap>(&mut vm.state, bound).ok()?;
-                    pointer.memory_page = vm.state.current_frame.aux_heap;
-                }
             }
         }
     }

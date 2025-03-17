@@ -6,7 +6,7 @@ use zksync_vm2_interface::{
 
 use super::{
     common::full_boilerplate,
-    far_call::get_far_call_calldata,
+    far_call::get_calldata,
     monomorphization::{match_boolean, monomorphize, parameterize},
 };
 use crate::{
@@ -44,7 +44,7 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
             None
         } else {
             let (raw_abi, is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
-            let result = get_far_call_calldata(raw_abi, is_pointer, vm).filter(|pointer| {
+            let result = get_calldata(raw_abi, is_pointer, vm).filter(|pointer| {
                 vm.state.current_frame.is_kernel
                     || pointer.memory_page != vm.state.current_frame.calldata_heap
             });
