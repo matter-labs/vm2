@@ -30,9 +30,9 @@ primitive-types = "0.12.1"
 proptest = "1.4"
 
 # "Internal" dependencies
-zkevm_opcode_defs = "0.150.0"
-zk_evm_abstractions = "0.150.0"
-zk_evm = "0.150.5"
+zkevm_opcode_defs = "0.151.0"
+zk_evm_abstractions = "0.151.0"
+zk_evm = "0.151.3"
 
 # Dependencies within the workspace
 zksync_vm2_interface = { version = "0.3.0", path = "crates/vm2-interface" }
