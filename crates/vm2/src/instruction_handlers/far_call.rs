@@ -69,7 +69,11 @@ where
                 abi.is_constructor_call,
             );
 
-            let maybe_calldata = get_calldata(raw_abi, raw_abi_is_pointer, vm);
+            // calldata has to be constructed even if we already know we will panic because
+            // overflowing start + length makes the heap resize even when already panicking.
+            let already_failed = decommit_result.is_none() || IS_SHARD && abi.shard_id != 0;
+
+            let maybe_calldata = get_calldata(raw_abi, raw_abi_is_pointer, vm, already_failed);
 
             // mandated gas is passed even if it means transferring more than the 63/64 rule allows
             if let Some(gas_left) = vm.state.current_frame.gas.checked_sub(mandated_gas) {
@@ -173,6 +177,7 @@ pub(crate) fn get_calldata<T, W>(
     raw_abi: U256,
     is_pointer: bool,
     vm: &mut VirtualMachine<T, W>,
+    already_failed: bool,
 ) -> Option<FatPointer> {
     let mut pointer = FatPointer::from(raw_abi);
     #[allow(clippy::cast_possible_truncation)]
@@ -205,7 +210,7 @@ pub(crate) fn get_calldata<T, W>(
             // A pointer whose start + length > u32::MAX always causes the heap to grow,
             // even if it doesn't fullfill any other validity criteria.
             if let Some(bound) = pointer.start.checked_add(pointer.length) {
-                if is_pointer || pointer.offset != 0 {
+                if is_pointer || pointer.offset != 0 || already_failed {
                     return None;
                 }
                 grow(bound)?;
