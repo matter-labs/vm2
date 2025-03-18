@@ -116,7 +116,7 @@ fn zk_evm_state_to_universal(vm: &VmLocalState<8, EncodingModeProduction>) -> Un
     // zk_evm's far call sometimes passes calldata even if it intends to immediately panic
     // I refuse to copy that "feature", so I have to silence that difference.
     if result.will_panic {
-        for register in result.registers.iter_mut() {
+        for register in &mut result.registers {
             register.0 = U256::zero();
         }
     }
