@@ -94,7 +94,7 @@ fn zk_evm_state_to_universal(vm: &VmLocalState<8, EncodingModeProduction>) -> Un
         }
     }
 
-    let mut result = UniversalVmState {
+    UniversalVmState {
         registers: vm
             .registers
             .iter()
@@ -111,17 +111,7 @@ fn zk_evm_state_to_universal(vm: &VmLocalState<8, EncodingModeProduction>) -> Un
         context_u128: vm.context_u128_register,
         frames,
         will_panic: vm.pending_exception,
-    };
-
-    // zk_evm's far call sometimes passes calldata even if it intends to immediately panic
-    // I refuse to copy that "feature", so I have to silence that difference.
-    if result.will_panic {
-        for register in &mut result.registers {
-            register.0 = U256::zero();
-        }
     }
-
-    result
 }
 
 fn zk_evm_frame_to_universal(frame: &CallStackEntry) -> UniversalVmFrame {
