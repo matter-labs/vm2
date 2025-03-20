@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/matter-labs/vm2/compare/v0.3.0...v0.3.1) (2025-03-20)
+
+
+### Bug Fixes
+
+* don't grow heap unless it is paid for ([#74](https://github.com/matter-labs/vm2/issues/74)) ([8311047](https://github.com/matter-labs/vm2/commit/831104788ad8250158a6e45b85ebd0a7157510d9))
+
 ## [0.3.0](https://github.com/matter-labs/vm2/compare/v0.2.1...v0.3.0) (2025-01-27)
 
 
