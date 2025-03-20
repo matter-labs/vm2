@@ -85,7 +85,7 @@ impl<T: Tracer, W: World<T>> Program<T, W> {
 
     pub(crate) fn new_panicking() -> Self {
         Self {
-            raw_first_instruction: 0,
+            raw_first_instruction: 0xBAD,
             first_instruction: MockRead::new(Rc::new([
                 Instruction::from_spontaneous_panic(),
                 Instruction::from_invalid(),

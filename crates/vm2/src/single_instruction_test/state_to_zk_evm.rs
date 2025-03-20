@@ -52,7 +52,8 @@ pub(crate) fn vm2_state_to_zk_evm_state<T: Tracer, W: World<T>>(
         memory_page_counter: 3000,
         absolute_execution_step: 0,
         tx_number_in_block: state.transaction_number,
-        pending_exception: state.current_frame.pc == spontaneous_panic(),
+        pending_exception: state.current_frame.pc == spontaneous_panic()
+            || state.current_frame.program.raw_first_instruction == 0xBAD,
         previous_super_pc: 0, // Same as current pc so the instruction is read from previous_code_word
         context_u128_register: state.context_u128,
         callstack: Callstack {

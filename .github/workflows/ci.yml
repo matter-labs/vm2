@@ -42,7 +42,7 @@ jobs:
           cargo build --workspace --all-targets --exclude zksync_vm2_afl_fuzz
 
       - name: Build fuzzer
-        run: cargo afl build -p zksync_vm2_afl_fuzz
+        run: cargo afl build -p zksync_vm2_afl_fuzz --release
 
       # Two runs are needed. One for normal VM, another for the mocked version
       - name: Run clippy
@@ -67,7 +67,14 @@ jobs:
       - name: Run fuzzer for a bit
         run: |
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-          cargo afl fuzz -i tests/afl-fuzz/in -o tests/afl-fuzz/out -V 60 target/debug/zksync_vm2_afl_fuzz
+          cargo afl fuzz -i tests/afl-fuzz/in -o tests/afl-fuzz/out -V 60 -g $(cargo run --bin check_input_size) target/release/zksync_vm2_afl_fuzz
+
+      - name: Fail if the fuzzer found a crash
+        run: |
+          if [ -n "$(ls tests/afl-fuzz/out/default/crashes)" ]; then
+            cd tests/afl-fuzz/ && sh show_crash.sh;
+            exit 1
+          fi
 
   document:
     needs:

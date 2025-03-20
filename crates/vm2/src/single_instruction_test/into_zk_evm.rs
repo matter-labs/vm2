@@ -7,7 +7,7 @@ use zk_evm::{
     block_properties::BlockProperties,
     reference_impls::event_sink::InMemoryEventSink,
     tracing,
-    vm_state::VmState,
+    vm_state::{Version, VmState},
     witness_trace::VmWitnessTracer,
 };
 use zk_evm_abstractions::vm::EventSink;
@@ -39,7 +39,7 @@ pub fn vm2_to_zk_evm<T: Tracer, W: World<T>>(
         local_state: vm2_state_to_zk_evm_state(&vm.state),
         block_properties: BlockProperties {
             default_aa_code_hash: U256::from_big_endian(&vm.settings.default_aa_code_hash),
-            evm_simulator_code_hash: U256::from_big_endian(&vm.settings.evm_interpreter_code_hash),
+            evm_emulator_code_hash: U256::from_big_endian(&vm.settings.evm_interpreter_code_hash),
             zkporter_is_available: false,
         },
         storage: MockWorldWrapper(world),
@@ -53,6 +53,7 @@ pub fn vm2_to_zk_evm<T: Tracer, W: World<T>>(
         precompiles_processor: NoOracle,
         decommittment_processor: MockDecommitter,
         witness_tracer: NoOracle,
+        version: Version::Version27,
     }
 }
 

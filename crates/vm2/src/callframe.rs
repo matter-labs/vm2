@@ -1,7 +1,9 @@
 use std::{mem, ptr};
 
 use primitive_types::H160;
-use zkevm_opcode_defs::system_params::{NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND};
+use zkevm_opcode_defs::system_params::{
+    NEW_EVM_FRAME_MEMORY_STIPEND, NEW_FRAME_MEMORY_STIPEND, NEW_KERNEL_FRAME_MEMORY_STIPEND,
+};
 use zksync_vm2_interface::{HeapId, Tracer};
 
 use crate::{
@@ -12,9 +14,6 @@ use crate::{
     world_diff::Snapshot,
     Instruction, World,
 };
-
-// FIXME: use `zkevm_opcode_defs::system_params` once it's released
-const NEW_EVM_FRAME_MEMORY_STIPEND: u32 = 56 << 10;
 
 #[derive(Debug)]
 pub(crate) struct Callframe<T, W> {

@@ -74,21 +74,18 @@ fn load<T: Tracer, W: World<T>, H: HeapFromState, In: Source, const INCREMENT: b
         // They will panic, though because they are larger than 2^32.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
 
-        let address = pointer.low_u32();
-
-        let new_bound = address.wrapping_add(32);
-        if grow_heap::<_, _, H>(&mut vm.state, new_bound).is_err() {
-            vm.state.current_frame.pc = spontaneous_panic();
-            return;
-        };
-
-        // The heap is always grown even when the index nonsensical.
-        // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
         if bigger_than_last_address(pointer) {
             let _ = vm.state.use_gas(u32::MAX);
             vm.state.current_frame.pc = spontaneous_panic();
             return;
         }
+
+        let address = pointer.low_u32();
+        let new_bound = address.wrapping_add(32);
+        if grow_heap::<_, _, H>(&mut vm.state, new_bound).is_err() {
+            vm.state.current_frame.pc = spontaneous_panic();
+            return;
+        };
 
         let heap = H::get_heap(&vm.state);
         let value = vm.state.heaps[heap].read_u256(address);
@@ -115,19 +112,17 @@ where
         // They will panic, though because they are larger than 2^32.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
 
+        if bigger_than_last_address(pointer) {
+            let _ = vm.state.use_gas(u32::MAX);
+            vm.state.current_frame.pc = spontaneous_panic();
+            return ExecutionStatus::Running;
+        }
+
         let address = pointer.low_u32();
         let value = Register2::get(args, &mut vm.state);
 
         let new_bound = address.wrapping_add(32);
         if grow_heap::<_, _, H>(&mut vm.state, new_bound).is_err() {
-            vm.state.current_frame.pc = spontaneous_panic();
-            return ExecutionStatus::Running;
-        }
-
-        // The heap is always grown even when the index nonsensical.
-        // TODO PLA-974 revert to not growing the heap on failure as soon as zk_evm is fixed
-        if bigger_than_last_address(pointer) {
-            let _ = vm.state.use_gas(u32::MAX);
             vm.state.current_frame.pc = spontaneous_panic();
             return ExecutionStatus::Running;
         }
@@ -153,11 +148,9 @@ pub(crate) fn grow_heap<T, W, H: HeapFromState>(
     state: &mut State<T, W>,
     new_bound: u32,
 ) -> Result<(), ()> {
-    let already_paid = H::get_heap_size(state);
-    if *already_paid < new_bound {
-        let to_pay = new_bound - *already_paid;
-        *already_paid = new_bound;
+    if let Some(to_pay) = new_bound.checked_sub(*H::get_heap_size(state)) {
         state.use_gas(to_pay)?;
+        *H::get_heap_size(state) = new_bound;
     }
 
     Ok(())
