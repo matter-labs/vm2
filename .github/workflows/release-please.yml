@@ -30,3 +30,4 @@ jobs:
       manifest: '.github/release-please/manifest.json' # Specify the path to the manifest file
       update-cargo-lock: true                          # Update Cargo.lock file
       publish-to-crates-io: true                       # Enable publishing to crates.io
+      cargo_build_args: '--workspace --exclude zksync_vm2_afl_fuzz' # Do not build fuzzer during publishing
