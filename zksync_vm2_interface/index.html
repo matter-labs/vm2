@@ -1,0 +1,83 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="EraVM Stable Interface"><title>zksync_vm2_interface - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-970bf1bf55bd1c15.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="zksync_vm2_interface" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (28a58f2fa 2024-07-31)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-f9142fe437216fc3.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../zksync_vm2_interface/index.html">zksync_<wbr>vm2_<wbr>interface</a><span class="version">0.3.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section><ul class="block"><li><a href="#modules">Modules</a></li><li><a href="#structs">Structs</a></li><li><a href="#enums">Enums</a></li><li><a href="#traits">Traits</a></li></ul></section></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <a class="mod" href="#">zksync_vm2_interface</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../src/zksync_vm2_interface/lib.rs.html#1-98">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="eravm-stable-interface"><a class="doc-anchor" href="#eravm-stable-interface">§</a>EraVM Stable Interface</h2>
+<p>This crate defines an interface for tracers that will never change but may be extended.
+To be precise, a tracer using this interface will work in any VM written against that
+version or a newer one. Updating the tracer to depend on a newer interface version is
+not necessary. In fact, tracers should depend on the oldest version that has the required
+features.</p>
+<p>A struct implementing <a href="trait.Tracer.html" title="trait zksync_vm2_interface::Tracer"><code>Tracer</code></a> may read and mutate the VM’s state via <a href="trait.StateInterface.html" title="trait zksync_vm2_interface::StateInterface"><code>StateInterface</code></a>
+when particular opcodes are executed.</p>
+<h3 id="why-is-extreme-backwards-compatibility-required-here"><a class="doc-anchor" href="#why-is-extreme-backwards-compatibility-required-here">§</a>Why is extreme backwards compatibility required here?</h3>
+<p>Suppose VM1 uses stable interface version 1 and VM2 uses stable interface version 2.
+With any sane design it would be trivial to take a tracer written for version 1 and
+update it to work with version 2. However, then it can no longer be used with VM1.</p>
+<p>This exact thing caused us a lot of trouble when we put many versions of <code>zk_evm</code> in <code>multivm</code>.</p>
+<h3 id="how-do-i-add-a-new-feature-to-the-interface"><a class="doc-anchor" href="#how-do-i-add-a-new-feature-to-the-interface">§</a>How do I add a new feature to the interface?</h3>
+<p>Do not change the existing traits. In fact, you should delete existing code in the new
+version that you publish and import it from the previous version instead.</p>
+<p>This is how you would add a new method to <a href="trait.StateInterface.html" title="trait zksync_vm2_interface::StateInterface"><code>StateInterface</code></a> and a new opcode.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>zksync_vm2_interface_v1::{
+    StateInterface <span class="kw">as </span>StateInterfaceV1, GlobalStateInterface <span class="kw">as </span>GlobalStateInterfaceV1, Tracer <span class="kw">as </span>TracerV1, opcodes::NearCall,
+    ShouldStop,
+};
+
+<span class="kw">trait </span>StateInterface: StateInterfaceV1 {
+    <span class="kw">fn </span>get_some_new_field(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32;
+}
+
+<span class="kw">trait </span>GlobalStateInterface: StateInterface + GlobalStateInterfaceV1 {}
+
+<span class="kw">pub struct </span>NewOpcode;
+
+<span class="attr">#[derive(PartialEq, Eq)]
+</span><span class="kw">enum </span>Opcode {
+    NewOpcode,
+    NearCall,
+    <span class="comment">// ...
+</span>}
+
+<span class="kw">trait </span>OpcodeType {
+    <span class="kw">const </span>VALUE: Opcode;
+}
+
+<span class="kw">impl </span>OpcodeType <span class="kw">for </span>NewOpcode {
+    <span class="kw">const </span>VALUE: Opcode = Opcode::NewOpcode;
+}
+
+<span class="comment">// Do this for every old opcode
+</span><span class="kw">impl </span>OpcodeType <span class="kw">for </span>NearCall {
+    <span class="kw">const </span>VALUE: Opcode = Opcode::NearCall;
+}
+
+<span class="kw">trait </span>Tracer {
+    <span class="kw">fn </span>before_instruction&lt;OP: OpcodeType, S: GlobalStateInterface&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, state: <span class="kw-2">&amp;mut </span>S) {}
+    <span class="kw">fn </span>after_instruction&lt;OP: OpcodeType, S: GlobalStateInterface&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, state: <span class="kw-2">&amp;mut </span>S) -&gt; ShouldStop {
+        ShouldStop::Continue
+    }
+}
+
+<span class="kw">impl</span>&lt;T: TracerV1&gt; Tracer <span class="kw">for </span>T {
+    <span class="kw">fn </span>before_instruction&lt;OP: OpcodeType, S: GlobalStateInterface&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, state: <span class="kw-2">&amp;mut </span>S) {
+        <span class="kw">match </span>OP::VALUE {
+            Opcode::NewOpcode =&gt; {}
+            <span class="comment">// Do this for every old opcode
+            </span>Opcode::NearCall =&gt; {
+                &lt;<span class="self">Self </span><span class="kw">as </span>TracerV1&gt;::before_instruction::&lt;NearCall, <span class="kw">_</span>&gt;(<span class="self">self</span>, state)
+            }
+        }
+    }
+    <span class="kw">fn </span>after_instruction&lt;OP: OpcodeType, S: GlobalStateInterface&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, state: <span class="kw-2">&amp;mut </span>S) -&gt; ShouldStop {
+        <span class="macro">todo!</span>()
+    }
+}
+
+<span class="comment">// Now you can use the new features by implementing TracerV2
+</span><span class="kw">struct </span>MyTracer;
+<span class="kw">impl </span>Tracer <span class="kw">for </span>MyTracer {
+    <span class="kw">fn </span>before_instruction&lt;OP: OpcodeType, S: GlobalStateInterface&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, state: <span class="kw-2">&amp;mut </span>S) {
+        <span class="kw">if </span>OP::VALUE == Opcode::NewOpcode {
+            state.get_some_new_field();
+        }
+    }
+}</code></pre></div>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="mod" href="opcodes/index.html" title="mod zksync_vm2_interface::opcodes">opcodes</a></div><div class="desc docblock-short">EraVM opcodes.</div></li></ul><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="struct" href="struct.Event.html" title="struct zksync_vm2_interface::Event">Event</a></div><div class="desc docblock-short">Event emitted by EraVM.</div></li><li><div class="item-name"><a class="struct" href="struct.Flags.html" title="struct zksync_vm2_interface::Flags">Flags</a></div><div class="desc docblock-short">VM execution flags. See the EraVM reference for more details.</div></li><li><div class="item-name"><a class="struct" href="struct.HeapId.html" title="struct zksync_vm2_interface::HeapId">HeapId</a></div><div class="desc docblock-short">Identifier of a VM heap.</div></li><li><div class="item-name"><a class="struct" href="struct.L2ToL1Log.html" title="struct zksync_vm2_interface::L2ToL1Log">L2To<wbr>L1Log</a></div><div class="desc docblock-short">L2-to-L1 log emitted by EraVM.</div></li></ul><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="enum" href="enum.CallingMode.html" title="enum zksync_vm2_interface::CallingMode">Calling<wbr>Mode</a></div><div class="desc docblock-short">All supported calling modes for <a href="opcodes/struct.FarCall.html" title="struct zksync_vm2_interface::opcodes::FarCall"><code>FarCall</code></a> opcode.</div></li><li><div class="item-name"><a class="enum" href="enum.CycleStats.html" title="enum zksync_vm2_interface::CycleStats">Cycle<wbr>Stats</a></div><div class="desc docblock-short">Cycle statistics emitted by the VM and supplied to <a href="trait.Tracer.html#method.on_extra_prover_cycles" title="method zksync_vm2_interface::Tracer::on_extra_prover_cycles"><code>Tracer::on_extra_prover_cycles()</code></a>.</div></li><li><div class="item-name"><a class="enum" href="enum.Opcode.html" title="enum zksync_vm2_interface::Opcode">Opcode</a></div><div class="desc docblock-short">All supported EraVM opcodes in a single enumeration.</div></li><li><div class="item-name"><a class="enum" href="enum.ReturnType.html" title="enum zksync_vm2_interface::ReturnType">Return<wbr>Type</a></div><div class="desc docblock-short">All supported return types for the <a href="opcodes/struct.Ret.html" title="struct zksync_vm2_interface::opcodes::Ret"><code>Ret</code></a> opcode.</div></li><li><div class="item-name"><a class="enum" href="enum.ShouldStop.html" title="enum zksync_vm2_interface::ShouldStop">Should<wbr>Stop</a></div><div class="desc docblock-short">Returned from <a href="trait.Tracer.html#method.after_instruction" title="method zksync_vm2_interface::Tracer::after_instruction"><code>Tracer::after_instruction</code></a> to indicate if the VM should stop.</div></li></ul><h2 id="traits" class="section-header">Traits<a href="#traits" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="trait" href="trait.CallframeInterface.html" title="trait zksync_vm2_interface::CallframeInterface">Callframe<wbr>Interface</a></div><div class="desc docblock-short">Public interface of an EraVM call frame.</div></li><li><div class="item-name"><a class="trait" href="trait.GlobalStateInterface.html" title="trait zksync_vm2_interface::GlobalStateInterface">Global<wbr>State<wbr>Interface</a></div><div class="desc docblock-short">State interface with access to global state like storage.</div></li><li><div class="item-name"><a class="trait" href="trait.OpcodeType.html" title="trait zksync_vm2_interface::OpcodeType">Opcode<wbr>Type</a></div><div class="desc docblock-short">Trait mapping opcodes as types to the corresponding variants of the <a href="enum.Opcode.html" title="enum zksync_vm2_interface::Opcode"><code>Opcode</code></a> enum.</div></li><li><div class="item-name"><a class="trait" href="trait.StateInterface.html" title="trait zksync_vm2_interface::StateInterface">State<wbr>Interface</a></div><div class="desc docblock-short">Public interface of the VM state. Encompasses both read and write methods.</div></li><li><div class="item-name"><a class="trait" href="trait.Tracer.html" title="trait zksync_vm2_interface::Tracer">Tracer</a></div><div class="desc docblock-short">EraVM instruction tracer.</div></li></ul></section></div></main></body></html>
