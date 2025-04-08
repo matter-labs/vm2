@@ -319,6 +319,14 @@ pub enum CycleStats {
     StorageRead,
     /// Writing a slot to the VM storage.
     StorageWrite,
+    /// Call to the `ModExp` precompile
+    ModExp(u32),
+    /// Call to the `EcAdd` precompile
+    EcAdd(u32),
+    /// Call to the `EcMul` precompile
+    EcMul(u32),
+    /// Call to the `EcPairing` precompile
+    EcPairing(u32),
 }
 
 /// No-op tracer implementation.

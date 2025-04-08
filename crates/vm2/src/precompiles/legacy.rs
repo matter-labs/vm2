@@ -2,16 +2,13 @@ use primitive_types::{H160, U256};
 use zk_evm_abstractions::{
     aux::Timestamp,
     precompiles::{
-        ecrecover::ecrecover_function, keccak256::keccak256_rounds_function,
-        secp256r1_verify::secp256r1_verify_function, sha256::sha256_rounds_function,
+        ecadd::ecadd_function, ecmul::ecmul_function, ecpairing::ecpairing_function, ecrecover::ecrecover_function, keccak256::keccak256_rounds_function, modexp::modexp_function, secp256r1_verify::secp256r1_verify_function, sha256::sha256_rounds_function
     },
     queries::{LogQuery, MemoryQuery},
     vm::Memory,
 };
 use zkevm_opcode_defs::{
-    PrecompileCallABI, ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS,
-    KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS, SECP256R1_VERIFY_PRECOMPILE_ADDRESS,
-    SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
+    PrecompileCallABI, ECADD_PRECOMPILE_ADDRESS, ECMUL_PRECOMPILE_ADDRESS, ECPAIRING_PRECOMPILE_ADDRESS, ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS, KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS, MODEXP_PRECOMPILE_ADDRESS, SECP256R1_VERIFY_PRECOMPILE_ADDRESS, SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS
 };
 use zksync_vm2_interface::CycleStats;
 
@@ -125,6 +122,26 @@ impl Precompiles for LegacyPrecompiles {
                 let cycles = secp256r1_verify_function::<_, false>(0, query, &mut io).0;
                 io.output
                     .with_cycle_stats(CycleStats::Secp256r1Verify(cycles as u32))
+            }
+            MODEXP_PRECOMPILE_ADDRESS => {
+                let cycles = modexp_function::<_, false>(0, query, &mut io).0;
+                io.output
+                    .with_cycle_stats(CycleStats::ModExp(cycles as u32))
+            }
+            ECADD_PRECOMPILE_ADDRESS => {
+                let cycles = ecadd_function::<_, false>(0, query, &mut io).0;
+                io.output
+                    .with_cycle_stats(CycleStats::EcAdd(cycles as u32))
+            }
+            ECMUL_PRECOMPILE_ADDRESS => {
+                let cycles = ecmul_function::<_, false>(0, query, &mut io).0;
+                io.output
+                    .with_cycle_stats(CycleStats::EcMul(cycles as u32))
+            }
+            ECPAIRING_PRECOMPILE_ADDRESS => {
+                let cycles = ecpairing_function::<_, false>(0, query, &mut io).0;
+                io.output
+                    .with_cycle_stats(CycleStats::EcPairing(cycles as u32))
             }
             _ => PrecompileOutput::default(),
         }
