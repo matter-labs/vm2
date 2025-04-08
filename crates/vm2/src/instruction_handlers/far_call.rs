@@ -83,7 +83,7 @@ where
                 vm.state.current_frame.gas = 0;
                 mandated_gas = 0;
                 return None;
-            };
+            }
 
             if IS_SHARD && abi.shard_id != 0 {
                 return None;
