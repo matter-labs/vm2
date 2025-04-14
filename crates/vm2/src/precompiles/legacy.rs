@@ -71,12 +71,12 @@ impl Memory for LegacyIo<'_> {
         _monotonic_cycle_counter: u32,
         mut query: MemoryQuery,
     ) -> MemoryQuery {
-        let start_word = query.location.index.0;
+        let start_word = query.location.index.0 as usize;
         if query.rw_flag {
-            if self.output.buffer.len() <= start_word as usize {
-                self.output.buffer.resize(start_word + 1, U256::zero());
+            while self.output.buffer.len() <= start_word {
+                self.output.buffer.push(U256::zero());
             }
-            self.output.buffer[start_word as usize] = query.value;
+            self.output.buffer[start_word] = query.value;
             self.output.len = self.output.len.max(start_word + 1);
         } else {
             query.value = self.input.heap.read_u256(start_word * 32);
