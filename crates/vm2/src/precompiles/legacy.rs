@@ -73,11 +73,12 @@ impl Memory for LegacyIo<'_> {
     ) -> MemoryQuery {
         let start_word = query.location.index.0;
         if query.rw_flag {
-            assert!(start_word < 2, "standard precompiles never write >2 words");
+            if self.output.buffer.len() <= start_word as usize {
+                self.output.buffer.resize(start_word + 1, U256::zero());
+            }
             self.output.buffer[start_word as usize] = query.value;
             self.output.len = self.output.len.max(start_word + 1);
         } else {
-            // Access `Heap` directly for a speed-up
             query.value = self.input.heap.read_u256(start_word * 32);
             query.value_is_pointer = false;
         }
