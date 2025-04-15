@@ -75,7 +75,8 @@ impl Memory for LegacyIo<'_> {
         println!("{:?}", query.value);
         let start_word = query.location.index.0;
         if query.rw_flag {
-            // assert!(start_word < 2, "standard precompiles never write >2 words");
+            assert!(start_word < 3, "standard precompiles never write >3 words");
+            // start_word == 2 only for EcAdd and EcMul precompiles
             if start_word == 2 {
                 self.output.buffer[0] = self.output.buffer[1];
                 self.output.buffer[1] = query.value;
