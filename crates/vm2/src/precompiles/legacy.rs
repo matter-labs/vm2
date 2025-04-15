@@ -71,7 +71,7 @@ impl Memory for LegacyIo<'_> {
         _monotonic_cycle_counter: u32,
         mut query: MemoryQuery,
     ) -> MemoryQuery {
-        println!("{:?}", query);adsa
+        println!("{:?}", query);
         println!("{:?}", query.value);
         let start_word = query.location.index.0;
         if query.rw_flag {
