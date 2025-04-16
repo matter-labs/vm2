@@ -89,11 +89,17 @@ impl From<U256> for PrecompileOutput {
     }
 }
 
-impl From<[U256; 3]> for PrecompileOutput {
-    fn from(value: [U256; 3]) -> Self {
+impl<const N: usize> From<[U256; N]> for PrecompileOutput 
+where
+    [U256; N]: Default,
+{
+    fn from(value: [U256; N]) -> Self {
+        let mut buffer = [U256::zero(); 3];
+        buffer[..N].copy_from_slice(&value[..N]);
+        
         Self {
-            buffer: value,
-            len: 3,
+            buffer,
+            len: N as u32,
             cycle_stats: None,
         }
     }
