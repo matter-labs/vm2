@@ -80,8 +80,8 @@ impl Memory for LegacyIo<'_> {
             //     self.output.buffer[1] = query.value;
             //     self.output.len = self.output.len.max(start_word);
             // } else {
-                self.output.buffer[start_word as usize] = query.value;
-                self.output.len = self.output.len.max(start_word + 1);
+            self.output.buffer[start_word as usize] = query.value;
+            self.output.len = self.output.len.max(start_word + 1);
             // }
         } else {
             // Access `Heap` directly for a speed-up

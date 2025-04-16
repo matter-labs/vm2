@@ -281,7 +281,7 @@ impl<T, W> PartialEq for Callframe<T, W> {
             && self.sp == other.sp
             && self.gas == other.gas
             && self.near_calls == other.near_calls
-            && self.pc == other.pc
+            && std::ptr::eq(self.pc, other.pc)
             && self.program == other.program
             && self.heap == other.heap
             && self.aux_heap == other.aux_heap
