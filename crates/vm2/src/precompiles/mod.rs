@@ -65,7 +65,7 @@ impl ExactSizeIterator for PrecompileMemoryReader<'_> {
 /// Output of a precompile call returned from [`Precompiles::call_precompile()`].
 #[derive(Debug, Default)]
 pub struct PrecompileOutput {
-    pub(crate) buffer: [U256; 2],
+    pub(crate) buffer: [U256; 3],
     pub(crate) len: u32,
     pub(crate) cycle_stats: Option<CycleStats>,
 }
@@ -82,18 +82,18 @@ impl PrecompileOutput {
 impl From<U256> for PrecompileOutput {
     fn from(value: U256) -> Self {
         Self {
-            buffer: [value, U256::zero()],
+            buffer: [value, U256::zero(), U256::zero()],
             len: 1,
             cycle_stats: None,
         }
     }
 }
 
-impl From<[U256; 2]> for PrecompileOutput {
-    fn from(value: [U256; 2]) -> Self {
+impl From<[U256; 3]> for PrecompileOutput {
+    fn from(value: [U256; 3]) -> Self {
         Self {
             buffer: value,
-            len: 2,
+            len: 3,
             cycle_stats: None,
         }
     }
