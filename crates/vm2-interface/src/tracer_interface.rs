@@ -313,6 +313,14 @@ pub enum CycleStats {
     EcRecover(u32),
     /// Call to the `secp256r1_verify` precompile with the specified number of hash cycles.
     Secp256r1Verify(u32),
+    /// Call to the `modexp` precompile took the specified number of cycles.
+    ModExp(u32),
+    /// Call to the `ecadd` precompile took the specified number of cycles.
+    EcAdd(u32),
+    /// Call to the `ecmul` precompile took the specified number of cycles.
+    EcMul(u32),
+    /// Call to the `ecpairing` precompile took the specified number of cycles.
+    EcPairing(u32),
     /// Decommitting an opcode.
     Decommit(u32),
     /// Reading a slot from the VM storage.

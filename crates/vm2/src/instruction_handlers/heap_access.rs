@@ -85,7 +85,7 @@ fn load<T: Tracer, W: World<T>, H: HeapFromState, In: Source, const INCREMENT: b
         if grow_heap::<_, _, H>(&mut vm.state, new_bound).is_err() {
             vm.state.current_frame.pc = spontaneous_panic();
             return;
-        };
+        }
 
         let heap = H::get_heap(&vm.state);
         let value = vm.state.heaps[heap].read_u256(address);
@@ -175,7 +175,7 @@ fn load_pointer<T: Tracer, W: World<T>, const INCREMENT: bool>(
         if pointer.offset > LAST_ADDRESS {
             vm.state.current_frame.pc = spontaneous_panic();
             return;
-        };
+        }
 
         let start = pointer.start + pointer.offset.min(pointer.length);
         let end = start.saturating_add(32).min(pointer.start + pointer.length);

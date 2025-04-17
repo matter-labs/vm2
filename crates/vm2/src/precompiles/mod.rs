@@ -65,7 +65,7 @@ impl ExactSizeIterator for PrecompileMemoryReader<'_> {
 /// Output of a precompile call returned from [`Precompiles::call_precompile()`].
 #[derive(Debug, Default)]
 pub struct PrecompileOutput {
-    pub(crate) buffer: [U256; 2],
+    pub(crate) buffer: [U256; 3],
     pub(crate) len: u32,
     pub(crate) cycle_stats: Option<CycleStats>,
 }
@@ -82,22 +82,33 @@ impl PrecompileOutput {
 impl From<U256> for PrecompileOutput {
     fn from(value: U256) -> Self {
         Self {
-            buffer: [value, U256::zero()],
+            buffer: [value, U256::zero(), U256::zero()],
             len: 1,
             cycle_stats: None,
         }
     }
 }
 
-impl From<[U256; 2]> for PrecompileOutput {
-    fn from(value: [U256; 2]) -> Self {
-        Self {
-            buffer: value,
-            len: 2,
-            cycle_stats: None,
+macro_rules! impl_from_array_for_precompile_output {
+    ($n:tt) => {
+        impl From<[U256; $n]> for PrecompileOutput {
+            fn from(value: [U256; $n]) -> Self {
+                let mut buffer = [U256::zero(); 3];
+                buffer[..$n].copy_from_slice(&value[..$n]);
+
+                Self {
+                    buffer,
+                    len: $n,
+                    cycle_stats: None,
+                }
+            }
         }
-    }
+    };
 }
+
+// Implement for array sizes 2 and 3
+impl_from_array_for_precompile_output!(2);
+impl_from_array_for_precompile_output!(3);
 
 /// Encapsulates precompiles used during VM execution.
 pub trait Precompiles {

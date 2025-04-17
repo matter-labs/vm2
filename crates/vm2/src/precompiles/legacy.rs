@@ -2,11 +2,17 @@ use primitive_types::{H160, U256};
 use zk_evm_abstractions::{
     aux::Timestamp,
     precompiles::{
+        ecadd::ecadd_function, ecmul::ecmul_function, ecpairing::ecpairing_function,
         ecrecover::ecrecover_function, keccak256::keccak256_rounds_function,
-        secp256r1_verify::secp256r1_verify_function, sha256::sha256_rounds_function,
+        modexp::modexp_function, secp256r1_verify::secp256r1_verify_function,
+        sha256::sha256_rounds_function,
     },
     queries::{LogQuery, MemoryQuery},
     vm::Memory,
+    zkevm_opcode_defs::{
+        ECADD_PRECOMPILE_ADDRESS, ECMUL_PRECOMPILE_ADDRESS, ECPAIRING_PRECOMPILE_ADDRESS,
+        MODEXP_PRECOMPILE_ADDRESS,
+    },
 };
 use zkevm_opcode_defs::{
     PrecompileCallABI, ECRECOVER_INNER_FUNCTION_PRECOMPILE_ADDRESS,
@@ -67,7 +73,7 @@ impl Memory for LegacyIo<'_> {
     ) -> MemoryQuery {
         let start_word = query.location.index.0;
         if query.rw_flag {
-            assert!(start_word < 2, "standard precompiles never write >2 words");
+            assert!(start_word < 3, "standard precompiles never write >3 words");
             self.output.buffer[start_word as usize] = query.value;
             self.output.len = self.output.len.max(start_word + 1);
         } else {
@@ -125,6 +131,24 @@ impl Precompiles for LegacyPrecompiles {
                 let cycles = secp256r1_verify_function::<_, false>(0, query, &mut io).0;
                 io.output
                     .with_cycle_stats(CycleStats::Secp256r1Verify(cycles as u32))
+            }
+            MODEXP_PRECOMPILE_ADDRESS => {
+                let cycles = modexp_function::<_, false>(0, query, &mut io).0;
+                io.output
+                    .with_cycle_stats(CycleStats::ModExp(cycles as u32))
+            }
+            ECADD_PRECOMPILE_ADDRESS => {
+                let cycles = ecadd_function::<_, false>(0, query, &mut io).0;
+                io.output.with_cycle_stats(CycleStats::EcAdd(cycles as u32))
+            }
+            ECMUL_PRECOMPILE_ADDRESS => {
+                let cycles = ecmul_function::<_, false>(0, query, &mut io).0;
+                io.output.with_cycle_stats(CycleStats::EcMul(cycles as u32))
+            }
+            ECPAIRING_PRECOMPILE_ADDRESS => {
+                let cycles = ecpairing_function::<_, false>(0, query, &mut io).0;
+                io.output
+                    .with_cycle_stats(CycleStats::EcPairing(cycles as u32))
             }
             _ => PrecompileOutput::default(),
         }
@@ -311,7 +335,7 @@ mod tests {
 
         prop_assert_eq!(output.len, 2);
         let expected_address = key_to_address(signing_key.verifying_key());
-        let [is_success, address] = output.buffer;
+        let [is_success, address, _] = output.buffer;
         if mutation.is_some() {
             prop_assert_ne!(address, expected_address);
         } else {
@@ -416,7 +440,7 @@ mod tests {
             LegacyPrecompiles.call_precompile(SECP256R1_VERIFY_PRECOMPILE_ADDRESS, memory, 0);
 
         prop_assert_eq!(output.len, 2);
-        let [is_ok, is_verified] = output.buffer;
+        let [is_ok, is_verified, _] = output.buffer;
         if mutation.is_none() {
             prop_assert_eq!(is_ok, U256::one());
             prop_assert_eq!(is_verified, U256::one());
