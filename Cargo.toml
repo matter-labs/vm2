@@ -35,8 +35,8 @@ zk_evm_abstractions = "0.152.0"
 zk_evm = "0.152.0"
 
 # Dependencies within the workspace
-zksync_vm2_interface = { version = "0.3.0", path = "crates/vm2-interface" }
-zksync_vm2 = { version = "0.3.0", path = "crates/vm2" }
+zksync_vm2_interface = { version = "=0.4.0", path = "crates/vm2-interface" }
+zksync_vm2 = { version = "=0.4.0", path = "crates/vm2" }
 
 [workspace.lints.rust]
 missing_docs = "warn"
