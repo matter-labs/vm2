@@ -89,21 +89,26 @@ impl From<U256> for PrecompileOutput {
     }
 }
 
-impl<const N: usize> From<[U256; N]> for PrecompileOutput
-where
-    [U256; N]: Default,
-{
-    fn from(value: [U256; N]) -> Self {
-        let mut buffer = [U256::zero(); 3];
-        buffer[..N].copy_from_slice(&value[..N]);
+macro_rules! impl_from_array_for_precompile_output {
+    ($n:tt) => {
+        impl From<[U256; $n]> for PrecompileOutput {
+            fn from(value: [U256; $n]) -> Self {
+                let mut buffer = [U256::zero(); 3];
+                buffer[..$n].copy_from_slice(&value[..$n]);
 
-        Self {
-            buffer,
-            len: u32::try_from(N).expect("Not a valid length"),
-            cycle_stats: None,
+                Self {
+                    buffer,
+                    len: u32::try_from($n).expect("Not a valid length"),
+                    cycle_stats: None,
+                }
+            }
         }
-    }
+    };
 }
+
+// Implement for array sizes 2 and 3
+impl_from_array_for_precompile_output!(2);
+impl_from_array_for_precompile_output!(3);
 
 /// Encapsulates precompiles used during VM execution.
 pub trait Precompiles {

@@ -335,7 +335,7 @@ mod tests {
 
         prop_assert_eq!(output.len, 2);
         let expected_address = key_to_address(signing_key.verifying_key());
-        let [is_success, address, _address] = output.buffer;
+        let [is_success, address, _] = output.buffer;
         if mutation.is_some() {
             prop_assert_ne!(address, expected_address);
         } else {
