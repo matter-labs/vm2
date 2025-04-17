@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"zksync_vm2":[["impl&lt;const IN_WORDS: <a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.bool.html\">bool</a>&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/iter/traits/iterator/trait.Iterator.html\" title=\"trait core::iter::traits::iterator::Iterator\">Iterator</a> for <a class=\"struct\" href=\"zksync_vm2/precompiles/struct.PrecompileMemoryReader.html\" title=\"struct zksync_vm2::precompiles::PrecompileMemoryReader\">PrecompileMemoryReader</a>&lt;'_, IN_WORDS&gt;"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
