@@ -440,7 +440,7 @@ mod tests {
             LegacyPrecompiles.call_precompile(SECP256R1_VERIFY_PRECOMPILE_ADDRESS, memory, 0);
 
         prop_assert_eq!(output.len, 2);
-        let [is_ok, is_verified, _is_verified] = output.buffer;
+        let [is_ok, is_verified, _] = output.buffer;
         if mutation.is_none() {
             prop_assert_eq!(is_ok, U256::one());
             prop_assert_eq!(is_verified, U256::one());
