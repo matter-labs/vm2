@@ -98,7 +98,7 @@ macro_rules! impl_from_array_for_precompile_output {
 
                 Self {
                     buffer,
-                    len: u32::try_from($n).expect("Not a valid length"),
+                    len: $n,
                     cycle_stats: None,
                 }
             }
