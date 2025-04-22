@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/matter-labs/vm2/compare/v0.3.0...v0.4.0) (2025-04-17)
+
+
+### Features
+
+* Elliptic curve precompiles ([#87](https://github.com/matter-labs/vm2/issues/87)) ([81375f5](https://github.com/matter-labs/vm2/commit/81375f5a2037bd5ed76f25cd6bea4c908656386b))
+
+
+### Bug Fixes
+
+* don't grow heap unless it is paid for ([#74](https://github.com/matter-labs/vm2/issues/74)) ([8311047](https://github.com/matter-labs/vm2/commit/831104788ad8250158a6e45b85ebd0a7157510d9))
+
 ## [0.3.0](https://github.com/matter-labs/vm2/compare/v0.2.1...v0.3.0) (2025-01-27)
 
 
