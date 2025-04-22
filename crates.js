@@ -1,0 +1,1 @@
+window.ALL_CRATES = ["zksync_vm2","zksync_vm2_interface"];
