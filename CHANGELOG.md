@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/matter-labs/vm2/compare/v0.4.0...v0.5.0) (2025-10-20)
+
+
+### Features
+
+* update zk_evm crates to 0.153.0 ([#90](https://github.com/matter-labs/vm2/issues/90)) ([8142057](https://github.com/matter-labs/vm2/commit/8142057ae3f79ca0e3517260535e51f063d8fbfe))
+
 ## [0.4.0](https://github.com/matter-labs/vm2/compare/v0.3.0...v0.4.0) (2025-04-17)
 
 
