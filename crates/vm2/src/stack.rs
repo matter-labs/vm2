@@ -96,6 +96,7 @@ pub(crate) struct StackSnapshot {
     slots: Box<[U256]>,
 }
 
+#[allow(clippy::borrow_as_ptr)]
 impl Clone for Box<Stack> {
     fn clone(&self) -> Self {
         unsafe {
