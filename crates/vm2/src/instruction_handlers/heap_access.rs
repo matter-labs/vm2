@@ -17,7 +17,7 @@ use crate::{
     ExecutionEnd, Instruction, VirtualMachine, World,
 };
 
-/// Dedicated heap slot used to model zk_evm static memory.
+/// Dedicated heap slot used to model `zk_evm` static memory.
 ///
 /// `heap_id == 0` is otherwise unused by vm2 heap instructions and thus can safely back
 /// static memory without interfering with regular heap / calldata pages.
