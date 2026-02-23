@@ -67,6 +67,7 @@ where
                 vm.settings.default_aa_code_hash,
                 vm.settings.evm_interpreter_code_hash,
                 abi.is_constructor_call,
+                vm.state.transaction_number,
             );
 
             // calldata has to be constructed even if we already know we will panic because

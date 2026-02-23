@@ -18,9 +18,14 @@ fn sstore<T: Tracer, W: World<T>>(
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
 
-        let refund =
-            vm.world_diff
-                .write_storage(world, tracer, vm.state.current_frame.address, key, value);
+        let refund = vm.world_diff.write_storage(
+            world,
+            tracer,
+            vm.state.current_frame.address,
+            key,
+            value,
+            vm.state.transaction_number,
+        );
 
         assert!(refund <= SSTORE_COST);
         vm.state.current_frame.gas += refund;
@@ -49,9 +54,13 @@ fn sload<T: Tracer, W: World<T>>(
     boilerplate_ext::<opcodes::StorageRead, _, _>(vm, world, tracer, |vm, args, world, tracer| {
         let key = Register1::get(args, &mut vm.state);
 
-        let (value, refund) =
-            vm.world_diff
-                .read_storage(world, tracer, vm.state.current_frame.address, key);
+        let (value, refund) = vm.world_diff.read_storage(
+            world,
+            tracer,
+            vm.state.current_frame.address,
+            key,
+            vm.state.transaction_number,
+        );
 
         assert!(refund <= SLOAD_COST);
         vm.state.current_frame.gas += refund;

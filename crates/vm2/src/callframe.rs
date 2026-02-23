@@ -144,9 +144,9 @@ impl<T: Tracer, W: World<T>> Callframe<T, W> {
     pub(crate) fn get_raw_pc(&self) -> usize {
         // We cannot use `<*const _>::offset_from` because `self.pc` isn't guaranteed to be allocated within `self.program`
         // (invalid instructions and free panics aren't).
-        let offset_in_bytes =
-            self.pc as usize - ptr::from_ref(self.program.instruction(0).unwrap()) as usize;
-        offset_in_bytes / mem::size_of::<Instruction<T, W>>() as usize
+        let offset_in_bytes = (self.pc as usize)
+            .wrapping_sub(ptr::from_ref(self.program.instruction(0).unwrap()) as usize);
+        offset_in_bytes / mem::size_of::<Instruction<T, W>>()
     }
 
     // TODO: can overflow / underflow after an invalid instruction or free panic. Ordinarily, this will lead to VM termination (for an invalid instruction)

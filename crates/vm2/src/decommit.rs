@@ -15,6 +15,7 @@ impl WorldDiff {
         default_aa_code_hash: [u8; 32],
         evm_interpreter_code_hash: [u8; 32],
         is_constructor_call: bool,
+        tx_number_in_block: u16,
     ) -> Option<(UnpaidDecommit, bool)> {
         let deployer_system_contract_address =
             Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW.into());
@@ -27,6 +28,7 @@ impl WorldDiff {
                 tracer,
                 deployer_system_contract_address,
                 address,
+                tx_number_in_block,
             );
             let mut code_info_bytes = [0; 32];
             code_info.to_big_endian(&mut code_info_bytes);

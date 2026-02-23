@@ -61,8 +61,10 @@ impl WorldDiff {
         tracer: &mut impl Tracer,
         contract: H160,
         key: U256,
+        tx_number_in_block: u16,
     ) -> (U256, u32) {
-        let (value, newly_added) = self.read_storage_inner(world, tracer, contract, key);
+        let (value, newly_added) =
+            self.read_storage_inner(world, tracer, contract, key, tx_number_in_block);
         let refund = if !newly_added || world.is_free_storage_slot(&contract, &key) {
             WARM_READ_REFUND
         } else {
@@ -81,8 +83,10 @@ impl WorldDiff {
         tracer: &mut impl Tracer,
         contract: H160,
         key: U256,
+        tx_number_in_block: u16,
     ) -> U256 {
-        self.read_storage_inner(world, tracer, contract, key).0
+        self.read_storage_inner(world, tracer, contract, key, tx_number_in_block)
+            .0
     }
 
     fn read_storage_inner(
@@ -91,6 +95,7 @@ impl WorldDiff {
         tracer: &mut impl Tracer,
         contract: H160,
         key: U256,
+        tx_number_in_block: u16,
     ) -> (U256, bool) {
         let newly_added = self.read_storage_slots.add((contract, key));
         if newly_added {
@@ -101,13 +106,13 @@ impl WorldDiff {
         let value = self.just_read_storage(world, contract, key);
         self.storage_logs.push(LogQuery {
             timestamp: Timestamp(u32::try_from(self.storage_logs.len()).unwrap_or(u32::MAX)),
-            tx_number_in_block: 0,
+            tx_number_in_block,
             aux_byte: STORAGE_AUX_BYTE,
             shard_id: 0,
             address: contract,
             key,
             read_value: value,
-            written_value: U256::zero(),
+            written_value: value,
             rw_flag: false,
             rollback: false,
             is_service: false,
@@ -138,11 +143,12 @@ impl WorldDiff {
         contract: H160,
         key: U256,
         value: U256,
+        tx_number_in_block: u16,
     ) -> u32 {
         let read_value = self.just_read_storage(world, contract, key);
         let log_query = LogQuery {
             timestamp: Timestamp(u32::try_from(self.storage_logs.len()).unwrap_or(u32::MAX)),
-            tx_number_in_block: 0,
+            tx_number_in_block,
             aux_byte: STORAGE_AUX_BYTE,
             shard_id: 0,
             address: contract,
@@ -220,6 +226,9 @@ impl WorldDiff {
     }
 
     /// Returns all recorded storage log queries.
+    ///
+    /// These logs are sufficient for vm2 state-transition checks and diagnostics.
+    /// TODO: Fill all `zk_evm` witness metadata before using these queries to build prover witness data.
     pub fn storage_log_queries(&self) -> &[LogQuery] {
         &self.storage_logs
     }
@@ -466,7 +475,7 @@ mod tests {
 
         let checkpoint1 = world_diff.snapshot();
         for (key, value) in &first_changes {
-            world_diff.write_storage(&mut NoWorld, &mut (), key.0, key.1, *value);
+            world_diff.write_storage(&mut NoWorld, &mut (), key.0, key.1, *value, 0);
         }
         let actual_changes = world_diff
             .get_storage_changes_after(&checkpoint1)
@@ -494,7 +503,7 @@ mod tests {
 
         let checkpoint2 = world_diff.snapshot();
         for (key, value) in &second_changes {
-            world_diff.write_storage(&mut NoWorld, &mut (), key.0, key.1, *value);
+            world_diff.write_storage(&mut NoWorld, &mut (), key.0, key.1, *value, 0);
         }
         let actual_changes = world_diff
             .get_storage_changes_after(&checkpoint2)
@@ -680,12 +689,12 @@ mod tests {
         let contract = H160::zero();
         let key = U256::from(1);
 
-        let (value, _) = world_diff.read_storage(&mut world, &mut (), contract, key);
+        let (value, _) = world_diff.read_storage(&mut world, &mut (), contract, key, 0);
         assert_eq!(value, U256::zero());
 
-        world_diff.write_storage(&mut world, &mut (), contract, key, U256::from(10));
+        world_diff.write_storage(&mut world, &mut (), contract, key, U256::from(10), 0);
         let snapshot = world_diff.snapshot();
-        world_diff.write_storage(&mut world, &mut (), contract, key, U256::from(20));
+        world_diff.write_storage(&mut world, &mut (), contract, key, U256::from(20), 0);
         world_diff.rollback(snapshot);
 
         let logs = world_diff.storage_log_queries();
@@ -707,7 +716,7 @@ mod tests {
         let value = U256::from(33);
         world.values.insert((contract, key), value);
 
-        let (read_value, _) = world_diff.read_storage(&mut world, &mut (), contract, key);
+        let (read_value, _) = world_diff.read_storage(&mut world, &mut (), contract, key, 0);
         assert_eq!(read_value, value);
 
         let logs = world_diff.storage_log_queries();

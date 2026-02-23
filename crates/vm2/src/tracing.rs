@@ -284,20 +284,14 @@ impl<T: Tracer, W: World<T>> CallframeInterface for CallframeWrapper<'_, T, W> {
         }
     }
 
-    // we don't expect the VM to run on 16-bit machines, and sign loss / wrap is checked
-    #[allow(
-        clippy::cast_sign_loss,
-        clippy::cast_possible_truncation,
-        clippy::cast_possible_wrap
-    )]
+    // we don't expect the VM to run on 16-bit machines, and truncation is checked
+    #[allow(clippy::cast_possible_truncation)]
     fn program_counter(&self) -> Option<u16> {
         if let Some(call) = self.near_call_on_top() {
             Some(call.previous_frame_pc)
         } else {
             let offset = self.frame.get_raw_pc();
-            if offset < 0
-                || offset > u16::MAX as usize
-                || self.frame.program.instruction(offset as u16).is_none()
+            if offset > u16::MAX as usize || self.frame.program.instruction(offset as u16).is_none()
             {
                 None
             } else {
