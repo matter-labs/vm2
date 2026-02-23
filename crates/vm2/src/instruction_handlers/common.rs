@@ -51,6 +51,7 @@ pub(crate) fn full_boilerplate<Opcode: OpcodeType, T: Tracer, W: World<T>>(
             vm.state.current_frame.is_kernel,
             vm.state.current_frame.is_static,
         )
+        || vm.state.callstack_is_full()
     {
         return free_panic(vm, world, tracer);
     }

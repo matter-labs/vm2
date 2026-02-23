@@ -38,8 +38,24 @@ fn decommit<T: Tracer, W: World<T>>(
             vm.state.current_frame.gas += extra_cost;
         }
 
-        let heap = vm.state.heaps.allocate_with_content(program.as_ref());
-        vm.state.current_frame.heaps_i_am_keeping_alive.push(heap);
+        let heap = if is_fresh {
+            let heap = vm.state.heaps.allocate_with_content(program.as_ref());
+            vm.world_diff.set_decommit_page(code_hash, heap);
+            heap
+        } else {
+            vm.world_diff
+                .decommit_page(code_hash)
+                .expect("decommit page must exist for non-fresh hash")
+        };
+
+        if !vm
+            .state
+            .current_frame
+            .heaps_i_am_keeping_alive
+            .contains(&heap)
+        {
+            vm.state.current_frame.heaps_i_am_keeping_alive.push(heap);
+        }
 
         let value = FatPointer {
             offset: 0,

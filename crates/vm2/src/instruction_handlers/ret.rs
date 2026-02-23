@@ -45,8 +45,15 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
         } else {
             let (raw_abi, is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
             let result = get_calldata(raw_abi, is_pointer, vm, false).filter(|pointer| {
-                vm.state.current_frame.is_kernel
-                    || pointer.memory_page != vm.state.current_frame.calldata_heap
+                if vm.state.current_frame.is_kernel {
+                    true
+                } else {
+                    // Non-kernel returndata forwarding must be unidirectional: callers may pass
+                    // pointers down the stack, but callees must not forward pointers to older pages.
+                    // This mirrors zk_evm's restriction based on base memory page checks.
+                    pointer.memory_page.as_u32() >= vm.state.current_frame.heap.as_u32()
+                        && pointer.memory_page != vm.state.current_frame.calldata_heap
+                }
             });
 
             if result.is_none() {

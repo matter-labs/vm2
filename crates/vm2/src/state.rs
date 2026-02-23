@@ -1,4 +1,5 @@
 use primitive_types::{H160, U256};
+use zkevm_opcode_defs::system_params::VM_MAX_STACK_DEPTH;
 use zksync_vm2_interface::{HeapId, Tracer};
 
 use crate::{
@@ -93,6 +94,11 @@ impl<T, W> State<T, W> {
 
     pub(crate) fn get_context_u128(&self) -> u128 {
         self.current_frame.context_u128
+    }
+
+    pub(crate) fn callstack_is_full(&self) -> bool {
+        self.previous_frames.len() + self.current_frame.near_calls.len()
+            >= VM_MAX_STACK_DEPTH as usize
     }
 }
 
