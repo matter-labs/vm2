@@ -7,6 +7,7 @@ use zksync_vm2_interface::{CycleStats, Tracer};
 use crate::{program::Program, world_diff::WorldDiff, World};
 
 impl WorldDiff {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn decommit<T: Tracer>(
         &mut self,
         world: &mut impl World<T>,
