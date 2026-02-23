@@ -60,21 +60,29 @@ where
             };
 
         let fallible_part = (|| {
-            let decommit_result = vm.world_diff.decommit(
-                world,
-                tracer,
-                destination_address,
-                vm.settings.default_aa_code_hash,
-                vm.settings.evm_interpreter_code_hash,
-                abi.is_constructor_call,
-                vm.state.transaction_number,
-            );
+            let shard_call_failed = IS_SHARD && abi.shard_id != 0;
 
-            // calldata has to be constructed even if we already know we will panic because
-            // overflowing start + length makes the heap resize even when already panicking.
-            let already_failed = decommit_result.is_none() || IS_SHARD && abi.shard_id != 0;
+            let (maybe_calldata, decommit_result) = if shard_call_failed {
+                // calldata has to be constructed even if we already know we will panic because
+                // overflowing start + length makes the heap resize even when already panicking.
+                (get_calldata(raw_abi, raw_abi_is_pointer, vm, true), None)
+            } else {
+                let decommit_result = vm.world_diff.decommit(
+                    world,
+                    tracer,
+                    destination_address,
+                    vm.settings.default_aa_code_hash,
+                    vm.settings.evm_interpreter_code_hash,
+                    abi.is_constructor_call,
+                    vm.state.transaction_number,
+                );
 
-            let maybe_calldata = get_calldata(raw_abi, raw_abi_is_pointer, vm, already_failed);
+                // calldata has to be constructed even if we already know we will panic because
+                // overflowing start + length makes the heap resize even when already panicking.
+                let already_failed = decommit_result.is_none();
+                let maybe_calldata = get_calldata(raw_abi, raw_abi_is_pointer, vm, already_failed);
+                (maybe_calldata, decommit_result)
+            };
 
             // mandated gas is passed even if it means transferring more than the 63/64 rule allows
             if let Some(gas_left) = vm.state.current_frame.gas.checked_sub(mandated_gas) {
@@ -86,7 +94,7 @@ where
                 return None;
             }
 
-            if IS_SHARD && abi.shard_id != 0 {
+            if shard_call_failed {
                 return None;
             }
             let calldata = maybe_calldata?;

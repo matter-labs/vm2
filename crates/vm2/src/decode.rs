@@ -18,34 +18,11 @@ use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
         Immediate1, Immediate2, Register, Register1, Register2, RegisterAndImmediate,
-        RelativeStack, SourceWriter,
+        RelativeStack,
     },
-    instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
-    Instruction, Predicate, VirtualMachine, World,
+    Instruction, Predicate, World,
 };
-
-fn unimplemented_instruction<T, W>(variant: Opcode) -> Instruction<T, W> {
-    let mut arguments = Arguments::new(Predicate::Always, 0, ModeRequirements::none());
-    let variant_as_number: u16 = unsafe { std::mem::transmute(variant) };
-    Immediate1(variant_as_number).write_source(&mut arguments);
-    Instruction {
-        handler: unimplemented_handler,
-        arguments,
-    }
-}
-
-fn unimplemented_handler<T, W>(
-    vm: &mut VirtualMachine<T, W>,
-    _: &mut W,
-    _: &mut T,
-) -> ExecutionStatus {
-    let variant: Opcode = unsafe {
-        std::mem::transmute(Immediate1::get_u16(&(*vm.state.current_frame.pc).arguments))
-    };
-    eprintln!("Unimplemented instruction: {variant:?}");
-    ExecutionStatus::Stopped(ExecutionEnd::Panicked)
-}
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> Instruction<T, W> {
@@ -313,12 +290,22 @@ pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> I
                     increment.then_some(out2),
                     arguments,
                 ),
-                zkevm_opcode_defs::UMAOpcode::StaticMemoryRead => unimplemented_instruction(
-                    Opcode::UMA(zkevm_opcode_defs::UMAOpcode::StaticMemoryRead),
-                ),
-                zkevm_opcode_defs::UMAOpcode::StaticMemoryWrite => unimplemented_instruction(
-                    Opcode::UMA(zkevm_opcode_defs::UMAOpcode::StaticMemoryWrite),
-                ),
+                zkevm_opcode_defs::UMAOpcode::StaticMemoryRead => {
+                    Instruction::from_static_memory_read(
+                        src1.try_into().unwrap(),
+                        out.try_into().unwrap(),
+                        increment.then_some(out2),
+                        arguments,
+                    )
+                }
+                zkevm_opcode_defs::UMAOpcode::StaticMemoryWrite => {
+                    Instruction::from_static_memory_write(
+                        src1.try_into().unwrap(),
+                        src2,
+                        increment.then_some(out.try_into().unwrap()),
+                        arguments,
+                    )
+                }
             }
         }
         Opcode::Invalid(_) => Instruction::from_invalid(),
