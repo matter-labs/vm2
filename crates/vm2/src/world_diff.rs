@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 
 use primitive_types::{H160, U256};
+use zk_evm_abstractions::{aux::Timestamp, queries::LogQuery};
 use zkevm_opcode_defs::system_params::{
     STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST, STORAGE_ACCESS_WARM_READ_COST,
-    STORAGE_ACCESS_WARM_WRITE_COST,
+    STORAGE_ACCESS_WARM_WRITE_COST, STORAGE_AUX_BYTE,
 };
 use zksync_vm2_interface::{CycleStats, Event, L2ToL1Log, Tracer};
 
@@ -25,6 +26,8 @@ pub struct WorldDiff {
     pub(crate) pubdata: RollbackablePod<i32>,
     storage_refunds: RollbackableLog<u32>,
     pubdata_costs: RollbackableLog<i32>,
+    storage_logs: Vec<LogQuery>,
+    rollback_storage_logs: Vec<LogQuery>,
 
     // The fields below are only rolled back when the whole VM is rolled back.
     /// Values indicate whether a bytecode was successfully decommitted. When accessing decommitted hashes
@@ -46,6 +49,8 @@ pub(crate) struct ExternalSnapshot {
     written_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
     storage_refunds: <RollbackableLog<u32> as Rollback>::Snapshot,
     pubdata_costs: <RollbackableLog<i32> as Rollback>::Snapshot,
+    storage_logs_len: usize,
+    rollback_storage_logs_len: usize,
 }
 
 impl WorldDiff {
@@ -93,7 +98,21 @@ impl WorldDiff {
         }
 
         self.pubdata_costs.push(0);
-        (self.just_read_storage(world, contract, key), newly_added)
+        let value = self.just_read_storage(world, contract, key);
+        self.storage_logs.push(LogQuery {
+            timestamp: Timestamp(u32::try_from(self.storage_logs.len()).unwrap_or(u32::MAX)),
+            tx_number_in_block: 0,
+            aux_byte: STORAGE_AUX_BYTE,
+            shard_id: 0,
+            address: contract,
+            key,
+            read_value: value,
+            written_value: U256::zero(),
+            rw_flag: false,
+            rollback: false,
+            is_service: false,
+        });
+        (value, newly_added)
     }
 
     /// Reads the value of a storage slot without any extra bookkeeping.
@@ -120,6 +139,26 @@ impl WorldDiff {
         key: U256,
         value: U256,
     ) -> u32 {
+        let read_value = self.just_read_storage(world, contract, key);
+        let log_query = LogQuery {
+            timestamp: Timestamp(u32::try_from(self.storage_logs.len()).unwrap_or(u32::MAX)),
+            tx_number_in_block: 0,
+            aux_byte: STORAGE_AUX_BYTE,
+            shard_id: 0,
+            address: contract,
+            key,
+            read_value,
+            written_value: value,
+            rw_flag: true,
+            rollback: false,
+            is_service: false,
+        };
+        self.storage_logs.push(log_query);
+        self.rollback_storage_logs.push(LogQuery {
+            rollback: true,
+            ..log_query
+        });
+
         self.storage_changes.insert((contract, key), value);
 
         let initial_value = self
@@ -178,6 +217,16 @@ impl WorldDiff {
     /// Returns recorded pubdata costs for all storage operations.
     pub fn pubdata_costs(&self) -> &[i32] {
         self.pubdata_costs.as_ref()
+    }
+
+    /// Returns all recorded storage log queries.
+    pub fn storage_log_queries(&self) -> &[LogQuery] {
+        &self.storage_logs
+    }
+
+    /// Returns storage log queries recorded after the specified `snapshot` was created.
+    pub fn storage_log_queries_after(&self, snapshot: &Snapshot) -> &[LogQuery] {
+        &self.storage_logs[snapshot.storage_logs_len..]
     }
 
     #[doc(hidden)] // duplicates `StateInterface::get_storage_state()`, but we use random access in some places
@@ -288,11 +337,21 @@ impl WorldDiff {
             l2_to_l1_logs: self.l2_to_l1_logs.snapshot(),
             transient_storage_changes: self.transient_storage_changes.snapshot(),
             pubdata: self.pubdata.snapshot(),
+            storage_logs_len: self.storage_logs.len(),
+            rollback_storage_logs_len: self.rollback_storage_logs.len(),
         }
     }
 
     #[allow(clippy::needless_pass_by_value)] // intentional: we require a snapshot to be rolled back to no more than once
     pub(crate) fn rollback(&mut self, snapshot: Snapshot) {
+        if self.rollback_storage_logs.len() > snapshot.rollback_storage_logs_len {
+            let rollback_logs = self
+                .rollback_storage_logs
+                .split_off(snapshot.rollback_storage_logs_len);
+            for log in rollback_logs.into_iter().rev() {
+                self.storage_logs.push(log);
+            }
+        }
         self.storage_changes.rollback(snapshot.storage_changes);
         self.paid_changes.rollback(snapshot.paid_changes);
         self.events.rollback(snapshot.events);
@@ -319,6 +378,8 @@ impl WorldDiff {
             written_storage_slots: self.written_storage_slots.snapshot(),
             storage_refunds: self.storage_refunds.snapshot(),
             pubdata_costs: self.pubdata_costs.snapshot(),
+            storage_logs_len: self.storage_logs.len(),
+            rollback_storage_logs_len: self.rollback_storage_logs.len(),
         }
     }
 
@@ -332,6 +393,9 @@ impl WorldDiff {
             .rollback(snapshot.read_storage_slots);
         self.written_storage_slots
             .rollback(snapshot.written_storage_slots);
+        self.storage_logs.truncate(snapshot.storage_logs_len);
+        self.rollback_storage_logs
+            .truncate(snapshot.rollback_storage_logs_len);
     }
 
     pub(crate) fn delete_history(&mut self) {
@@ -363,6 +427,8 @@ pub struct Snapshot {
     l2_to_l1_logs: <RollbackableLog<L2ToL1Log> as Rollback>::Snapshot,
     transient_storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
     pubdata: <RollbackablePod<i32> as Rollback>::Snapshot,
+    storage_logs_len: usize,
+    rollback_storage_logs_len: usize,
 }
 
 /// Change in a single storage slot.
@@ -578,5 +644,76 @@ mod tests {
         fn is_free_storage_slot(&self, _: &H160, _: &U256) -> bool {
             false
         }
+    }
+
+    #[derive(Default)]
+    struct TestWorld {
+        values: BTreeMap<(H160, U256), U256>,
+    }
+
+    impl StorageInterface for TestWorld {
+        fn read_storage(&mut self, contract: H160, key: U256) -> StorageSlot {
+            let value = self
+                .values
+                .get(&(contract, key))
+                .copied()
+                .unwrap_or_default();
+            StorageSlot {
+                value,
+                is_write_initial: !self.values.contains_key(&(contract, key)),
+            }
+        }
+
+        fn cost_of_writing_storage(&mut self, _: StorageSlot, _: U256) -> u32 {
+            0
+        }
+
+        fn is_free_storage_slot(&self, _: &H160, _: &U256) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn storage_logs_include_reads_writes_and_rollbacks() {
+        let mut world_diff = WorldDiff::default();
+        let mut world = TestWorld::default();
+        let contract = H160::zero();
+        let key = U256::from(1);
+
+        let (value, _) = world_diff.read_storage(&mut world, &mut (), contract, key);
+        assert_eq!(value, U256::zero());
+
+        world_diff.write_storage(&mut world, &mut (), contract, key, U256::from(10));
+        let snapshot = world_diff.snapshot();
+        world_diff.write_storage(&mut world, &mut (), contract, key, U256::from(20));
+        world_diff.rollback(snapshot);
+
+        let logs = world_diff.storage_log_queries();
+        assert_eq!(logs.len(), 4);
+        assert!(!logs[0].rw_flag);
+        assert!(logs[1].rw_flag && !logs[1].rollback);
+        assert!(logs[2].rw_flag && !logs[2].rollback);
+        assert!(logs[3].rw_flag && logs[3].rollback);
+        assert_eq!(logs[3].read_value, logs[2].read_value);
+        assert_eq!(logs[3].written_value, logs[2].written_value);
+    }
+
+    #[test]
+    fn storage_read_log_sets_written_value_to_read_value() {
+        let mut world_diff = WorldDiff::default();
+        let mut world = TestWorld::default();
+        let contract = H160::repeat_byte(1);
+        let key = U256::from(7);
+        let value = U256::from(33);
+        world.values.insert((contract, key), value);
+
+        let (read_value, _) = world_diff.read_storage(&mut world, &mut (), contract, key);
+        assert_eq!(read_value, value);
+
+        let logs = world_diff.storage_log_queries();
+        assert_eq!(logs.len(), 1);
+        assert!(!logs[0].rw_flag);
+        assert_eq!(logs[0].read_value, value);
+        assert_eq!(logs[0].written_value, value);
     }
 }

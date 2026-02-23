@@ -2,8 +2,9 @@ use zkevm_opcode_defs::ethereum_types::Address;
 use zksync_vm2_interface::{CallframeInterface, StateInterface};
 
 use crate::{
+    addressing_modes::{Arguments, Register, Register1},
     testonly::{initial_decommit, TestWorld},
-    ExecutionEnd, Program, Settings, VirtualMachine,
+    ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
 };
 
 #[test]
@@ -34,4 +35,46 @@ fn call_to_invalid_address() {
         ExecutionEnd::Panicked
     ));
     assert_eq!(vm.current_frame().gas(), 0);
+}
+
+#[test]
+fn storage_log_uses_vm_transaction_number() {
+    let storage_read = Instruction::from_storage_read(
+        Register1(Register::new(0)),
+        Register1(Register::new(2)),
+        Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
+    );
+    let ret = Instruction::from_ret(
+        Register1(Register::new(0)),
+        None,
+        Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
+    );
+    let program = Program::from_raw(vec![storage_read, ret], vec![]);
+
+    let address = Address::from_low_u64_be(0x_2234_5678_90ab_cdef);
+    let mut world = TestWorld::new(&[(address, program)]);
+    let program = initial_decommit(&mut world, address);
+
+    let mut vm = VirtualMachine::new(
+        address,
+        program,
+        Address::zero(),
+        &[],
+        100,
+        Settings {
+            default_aa_code_hash: [0; 32],
+            evm_interpreter_code_hash: [0; 32],
+            hook_address: 0,
+        },
+    );
+    vm.state.transaction_number = 7;
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+
+    let storage_logs = vm.world_diff().storage_log_queries();
+    assert_eq!(storage_logs.len(), 1);
+    assert_eq!(storage_logs[0].tx_number_in_block, 7);
 }
