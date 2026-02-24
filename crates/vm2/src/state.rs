@@ -125,7 +125,11 @@ impl<T: Tracer, W: World<T>> State<T, W> {
         }
     }
 
-    pub(crate) fn rollback(&mut self, snapshot: StateSnapshot) {
+    pub(crate) fn rollback(
+        &mut self,
+        snapshot: StateSnapshot,
+        mut is_heap_pinned: impl FnMut(HeapId) -> bool,
+    ) {
         let StateSnapshot {
             registers,
             register_pointer_flags,
@@ -137,7 +141,9 @@ impl<T: Tracer, W: World<T>> State<T, W> {
         } = snapshot;
 
         for heap in self.current_frame.rollback(bootloader_frame) {
-            self.heaps.deallocate(heap);
+            if !is_heap_pinned(heap) {
+                self.heaps.deallocate(heap);
+            }
         }
         self.heaps.rollback(bootloader_heap_snapshot);
         self.registers = registers;

@@ -48,13 +48,16 @@ fn decommit<T: Tracer, W: World<T>>(
                 .expect("decommit page must exist for non-fresh hash")
         };
 
-        if !vm
-            .state
-            .current_frame
-            .heaps_i_am_keeping_alive
-            .contains(&heap)
-        {
-            vm.state.current_frame.heaps_i_am_keeping_alive.push(heap);
+        // Decommit page mapping lives for the whole VM run, so nested-frame decommits
+        // must pin pages in the bootloader frame rather than in the current frame.
+        let heaps_to_keep_alive =
+            if let Some(bootloader_frame) = vm.state.previous_frames.first_mut() {
+                &mut bootloader_frame.heaps_i_am_keeping_alive
+            } else {
+                &mut vm.state.current_frame.heaps_i_am_keeping_alive
+            };
+        if !heaps_to_keep_alive.contains(&heap) {
+            heaps_to_keep_alive.push(heap);
         }
 
         let value = FatPointer {

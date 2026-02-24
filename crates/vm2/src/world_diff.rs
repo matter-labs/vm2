@@ -38,6 +38,11 @@ pub struct WorldDiff {
     ///
     /// Like `decommitted_hashes`, this is rolled back only by external VM snapshots.
     decommit_pages: RollbackableMap<U256, u32>,
+    /// Reverse index for `decommit_pages` to quickly check whether a heap page is globally pinned
+    /// by decommitment reuse semantics.
+    ///
+    /// This follows external snapshot / rollback semantics together with `decommit_pages`.
+    decommit_pinned_pages: RollbackableSet<u32>,
     read_storage_slots: RollbackableSet<(H160, U256)>,
     written_storage_slots: RollbackableSet<(H160, U256)>,
 
@@ -50,6 +55,7 @@ pub(crate) struct ExternalSnapshot {
     internal_snapshot: Snapshot,
     pub(crate) decommitted_hashes: <RollbackableMap<U256, bool> as Rollback>::Snapshot,
     decommit_pages: <RollbackableMap<U256, u32> as Rollback>::Snapshot,
+    decommit_pinned_pages: <RollbackableSet<u32> as Rollback>::Snapshot,
     read_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
     written_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
     storage_refunds: <RollbackableLog<u32> as Rollback>::Snapshot,
@@ -350,8 +356,13 @@ impl WorldDiff {
             .map(HeapId::from_u32_unchecked)
     }
 
+    pub(crate) fn is_decommit_page_pinned(&self, page: HeapId) -> bool {
+        self.decommit_pinned_pages.as_ref().contains(&page.as_u32())
+    }
+
     pub(crate) fn set_decommit_page(&mut self, code_hash: U256, page: HeapId) {
         self.decommit_pages.insert(code_hash, page.as_u32());
+        self.decommit_pinned_pages.add(page.as_u32());
     }
 
     /// Get a snapshot for selecting which logs & co. to output using [`Self::events_after()`] and other methods.
@@ -401,6 +412,7 @@ impl WorldDiff {
             },
             decommitted_hashes: self.decommitted_hashes.snapshot(),
             decommit_pages: self.decommit_pages.snapshot(),
+            decommit_pinned_pages: self.decommit_pinned_pages.snapshot(),
             read_storage_slots: self.read_storage_slots.snapshot(),
             written_storage_slots: self.written_storage_slots.snapshot(),
             storage_refunds: self.storage_refunds.snapshot(),
@@ -417,6 +429,8 @@ impl WorldDiff {
         self.decommitted_hashes
             .rollback(snapshot.decommitted_hashes);
         self.decommit_pages.rollback(snapshot.decommit_pages);
+        self.decommit_pinned_pages
+            .rollback(snapshot.decommit_pinned_pages);
         self.read_storage_slots
             .rollback(snapshot.read_storage_slots);
         self.written_storage_slots
@@ -437,6 +451,7 @@ impl WorldDiff {
         self.pubdata_costs.delete_history();
         self.decommitted_hashes.delete_history();
         self.decommit_pages.delete_history();
+        self.decommit_pinned_pages.delete_history();
         self.read_storage_slots.delete_history();
         self.written_storage_slots.delete_history();
     }

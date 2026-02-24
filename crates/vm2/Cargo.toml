@@ -36,4 +36,5 @@ harness = false
 
 [features]
 default = []
+airbender-precompile-delegations = ["zk_evm_abstractions/airbender-precompile-delegations"]
 single_instruction_test = ["arbitrary", "primitive-types/arbitrary", "zk_evm", "anyhow"]

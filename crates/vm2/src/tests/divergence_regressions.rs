@@ -351,7 +351,6 @@ fn non_kernel_returndata_forward_to_older_page_should_panic() {
 #[test]
 fn nonfresh_decommit_should_reuse_existing_memory_page() {
     // zk_evm reuses the same memory page for repeated decommit of the same code hash.
-    // vm2 currently allocates a fresh page every time.
     let contract = (
         non_kernel_address(),
         Program::from_raw(vec![ret_instruction()], vec![]),
@@ -395,4 +394,147 @@ fn nonfresh_decommit_should_reuse_existing_memory_page() {
     let second = FatPointer::from(vm.state.registers[4]);
 
     assert_eq!(first.memory_page, second.memory_page);
+}
+
+#[test]
+fn nonfresh_decommit_should_keep_page_alive_after_nested_frame_returns() {
+    // Reusing decommit pages is correct only if the page survives nested frame teardown.
+    let code_word = U256::from(0xdead_beef_u64);
+    let contract = (
+        non_kernel_address(),
+        Program::from_raw(vec![ret_instruction()], vec![code_word]),
+    );
+    let mut world = TestWorld::new(&[contract]);
+    let code_hash = *world
+        .address_to_hash
+        .values()
+        .next()
+        .expect("test contract hash must exist");
+
+    let nested_decommit = Instruction::from_decommit(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Register1(Register::new(3)),
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let nested_program = Program::from_raw(vec![nested_decommit], vec![]);
+    let bootloader_decommit = Instruction::from_decommit(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Register1(Register::new(4)),
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let bootloader_program = Program::from_raw(vec![bootloader_decommit], vec![]);
+
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        bootloader_program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+    vm.state.registers[1] = code_hash;
+    vm.state.registers[2] = U256::zero();
+
+    let calldata_heap = vm.state.current_frame.calldata_heap;
+    let world_before_nested = vm.world_diff.snapshot();
+    vm.push_frame::<opcodes::Normal>(
+        kernel_address(),
+        nested_program,
+        200_000,
+        0,
+        false,
+        false,
+        calldata_heap,
+        world_before_nested,
+    );
+
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+    let first = FatPointer::from(vm.state.registers[3]);
+    assert_eq!(vm.state.heaps[first.memory_page].read_u256(0), code_word);
+
+    vm.pop_frame(None)
+        .expect("nested frame must be present for pop");
+
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+    let second = FatPointer::from(vm.state.registers[4]);
+
+    assert_eq!(first.memory_page, second.memory_page);
+    assert_eq!(vm.state.heaps[second.memory_page].read_u256(0), code_word);
+}
+
+#[test]
+fn decommit_page_in_keep_alive_list_should_not_be_deallocated_on_pop() {
+    let program: Program<(), TestWorld<()>> =
+        Program::from_raw(vec![ret_instruction::<(), TestWorld<()>>()], vec![]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program.clone(),
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let calldata_heap = vm.state.current_frame.calldata_heap;
+    let world_before_nested = vm.world_diff.snapshot();
+    vm.push_frame::<opcodes::Normal>(
+        kernel_address(),
+        program,
+        200_000,
+        0,
+        false,
+        false,
+        calldata_heap,
+        world_before_nested,
+    );
+
+    let code_word = U256::from(0xabcdu64);
+    let mut code_bytes = [0_u8; 32];
+    code_word.to_big_endian(&mut code_bytes);
+    let decommit_heap = vm.state.heaps.allocate_with_content(&code_bytes);
+    let kept_heap = vm.state.heaps.allocate_with_content(&[0x11; 32]);
+
+    vm.world_diff
+        .set_decommit_page(U256::from(0x1234_u64), decommit_heap);
+    vm.state
+        .current_frame
+        .heaps_i_am_keeping_alive
+        .extend([decommit_heap, kept_heap]);
+
+    vm.pop_frame(Some(kept_heap))
+        .expect("nested frame must be present for pop");
+
+    assert_eq!(vm.state.heaps[decommit_heap].read_u256(0), code_word);
+}
+
+#[test]
+fn rollback_should_preserve_pre_snapshot_decommit_page() {
+    let program: Program<(), TestWorld<()>> =
+        Program::from_raw(vec![ret_instruction::<(), TestWorld<()>>()], vec![]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let code_word = U256::from(0xdead_beef_u64);
+    let mut code_bytes = [0_u8; 32];
+    code_word.to_big_endian(&mut code_bytes);
+    let decommit_heap = vm.state.heaps.allocate_with_content(&code_bytes);
+    vm.world_diff
+        .set_decommit_page(U256::from(0xfeed_u64), decommit_heap);
+
+    vm.make_snapshot();
+    vm.state
+        .current_frame
+        .heaps_i_am_keeping_alive
+        .push(decommit_heap);
+    vm.rollback();
+
+    assert_eq!(vm.state.heaps[decommit_heap].read_u256(0), code_word);
 }

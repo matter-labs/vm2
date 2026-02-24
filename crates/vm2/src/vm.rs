@@ -161,7 +161,9 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
             .take()
             .expect("`rollback()` called without a snapshot");
         self.world_diff.external_rollback(snapshot.world_snapshot);
-        self.state.rollback(snapshot.state_snapshot);
+        self.state.rollback(snapshot.state_snapshot, |heap| {
+            self.world_diff.is_decommit_page_pinned(heap)
+        });
         self.delete_history();
     }
 
@@ -246,7 +248,7 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
             .iter()
             .chain(&self.state.current_frame.heaps_i_am_keeping_alive)
             {
-                if Some(heap) != heap_to_keep {
+                if Some(heap) != heap_to_keep && !self.world_diff.is_decommit_page_pinned(heap) {
                     self.state.heaps.deallocate(heap);
                 }
             }
