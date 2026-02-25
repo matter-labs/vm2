@@ -478,6 +478,7 @@ mod test {
             vm.state
                 .current_frame
                 .push_near_call(count_u32, *counter, vm.world_diff.snapshot());
+            vm.state.increment_callstack_depth();
             assert_eq!(vm.current_frame().gas(), (*counter).into());
             *counter += 1;
         };

@@ -62,6 +62,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for VirtualMachine<T, W> {
         }
 
         let heaps = Heaps::from_id(current_frame.heap, u)?;
+        let callstack_depth = current_frame.near_calls.len() + 2;
 
         Ok(Self {
             state: State {
@@ -72,6 +73,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for VirtualMachine<T, W> {
                 // Exiting the final frame is different in vm2 on purpose,
                 // so always generate two frames to avoid that.
                 previous_frames: vec![Callframe::dummy()],
+                callstack_depth,
                 heaps,
                 transaction_number: u.arbitrary()?,
                 context_u128: u.arbitrary()?,

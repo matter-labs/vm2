@@ -237,41 +237,43 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
 
         std::mem::swap(&mut new_frame, &mut self.state.current_frame);
         self.state.previous_frames.push(new_frame);
+        self.state.increment_callstack_depth();
     }
 
     pub(crate) fn pop_frame(&mut self, heap_to_keep: Option<HeapId>) -> Option<FrameRemnant> {
-        self.state.previous_frames.pop().map(|mut frame| {
-            for &heap in [
-                self.state.current_frame.heap,
-                self.state.current_frame.aux_heap,
-            ]
-            .iter()
-            .chain(&self.state.current_frame.heaps_i_am_keeping_alive)
-            {
-                if Some(heap) != heap_to_keep && !self.world_diff.is_decommit_page_pinned(heap) {
-                    self.state.heaps.deallocate(heap);
-                }
+        let mut frame = self.state.previous_frames.pop()?;
+        self.state.decrement_callstack_depth();
+
+        for &heap in [
+            self.state.current_frame.heap,
+            self.state.current_frame.aux_heap,
+        ]
+        .iter()
+        .chain(&self.state.current_frame.heaps_i_am_keeping_alive)
+        {
+            if Some(heap) != heap_to_keep && !self.world_diff.is_decommit_page_pinned(heap) {
+                self.state.heaps.deallocate(heap);
             }
+        }
 
-            std::mem::swap(&mut self.state.current_frame, &mut frame);
-            let Callframe {
-                exception_handler,
-                world_before_this_frame,
-                stack,
-                ..
-            } = frame;
+        std::mem::swap(&mut self.state.current_frame, &mut frame);
+        let Callframe {
+            exception_handler,
+            world_before_this_frame,
+            stack,
+            ..
+        } = frame;
 
-            self.stack_pool.recycle(stack);
+        self.stack_pool.recycle(stack);
 
-            self.state
-                .current_frame
-                .heaps_i_am_keeping_alive
-                .extend(heap_to_keep);
+        self.state
+            .current_frame
+            .heaps_i_am_keeping_alive
+            .extend(heap_to_keep);
 
-            FrameRemnant {
-                exception_handler,
-                snapshot: world_before_this_frame,
-            }
+        Some(FrameRemnant {
+            exception_handler,
+            snapshot: world_before_this_frame,
         })
     }
 
