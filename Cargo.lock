@@ -1731,6 +1731,7 @@ dependencies = [
 [[package]]
 name = "zk_evm"
 version = "0.153.9"
+source = "git+https://github.com/matter-labs/zksync-protocol?branch=popzxc-airbender-precompiles#55f7a4cf5f590545edc1c26e31956815a79b037d"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -1744,6 +1745,7 @@ dependencies = [
 [[package]]
 name = "zk_evm_abstractions"
 version = "0.153.9"
+source = "git+https://github.com/matter-labs/zksync-protocol?branch=popzxc-airbender-precompiles#55f7a4cf5f590545edc1c26e31956815a79b037d"
 dependencies = [
  "airbender-crypto",
  "anyhow",
@@ -1756,6 +1758,7 @@ dependencies = [
 [[package]]
 name = "zkevm_opcode_defs"
 version = "0.153.9"
+source = "git+https://github.com/matter-labs/zksync-protocol?branch=popzxc-airbender-precompiles#55f7a4cf5f590545edc1c26e31956815a79b037d"
 dependencies = [
  "bitflags",
  "blake2",
