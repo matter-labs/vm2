@@ -473,6 +473,7 @@ fn callstack_saturation_should_mask_near_call_to_panic() {
 }
 
 #[test]
+#[allow(clippy::similar_names)] // `caller` / `callee` is standard notation
 fn non_kernel_returndata_forward_to_older_page_should_panic() {
     // zk_evm rejects non-kernel returndata forwarding to an older memory page.
     // vm2 only blocks forwarding to the current calldata page.
