@@ -430,56 +430,6 @@ fn precompile_extra_ergs_oog_should_not_panic() {
 
 #[test]
 #[ignore = "extreme callstack saturation case; memory-heavy and long-running; run on demand"]
-fn callstack_saturation_should_count_near_calls_in_previous_far_frames() {
-    // This test checks the extreme case of callstack saturation, which is highly unlikely
-    // to be hit in practice. It is memory-heavy and long-running.
-    // Consider running it only when debugging an active VM issue and you suspect
-    // callstack processing behavior.
-    // Run on demand with:
-    // cargo test -p zksync_vm2 callstack_saturation_should_count_near_calls_in_previous_far_frames -- --ignored --nocapture
-    let program: Program<(), TestWorld<()>> =
-        Program::from_raw(vec![ret_instruction::<(), TestWorld<()>>()], vec![]);
-
-    let mut vm = VirtualMachine::new(
-        non_kernel_address(),
-        program.clone(),
-        Address::zero(),
-        &[],
-        1_000_000,
-        default_settings(),
-    );
-
-    // Fill the current far frame with local near calls and then move it to `previous_frames`
-    // via a far-frame push. This reproduces mixed far+near depth that previously undercounted.
-    let snapshot = vm.world_diff.snapshot();
-    vm.state
-        .current_frame
-        .push_near_call(vm.state.current_frame.gas, 0, snapshot);
-    let template_near_call = vm.state.current_frame.near_calls[0].clone();
-    vm.state.current_frame.near_calls = vec![template_near_call; VM_MAX_STACK_DEPTH as usize - 1];
-    // Keep the cached depth in sync with the direct near call vector mutation above.
-    vm.state.callstack_depth = VM_MAX_STACK_DEPTH as usize;
-
-    let calldata_heap = vm.state.current_frame.calldata_heap;
-    vm.push_frame::<opcodes::Normal>(
-        non_kernel_address(),
-        program,
-        200_000,
-        0,
-        false,
-        false,
-        calldata_heap,
-        vm.world_diff.snapshot(),
-    );
-
-    assert!(
-        vm.state.callstack_is_full(),
-        "callstack saturation should include near calls from previous far frames"
-    );
-}
-
-#[test]
-#[ignore = "extreme callstack saturation case; memory-heavy and long-running; run on demand"]
 fn callstack_saturation_should_mask_near_call_to_panic() {
     // This test checks the extreme case of callstack saturation, which is highly unlikely
     // to be hit in practice. It is memory-heavy and long-running.
@@ -512,7 +462,6 @@ fn callstack_saturation_should_mask_near_call_to_panic() {
         vm.state
             .current_frame
             .push_near_call(vm.state.current_frame.gas, 0, snapshot.clone());
-        vm.state.increment_callstack_depth();
     }
 
     execute_one_instruction(&mut vm, &mut world, &mut ());

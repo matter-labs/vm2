@@ -28,7 +28,6 @@ fn near_call<T: Tracer, W: World<T>>(
             error_handler,
             vm.world_diff.snapshot(),
         );
-        vm.state.increment_callstack_depth();
 
         vm.state.flags = Flags::new(false, false, false);
 

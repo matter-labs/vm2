@@ -237,12 +237,10 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
 
         std::mem::swap(&mut new_frame, &mut self.state.current_frame);
         self.state.previous_frames.push(new_frame);
-        self.state.increment_callstack_depth();
     }
 
     pub(crate) fn pop_frame(&mut self, heap_to_keep: Option<HeapId>) -> Option<FrameRemnant> {
         let mut frame = self.state.previous_frames.pop()?;
-        self.state.decrement_callstack_depth();
 
         for &heap in [
             self.state.current_frame.heap,

@@ -31,8 +31,6 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
         snapshot,
     }) = vm.state.current_frame.pop_near_call()
     {
-        vm.state.decrement_callstack_depth();
-
         if TO_LABEL {
             let pc = Immediate1::get_u16(args);
             vm.state.current_frame.set_pc_from_u16(pc);

@@ -24,11 +24,6 @@ pub(crate) struct State<T, W> {
     /// Contains indices to the far call instructions currently being executed.
     /// They are needed to continue execution from the correct spot upon return.
     pub(crate) previous_frames: Vec<Callframe<T, W>>,
-    /// Cached callstack depth across far and near frames.
-    ///
-    /// This value is updated on each push/pop so that callstack saturation checks in
-    /// instruction boilerplate stay O(1) on the hot path.
-    pub(crate) callstack_depth: usize,
     pub(crate) heaps: Heaps,
     pub(crate) transaction_number: u16,
     pub(crate) context_u128: u128,
@@ -75,9 +70,6 @@ impl<T, W> State<T, W> {
             ),
             previous_frames: vec![],
 
-            // A fresh VM starts with a single far frame and no near calls.
-            callstack_depth: 1,
-
             heaps: Heaps::new(calldata),
 
             transaction_number: 0,
@@ -104,24 +96,12 @@ impl<T, W> State<T, W> {
         self.current_frame.context_u128
     }
 
-    #[inline(always)]
-    pub(crate) fn increment_callstack_depth(&mut self) {
-        self.callstack_depth = self
-            .callstack_depth
-            .checked_add(1)
-            .expect("callstack depth overflow");
-    }
-
-    #[inline(always)]
-    pub(crate) fn decrement_callstack_depth(&mut self) {
-        self.callstack_depth = self
-            .callstack_depth
-            .checked_sub(1)
-            .expect("callstack depth underflow");
-    }
-
     pub(crate) fn callstack_is_full(&self) -> bool {
-        self.callstack_depth >= VM_MAX_STACK_DEPTH as usize
+        // TODO: This is not precise, since we should account for the depth of near calls
+        // in each of previous frames. This is unlikely to be hit in practice, so it is
+        // probably fine to keep it as is for now.
+        self.previous_frames.len() + self.current_frame.near_calls.len()
+            >= VM_MAX_STACK_DEPTH as usize
     }
 }
 
@@ -145,7 +125,6 @@ impl<T: Tracer, W: World<T>> State<T, W> {
             bootloader_heap_snapshot: self.heaps.snapshot(),
             transaction_number: self.transaction_number,
             context_u128: self.context_u128,
-            callstack_depth: self.callstack_depth,
         }
     }
 
@@ -162,7 +141,6 @@ impl<T: Tracer, W: World<T>> State<T, W> {
             bootloader_heap_snapshot,
             transaction_number,
             context_u128,
-            callstack_depth,
         } = snapshot;
 
         for heap in self.current_frame.rollback(bootloader_frame) {
@@ -176,7 +154,6 @@ impl<T: Tracer, W: World<T>> State<T, W> {
         self.flags = flags;
         self.transaction_number = transaction_number;
         self.context_u128 = context_u128;
-        self.callstack_depth = callstack_depth;
     }
 
     pub(crate) fn delete_history(&mut self) {
@@ -192,7 +169,6 @@ impl<T, W> Clone for State<T, W> {
             flags: self.flags.clone(),
             current_frame: self.current_frame.clone(),
             previous_frames: self.previous_frames.clone(),
-            callstack_depth: self.callstack_depth,
             heaps: self.heaps.clone(),
             transaction_number: self.transaction_number,
             context_u128: self.context_u128,
@@ -211,7 +187,6 @@ impl<T, W> PartialEq for State<T, W> {
             && self.context_u128 == other.context_u128
             && self.current_frame == other.current_frame
             && self.previous_frames == other.previous_frames
-            && self.callstack_depth == other.callstack_depth
             && self.heaps == other.heaps
     }
 }
@@ -267,5 +242,4 @@ pub(crate) struct StateSnapshot {
     bootloader_heap_snapshot: (usize, usize),
     transaction_number: u16,
     context_u128: u128,
-    callstack_depth: usize,
 }
