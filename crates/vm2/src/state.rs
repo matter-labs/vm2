@@ -97,8 +97,14 @@ impl<T, W> State<T, W> {
     }
 
     pub(crate) fn callstack_is_full(&self) -> bool {
-        self.previous_frames.len() + self.current_frame.near_calls.len()
-            >= VM_MAX_STACK_DEPTH as usize
+        let previous_depth = self
+            .previous_frames
+            .iter()
+            .map(|frame| frame.near_calls.len() + 1)
+            .sum::<usize>();
+        let current_depth = self.current_frame.near_calls.len() + 1;
+
+        previous_depth + current_depth >= VM_MAX_STACK_DEPTH as usize
     }
 }
 

@@ -88,6 +88,10 @@ fn precompile_call<T: Tracer, W: World<T>>(
             }
 
             let mut abi = PrecompileCallAbi::from_u256(Register1::get(args, &mut vm.state));
+            // `zk_evm` uses `memory_page == 0` in precompile ABI as a sentinel meaning
+            // "use the current heap". vm2 also uses heap id `0` to model static memory,
+            // so we must preserve this remapping here to keep precompile accesses isolated
+            // from static UMA memory.
             if abi.memory_page_to_read.as_u32() == 0 {
                 abi.memory_page_to_read = vm.state.current_frame.heap;
             }

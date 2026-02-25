@@ -10,6 +10,7 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Register, Register1, Register2},
     decode::decode,
     fat_pointer::FatPointer,
+    precompiles::{PrecompileMemoryReader, PrecompileOutput, Precompiles},
     testonly::TestWorld,
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, StorageInterface,
     StorageSlot, VirtualMachine, World,
@@ -136,6 +137,186 @@ fn static_memory_write_should_not_panic_in_kernel_mode() {
     );
 }
 
+#[test]
+fn static_memory_should_be_isolated_from_regular_heap() {
+    let static_write = Instruction::from_static_memory_write(
+        Register1(Register::new(1)).into(),
+        Register2(Register::new(2)),
+        None,
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let heap_read = Instruction::from_heap_read(
+        Register1(Register::new(1)).into(),
+        Register1(Register::new(3)),
+        None,
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let static_read = Instruction::from_static_memory_read(
+        Register1(Register::new(1)).into(),
+        Register1(Register::new(4)),
+        None,
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let program = Program::from_raw(
+        vec![static_write, heap_read, static_read, ret_instruction()],
+        vec![],
+    );
+    let mut world = TestWorld::new(&[]);
+
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let static_value = U256::from(0x11_u64);
+    vm.state.register_pointer_flags &= !(1 << 1);
+    vm.state.registers[1] = U256::zero();
+    vm.state.registers[2] = static_value;
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+    assert_eq!(vm.state.registers[3], U256::zero());
+    assert_eq!(vm.state.registers[4], static_value);
+}
+
+#[derive(Debug, Default)]
+struct IncrementingPrecompiles;
+
+impl Precompiles for IncrementingPrecompiles {
+    fn call_precompile(
+        &self,
+        _: u16,
+        mut memory: PrecompileMemoryReader<'_>,
+        _: u64,
+    ) -> PrecompileOutput {
+        let mut input_word = [0_u8; 32];
+        for byte in &mut input_word {
+            *byte = memory.next().unwrap_or_default();
+        }
+        (U256::from_big_endian(&input_word) + U256::one()).into()
+    }
+}
+
+#[derive(Debug, Default)]
+struct PrecompileSentinelWorld {
+    precompiles: IncrementingPrecompiles,
+}
+
+impl StorageInterface for PrecompileSentinelWorld {
+    fn read_storage(&mut self, _: H160, _: U256) -> StorageSlot {
+        StorageSlot::EMPTY
+    }
+
+    fn cost_of_writing_storage(&mut self, _: StorageSlot, _: U256) -> u32 {
+        0
+    }
+
+    fn is_free_storage_slot(&self, _: &H160, _: &U256) -> bool {
+        false
+    }
+}
+
+impl<T: Tracer> World<T> for PrecompileSentinelWorld {
+    fn decommit(&mut self, _: U256) -> Program<T, Self> {
+        Program::new_panicking()
+    }
+
+    fn decommit_code(&mut self, _: U256) -> Vec<u8> {
+        vec![]
+    }
+
+    fn precompiles(&self) -> &impl Precompiles {
+        &self.precompiles
+    }
+}
+
+#[test]
+fn precompile_zero_memory_page_should_use_current_heap_instead_of_static_memory() {
+    let static_write = Instruction::from_static_memory_write(
+        Register1(Register::new(1)).into(),
+        Register2(Register::new(2)),
+        None,
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let heap_write = Instruction::from_heap_write(
+        Register1(Register::new(1)).into(),
+        Register2(Register::new(3)),
+        None,
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+        false,
+    );
+    let precompile_call = Instruction::from_precompile_call(
+        Register1(Register::new(4)),
+        Register2(Register::new(5)),
+        Register1(Register::new(6)),
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let heap_read_after = Instruction::from_heap_read(
+        Register1(Register::new(1)).into(),
+        Register1(Register::new(7)),
+        None,
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let static_read_after = Instruction::from_static_memory_read(
+        Register1(Register::new(1)).into(),
+        Register1(Register::new(8)),
+        None,
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let program = Program::from_raw(
+        vec![
+            static_write,
+            heap_write,
+            precompile_call,
+            heap_read_after,
+            static_read_after,
+            ret_instruction(),
+        ],
+        vec![],
+    );
+    let mut world = PrecompileSentinelWorld::default();
+
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let static_value = U256::from(0x11_u64);
+    let heap_value = U256::from(0x22_u64);
+    let expected_heap_after_precompile = heap_value + U256::one();
+
+    // ABI: read 32 bytes from offset 0, write 1 word at offset 0, with page ids left at zero.
+    // Page zero is the sentinel path under test.
+    let mut precompile_abi = U256::zero();
+    precompile_abi.0[0] = 32_u64 << 32;
+    precompile_abi.0[1] = 1_u64 << 32;
+
+    vm.state.register_pointer_flags &= !(1 << 1);
+    vm.state.registers[1] = U256::zero();
+    vm.state.registers[2] = static_value;
+    vm.state.registers[3] = heap_value;
+    vm.state.registers[4] = precompile_abi;
+    vm.state.registers[5] = U256::zero();
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+    assert_eq!(vm.state.registers[6], U256::one());
+    assert_eq!(vm.state.registers[7], expected_heap_after_precompile);
+    assert_eq!(vm.state.registers[8], static_value);
+}
+
 #[derive(Debug, Default)]
 struct CountingWorld {
     storage_reads: usize,
@@ -244,6 +425,47 @@ fn precompile_extra_ergs_oog_should_not_panic() {
     assert_eq!(
         vm.run(&mut world, &mut ()),
         ExecutionEnd::ProgramFinished(vec![])
+    );
+}
+
+#[test]
+fn callstack_saturation_should_count_near_calls_in_previous_far_frames() {
+    let program: Program<(), TestWorld<()>> =
+        Program::from_raw(vec![ret_instruction::<(), TestWorld<()>>()], vec![]);
+
+    let mut vm = VirtualMachine::new(
+        non_kernel_address(),
+        program.clone(),
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    // Fill the current far frame with local near calls and then move it to `previous_frames`
+    // via a far-frame push. This reproduces mixed far+near depth where vm2 undercounts.
+    let snapshot = vm.world_diff.snapshot();
+    vm.state
+        .current_frame
+        .push_near_call(vm.state.current_frame.gas, 0, snapshot);
+    let template_near_call = vm.state.current_frame.near_calls[0].clone();
+    vm.state.current_frame.near_calls = vec![template_near_call; VM_MAX_STACK_DEPTH as usize - 1];
+
+    let calldata_heap = vm.state.current_frame.calldata_heap;
+    vm.push_frame::<opcodes::Normal>(
+        non_kernel_address(),
+        program,
+        200_000,
+        0,
+        false,
+        false,
+        calldata_heap,
+        vm.world_diff.snapshot(),
+    );
+
+    assert!(
+        vm.state.callstack_is_full(),
+        "callstack saturation should include near calls from previous far frames"
     );
 }
 
@@ -394,6 +616,66 @@ fn nonfresh_decommit_should_reuse_existing_memory_page() {
     let second = FatPointer::from(vm.state.registers[4]);
 
     assert_eq!(first.memory_page, second.memory_page);
+}
+
+#[test]
+fn decommit_after_far_call_decommit_should_not_panic() {
+    // `pay_for_decommit` marks the hash as decommitted but does not assign a Decommit page.
+    // A follow-up Decommit opcode on the same hash should stay inside VM semantics instead of
+    // panicking the host process.
+    let called_address = Address::from_low_u64_be(2);
+    let called_program = Program::from_raw(vec![ret_instruction()], vec![]);
+    let mut world = TestWorld::new(&[(called_address, called_program)]);
+    let called_address_as_u256 = U256::from(called_address.to_low_u64_be());
+    let code_hash = *world
+        .address_to_hash
+        .get(&called_address_as_u256)
+        .expect("test contract hash must exist");
+
+    let far_call = Instruction::from_far_call::<opcodes::Normal>(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Immediate1(1),
+        false,
+        false,
+        Arguments::new(Predicate::Always, 200, ModeRequirements::none()),
+    );
+    let decommit = Instruction::from_decommit(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Register1(Register::new(3)),
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let program = Program::from_raw(vec![far_call, decommit, ret_instruction()], vec![]);
+
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let mut far_call_abi = U256::zero();
+    far_call_abi.0[3] = 10_000;
+    vm.state.register_pointer_flags &= !(1 << 1);
+    vm.state.registers[1] = far_call_abi;
+    vm.state.registers[2] = called_address_as_u256;
+
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+
+    vm.state.registers[1] = code_hash;
+    vm.state.registers[2] = U256::zero();
+    vm.state.register_pointer_flags &= !(1 << 1);
+
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+
+    assert!(
+        vm.world_diff.decommit_page(code_hash).is_some(),
+        "Decommit opcode should materialize a reusable page for non-fresh hashes"
+    );
 }
 
 #[test]

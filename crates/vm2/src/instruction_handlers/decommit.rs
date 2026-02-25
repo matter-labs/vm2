@@ -43,9 +43,16 @@ fn decommit<T: Tracer, W: World<T>>(
             vm.world_diff.set_decommit_page(code_hash, heap);
             heap
         } else {
-            vm.world_diff
-                .decommit_page(code_hash)
-                .expect("decommit page must exist for non-fresh hash")
+            // `pay_for_decommit` marks hashes as decommitted without assigning a decommit page.
+            // If `Decommit` is the first opcode path that needs a memory page for this hash,
+            // materialize the page lazily instead of panicking the host process.
+            if let Some(heap) = vm.world_diff.decommit_page(code_hash) {
+                heap
+            } else {
+                let heap = vm.state.heaps.allocate_with_content(program.as_ref());
+                vm.world_diff.set_decommit_page(code_hash, heap);
+                heap
+            }
         };
 
         // Decommit page mapping lives for the whole VM run, so nested-frame decommits
