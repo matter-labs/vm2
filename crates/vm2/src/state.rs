@@ -95,14 +95,6 @@ impl<T, W> State<T, W> {
     pub(crate) fn get_context_u128(&self) -> u128 {
         self.current_frame.context_u128
     }
-
-    pub(crate) fn callstack_is_full(&self) -> bool {
-        // TODO: This is not precise, since we should account for the depth of near calls
-        // in each of previous frames. This is unlikely to be hit in practice, so it is
-        // probably fine to keep it as is for now.
-        self.previous_frames.len() + self.current_frame.near_calls.len()
-            >= VM_MAX_STACK_DEPTH as usize
-    }
 }
 
 impl<T: Tracer, W: World<T>> State<T, W> {
