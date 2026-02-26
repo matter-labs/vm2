@@ -1,5 +1,4 @@
 use primitive_types::{H160, U256};
-use zkevm_opcode_defs::system_params::VM_MAX_STACK_DEPTH;
 use zksync_vm2_interface::{HeapId, Tracer};
 
 use crate::{

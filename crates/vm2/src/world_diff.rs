@@ -239,7 +239,9 @@ impl WorldDiff {
     /// Returns all recorded storage log queries.
     ///
     /// These logs are sufficient for vm2 state-transition checks and diagnostics.
-    /// TODO: Fill all `zk_evm` witness metadata before using these queries to build prover witness data.
+    // TODO: We don't fill all the `zk_evm` witness metadata, so this is not suitable for
+    // generating EraVM prover witness data. This is not the goal, however, as we only need
+    // to emit enough data to verify the correctness of the state transition.
     pub fn storage_log_queries(&self) -> &[LogQuery] {
         &self.storage_logs
     }

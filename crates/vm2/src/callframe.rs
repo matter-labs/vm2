@@ -144,14 +144,17 @@ impl<T: Tracer, W: World<T>> Callframe<T, W> {
     pub(crate) fn get_raw_pc(&self) -> usize {
         // We cannot use `<*const _>::offset_from` because `self.pc` isn't guaranteed to be allocated within `self.program`
         // (invalid instructions and free panics aren't).
+        // We cannot use `isize` either, because it causes troubles when compiled to `RISC-V`, so we are
+        // returning the value that is clearly out of scope.
         let offset_in_bytes = (self.pc as usize)
-            .wrapping_sub(ptr::from_ref(self.program.instruction(0).unwrap()) as usize);
+            .checked_sub(ptr::from_ref(self.program.instruction(0).unwrap()) as usize)
+            .unwrap_or(usize::MAX);
         offset_in_bytes / mem::size_of::<Instruction<T, W>>()
     }
 
     // TODO: can overflow / underflow after an invalid instruction or free panic. Ordinarily, this will lead to VM termination (for an invalid instruction)
     //   or the callframe getting popped (for a panic), but it's still technically possible to invoke this method afterwards in certain cases (e.g., in the bootloader callframe).
-    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_possible_truncation)]
     pub(crate) fn get_pc_as_u16(&self) -> u16 {
         self.get_raw_pc() as u16
     }
