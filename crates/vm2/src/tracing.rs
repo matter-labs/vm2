@@ -496,7 +496,7 @@ mod test {
     }
 
     #[test]
-    fn program_counter_does_not_panic_for_pointer_before_program() {
+    fn program_counter_with_pointer_before_program() {
         let program = Program::from_raw(vec![Instruction::from_invalid()], vec![]);
 
         let address = Address::from_low_u64_be(0x_1234_5678_90ab_cdef);
@@ -519,14 +519,7 @@ mod test {
         let first_instruction = vm.state.current_frame.pc;
         vm.state.current_frame.pc = first_instruction.wrapping_sub(1);
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            vm.current_frame().program_counter()
-        }));
-
-        assert!(
-            result.is_ok(),
-            "program_counter should not panic on invalid pc"
-        );
-        assert_eq!(result.unwrap(), None);
+        let result = vm.current_frame().program_counter();
+        assert_eq!(result, None);
     }
 }
