@@ -201,7 +201,7 @@ fn load_static<T: Tracer, W: World<T>, In: Source, const INCREMENT: bool>(
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    boilerplate::<opcodes::HeapRead, _, _>(vm, world, tracer, |vm, args| {
+    boilerplate::<opcodes::StaticMemoryRead, _, _>(vm, world, tracer, |vm, args| {
         // Static memory uses a plain 32-bit offset in src0, same as heap UMA ops.
         // Pointer-typed values are still accepted as raw words and then validated by range check.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
@@ -230,7 +230,7 @@ where
     T: Tracer,
     In: Source,
 {
-    boilerplate::<opcodes::HeapWrite, _, _>(vm, world, tracer, |vm, args| {
+    boilerplate::<opcodes::StaticMemoryWrite, _, _>(vm, world, tracer, |vm, args| {
         // Static memory uses a plain 32-bit offset in src0, same as heap UMA ops.
         // Pointer-typed values are still accepted as raw words and then validated by range check.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);

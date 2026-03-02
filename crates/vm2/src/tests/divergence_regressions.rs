@@ -83,8 +83,8 @@ fn static_uma_instruction<T: Tracer, W: World<T>>(opcode: UMAOpcode) -> Instruct
 
 #[test]
 fn static_memory_read_should_not_panic_in_kernel_mode() {
-    // In zk_evm this opcode is executable in kernel mode. We lock this behavior as a regression
-    // test before implementing StaticMemoryRead in vm2.
+    // In zk_evm this opcode is executable in kernel mode. This regression test locks that
+    // behavior in vm2.
     let program = Program::from_raw(
         vec![
             static_uma_instruction(UMAOpcode::StaticMemoryRead),
@@ -111,8 +111,8 @@ fn static_memory_read_should_not_panic_in_kernel_mode() {
 
 #[test]
 fn static_memory_write_should_not_panic_in_kernel_mode() {
-    // In zk_evm this opcode is executable in kernel mode. We lock this behavior as a regression
-    // test before implementing StaticMemoryWrite in vm2.
+    // In zk_evm this opcode is executable in kernel mode. This regression test locks that
+    // behavior in vm2.
     let program = Program::from_raw(
         vec![
             static_uma_instruction(UMAOpcode::StaticMemoryWrite),
