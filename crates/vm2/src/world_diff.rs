@@ -30,18 +30,19 @@ pub struct WorldDiff {
     rollback_storage_logs: Vec<LogQuery>,
 
     // The fields below are only rolled back when the whole VM is rolled back.
-    /// Values indicate whether a bytecode was successfully decommitted. When accessing decommitted hashes
-    /// for the execution state, we need to track both successful and failed decommitments; OTOH, only successful ones
-    /// matter when computing decommitment cost.
-    pub(crate) decommitted_hashes: RollbackableMap<U256, bool>,
-    /// Memory page assigned to each successfully decommitted hash by the `Decommit` opcode.
+    /// Tracks decommit attempts and successful decommit state for each bytecode hash.
     ///
-    /// Like `decommitted_hashes`, this is rolled back only by external VM snapshots.
-    decommit_pages: RollbackableMap<U256, u32>,
-    /// Reverse index for `decommit_pages` to quickly check whether a heap page is globally pinned
-    /// by decommitment reuse semantics.
+    /// This includes failed attempts (out of gas) because they affect old-VM-compatible behavior,
+    /// and successful attempts may or may not already have a materialized decommit page.
     ///
-    /// This follows external snapshot / rollback semantics together with `decommit_pages`.
+    /// This field is rolled back only by external VM snapshots.
+    pub(crate) decommitted_hashes: RollbackableMap<U256, DecommitState>,
+    /// Reverse index for `decommitted_hashes` entries that carry materialized heap pages.
+    ///
+    /// This is used to quickly check whether a heap page is globally pinned by decommitment reuse
+    /// semantics.
+    ///
+    /// This follows external snapshot / rollback semantics together with `decommitted_hashes`.
     decommit_pinned_pages: RollbackableSet<u32>,
     read_storage_slots: RollbackableSet<(H160, U256)>,
     written_storage_slots: RollbackableSet<(H160, U256)>,
@@ -53,8 +54,7 @@ pub struct WorldDiff {
 #[derive(Debug)]
 pub(crate) struct ExternalSnapshot {
     internal_snapshot: Snapshot,
-    pub(crate) decommitted_hashes: <RollbackableMap<U256, bool> as Rollback>::Snapshot,
-    decommit_pages: <RollbackableMap<U256, u32> as Rollback>::Snapshot,
+    pub(crate) decommitted_hashes: <RollbackableMap<U256, DecommitState> as Rollback>::Snapshot,
     decommit_pinned_pages: <RollbackableSet<u32> as Rollback>::Snapshot,
     read_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
     written_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
@@ -62,6 +62,24 @@ pub(crate) struct ExternalSnapshot {
     pubdata_costs: <RollbackableLog<i32> as Rollback>::Snapshot,
     storage_logs_len: usize,
     rollback_storage_logs_len: usize,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DecommitState {
+    /// A decommit was attempted, but did not finish successfully (e.g. due to out-of-gas).
+    ///
+    /// We still record this state to preserve old VM behavior where failed attempts are visible
+    /// in `decommitted_hashes()`, but this state must not make future decommits free.
+    #[default]
+    Unsuccessful,
+    /// A bytecode hash was successfully decommitted for charging / freshness semantics,
+    /// but no reusable heap page has been materialized yet.
+    ///
+    /// This happens when `pay_for_decommit` succeeds on non-`Decommit` opcode paths
+    /// (e.g. far call), and the first `Decommit` opcode later materializes the page lazily.
+    SucceededNoPage,
+    /// A bytecode hash was successfully decommitted and has an assigned reusable heap page.
+    SucceededWithPage(u32),
 }
 
 impl WorldDiff {
@@ -351,11 +369,16 @@ impl WorldDiff {
     }
 
     pub(crate) fn decommit_page(&self, code_hash: U256) -> Option<HeapId> {
-        self.decommit_pages
+        self.decommitted_hashes
             .as_ref()
             .get(&code_hash)
-            .copied()
-            .map(HeapId::from_u32_unchecked)
+            .and_then(|state| {
+                if let DecommitState::SucceededWithPage(page) = state {
+                    Some(HeapId::from_u32_unchecked(*page))
+                } else {
+                    None
+                }
+            })
     }
 
     pub(crate) fn is_decommit_page_pinned(&self, page: HeapId) -> bool {
@@ -363,7 +386,8 @@ impl WorldDiff {
     }
 
     pub(crate) fn set_decommit_page(&mut self, code_hash: U256, page: HeapId) {
-        self.decommit_pages.insert(code_hash, page.as_u32());
+        self.decommitted_hashes
+            .insert(code_hash, DecommitState::SucceededWithPage(page.as_u32()));
         self.decommit_pinned_pages.add(page.as_u32());
     }
 
@@ -413,7 +437,6 @@ impl WorldDiff {
                 ..self.snapshot()
             },
             decommitted_hashes: self.decommitted_hashes.snapshot(),
-            decommit_pages: self.decommit_pages.snapshot(),
             decommit_pinned_pages: self.decommit_pinned_pages.snapshot(),
             read_storage_slots: self.read_storage_slots.snapshot(),
             written_storage_slots: self.written_storage_slots.snapshot(),
@@ -430,7 +453,6 @@ impl WorldDiff {
         self.pubdata_costs.rollback(snapshot.pubdata_costs);
         self.decommitted_hashes
             .rollback(snapshot.decommitted_hashes);
-        self.decommit_pages.rollback(snapshot.decommit_pages);
         self.decommit_pinned_pages
             .rollback(snapshot.decommit_pinned_pages);
         self.read_storage_slots
@@ -452,7 +474,6 @@ impl WorldDiff {
         self.storage_refunds.delete_history();
         self.pubdata_costs.delete_history();
         self.decommitted_hashes.delete_history();
-        self.decommit_pages.delete_history();
         self.decommit_pinned_pages.delete_history();
         self.read_storage_slots.delete_history();
         self.written_storage_slots.delete_history();

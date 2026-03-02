@@ -4,7 +4,11 @@ use zkevm_opcode_defs::{
 };
 use zksync_vm2_interface::{CycleStats, Tracer};
 
-use crate::{program::Program, world_diff::WorldDiff, World};
+use crate::{
+    program::Program,
+    world_diff::{DecommitState, WorldDiff},
+    World,
+};
 
 impl WorldDiff {
     #[allow(clippy::too_many_arguments)]
@@ -77,7 +81,10 @@ impl WorldDiff {
         code_info[1] = 0;
         let code_key: U256 = U256::from_big_endian(&code_info);
 
-        let was_decommitted = self.decommitted_hashes.as_ref().get(&code_key) == Some(&true);
+        let was_decommitted = matches!(
+            self.decommitted_hashes.as_ref().get(&code_key),
+            Some(DecommitState::SucceededNoPage | DecommitState::SucceededWithPage(_))
+        );
         let cost = if was_decommitted {
             0
         } else {
@@ -97,7 +104,14 @@ impl WorldDiff {
         tracer: &mut T,
         code_hash: U256,
     ) -> (Vec<u8>, bool) {
-        let is_new = self.decommitted_hashes.insert(code_hash, true) != Some(true);
+        let is_new = match self.decommitted_hashes.as_ref().get(&code_hash).copied() {
+            None | Some(DecommitState::Unsuccessful) => {
+                self.decommitted_hashes
+                    .insert(code_hash, DecommitState::SucceededNoPage);
+                true
+            }
+            Some(DecommitState::SucceededNoPage | DecommitState::SucceededWithPage(_)) => false,
+        };
         let code = world.decommit_code(code_hash);
         if is_new {
             let code_len = u32::try_from(code.len()).expect("bytecode length overflow");
@@ -117,12 +131,30 @@ impl WorldDiff {
         if decommit.cost > *gas {
             // We intentionally record a decommitment event even if actual decommitment never happens because of an out-of-gas error.
             // This is how the old VM behaves.
-            self.decommitted_hashes.insert(decommit.code_key, false);
+            if !matches!(
+                self.decommitted_hashes.as_ref().get(&decommit.code_key),
+                Some(DecommitState::SucceededNoPage | DecommitState::SucceededWithPage(_))
+            ) {
+                self.decommitted_hashes
+                    .insert(decommit.code_key, DecommitState::Unsuccessful);
+            }
             // Unlike all other gas costs, this one is not paid if low on gas.
             return None;
         }
 
-        let is_new = self.decommitted_hashes.insert(decommit.code_key, true) != Some(true);
+        let is_new = match self
+            .decommitted_hashes
+            .as_ref()
+            .get(&decommit.code_key)
+            .copied()
+        {
+            None | Some(DecommitState::Unsuccessful) => {
+                self.decommitted_hashes
+                    .insert(decommit.code_key, DecommitState::SucceededNoPage);
+                true
+            }
+            Some(DecommitState::SucceededNoPage | DecommitState::SucceededWithPage(_)) => false,
+        };
         *gas -= decommit.cost;
 
         let decommit = world.decommit(decommit.code_key);
