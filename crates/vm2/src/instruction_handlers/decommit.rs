@@ -38,20 +38,21 @@ fn decommit<T: Tracer, W: World<T>>(
             vm.state.current_frame.gas += extra_cost;
         }
 
-        let heap = if is_fresh {
+        // We only need to mutate keep-alive state when this opcode allocates a new heap.
+        let (heap, should_record_keep_alive) = if is_fresh {
             let heap = vm.state.heaps.allocate_with_content(program.as_ref());
             vm.world_diff.set_decommit_page(code_hash, heap);
-            heap
+            (heap, true)
         } else {
-            // `pay_for_decommit` marks hashes as decommitted without assigning a decommit page.
-            // If `Decommit` is the first opcode path that needs a memory page for this hash,
-            // materialize the page lazily instead of panicking the host process.
+            // `pay_for_decommit` can mark the hash as decommitted without assigning a memory page.
+            // In that case, the first `Decommit` opcode materializes the page lazily and starts
+            // tracking it for frame teardown semantics.
             if let Some(heap) = vm.world_diff.decommit_page(code_hash) {
-                heap
+                (heap, false)
             } else {
                 let heap = vm.state.heaps.allocate_with_content(program.as_ref());
                 vm.world_diff.set_decommit_page(code_hash, heap);
-                heap
+                (heap, true)
             }
         };
 
@@ -63,7 +64,7 @@ fn decommit<T: Tracer, W: World<T>>(
             } else {
                 &mut vm.state.current_frame.heaps_i_am_keeping_alive
             };
-        if !heaps_to_keep_alive.contains(&heap) {
+        if should_record_keep_alive {
             heaps_to_keep_alive.push(heap);
         }
 

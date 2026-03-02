@@ -584,8 +584,8 @@ fn nonfresh_decommit_should_reuse_existing_memory_page() {
 #[test]
 fn decommit_after_far_call_decommit_should_not_panic() {
     // `pay_for_decommit` marks the hash as decommitted but does not assign a Decommit page.
-    // A follow-up Decommit opcode on the same hash should stay inside VM semantics instead of
-    // panicking the host process.
+    // The first follow-up `Decommit` must materialize a page lazily, while repeated `Decommit`
+    // should reuse that page without creating duplicate keep-alive entries.
     let called_address = Address::from_low_u64_be(2);
     let called_program = Program::from_raw(vec![ret_instruction()], vec![]);
     let mut world = TestWorld::new(&[(called_address, called_program)]);
@@ -603,13 +603,22 @@ fn decommit_after_far_call_decommit_should_not_panic() {
         false,
         Arguments::new(Predicate::Always, 200, ModeRequirements::none()),
     );
-    let decommit = Instruction::from_decommit(
+    let decommit_first = Instruction::from_decommit(
         Register1(Register::new(1)),
         Register2(Register::new(2)),
         Register1(Register::new(3)),
         Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
     );
-    let program = Program::from_raw(vec![far_call, decommit, ret_instruction()], vec![]);
+    let decommit_second = Instruction::from_decommit(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Register1(Register::new(4)),
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let program = Program::from_raw(
+        vec![far_call, decommit_first, decommit_second, ret_instruction()],
+        vec![],
+    );
 
     let mut vm = VirtualMachine::new(
         kernel_address(),
@@ -634,10 +643,27 @@ fn decommit_after_far_call_decommit_should_not_panic() {
     vm.state.register_pointer_flags &= !(1 << 1);
 
     execute_one_instruction(&mut vm, &mut world, &mut ());
+    let first = FatPointer::from(vm.state.registers[3]);
+
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+    let second = FatPointer::from(vm.state.registers[4]);
+
+    let keep_alive_occurrences = vm
+        .state
+        .current_frame
+        .heaps_i_am_keeping_alive
+        .iter()
+        .filter(|&&heap| heap == first.memory_page)
+        .count();
 
     assert!(
         vm.world_diff.decommit_page(code_hash).is_some(),
         "Decommit opcode should materialize a reusable page for non-fresh hashes"
+    );
+    assert_eq!(first.memory_page, second.memory_page);
+    assert_eq!(
+        keep_alive_occurrences, 1,
+        "Reused decommit pages should be recorded in keep-alive once"
     );
 }
 
@@ -705,8 +731,20 @@ fn nonfresh_decommit_should_keep_page_alive_after_nested_frame_returns() {
     execute_one_instruction(&mut vm, &mut world, &mut ());
     let second = FatPointer::from(vm.state.registers[4]);
 
+    let keep_alive_occurrences = vm
+        .state
+        .current_frame
+        .heaps_i_am_keeping_alive
+        .iter()
+        .filter(|&&heap| heap == second.memory_page)
+        .count();
+
     assert_eq!(first.memory_page, second.memory_page);
     assert_eq!(vm.state.heaps[second.memory_page].read_u256(0), code_word);
+    assert_eq!(
+        keep_alive_occurrences, 1,
+        "Nested and parent decommits should not duplicate keep-alive entries"
+    );
 }
 
 #[test]
