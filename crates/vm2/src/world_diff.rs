@@ -130,6 +130,8 @@ impl WorldDiff {
 
         self.pubdata_costs.push(0);
         let value = self.just_read_storage(world, contract, key);
+        // Note: timestamp logic does not match `zk_evm`, we're only ensuring that the timestamps
+        // are unique. This is fine as long as we don't need to actually generate witness based on these logs.
         self.storage_logs.push(LogQuery {
             timestamp: Timestamp(
                 u32::try_from(self.storage_logs.len()).expect("Too many storage logs"),
