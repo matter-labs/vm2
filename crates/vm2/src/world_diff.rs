@@ -30,9 +30,11 @@ pub struct WorldDiff {
     rollback_storage_logs: Vec<LogQuery>,
 
     // The fields below are only rolled back when the whole VM is rolled back.
-    /// Tracks decommit attempts and successful decommit state for each bytecode hash.
+    /// Tracks decommit visibility state for each bytecode hash.
     ///
-    /// This includes failed attempts (out of gas) because they affect old-VM-compatible behavior.
+    /// Besides successful decommits, we also retain far-call decommit attempts that failed with
+    /// out-of-gas in `pay_for_decommit()`. Legacy VM includes those hashes into "used contracts"
+    /// output, and shadow-mode compares that output (`CurrentExecutionState.used_contract_hashes`).
     ///
     /// This field is rolled back only by external VM snapshots.
     pub(crate) decommitted_hashes: RollbackableMap<U256, DecommitState>,
@@ -65,10 +67,14 @@ pub(crate) struct ExternalSnapshot {
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DecommitState {
-    /// A decommit was attempted, but did not finish successfully (e.g. due to out-of-gas).
+    /// A far-call decommit attempt ran out of gas before materialization.
     ///
-    /// We still record this state to preserve old VM behavior where failed attempts are visible
-    /// in `decommitted_hashes()`, but this state must not make future decommits free.
+    /// We preserve this state for legacy compatibility: old VM exposes these hashes as used
+    /// contracts. This state is observable via `decommitted_hashes()`, but it must not make
+    /// future decommits free.
+    ///
+    /// Note that `log.decommit` out-of-gas is not represented by this state because that opcode
+    /// exits before decommit bookkeeping.
     #[default]
     Unsuccessful,
     /// A bytecode hash was successfully decommitted and has an assigned reusable heap page.
@@ -355,8 +361,11 @@ impl WorldDiff {
         self.l2_to_l1_logs.logs_after(snapshot.l2_to_l1_logs)
     }
 
-    /// Returns hashes of decommitted contract bytecodes in no particular order. Note that this includes
-    /// failed (out-of-gas) decommitments.
+    /// Returns hashes of contract bytecodes that were observed by decommit bookkeeping in no
+    /// particular order.
+    ///
+    /// This includes successful decommits and far-call out-of-gas attempts recorded as
+    /// [`DecommitState::Unsuccessful`] for legacy `used_contract_hashes` compatibility.
     pub fn decommitted_hashes(&self) -> impl Iterator<Item = U256> + '_ {
         self.decommitted_hashes.as_ref().keys().copied()
     }

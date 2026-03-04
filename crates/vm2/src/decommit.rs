@@ -159,8 +159,9 @@ impl WorldDiff {
         gas: &mut u32,
     ) -> Option<Program<T, W>> {
         if decommit.cost > *gas {
-            // We intentionally record a decommitment event even if actual decommitment never happens because of an out-of-gas error.
-            // This is how the old VM behaves.
+            // We intentionally keep this hash visible even though decommit did not execute.
+            // Legacy VM includes far-call OOG attempts in "used contracts", and shadow mode
+            // compares that output.
             if !matches!(
                 self.decommitted_hashes.as_ref().get(&decommit.code_key),
                 Some(DecommitState::Succeeded(_))
