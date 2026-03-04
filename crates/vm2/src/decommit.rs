@@ -2,13 +2,40 @@ use primitive_types::{H160, U256};
 use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
-use zksync_vm2_interface::{CycleStats, Tracer};
+use zksync_vm2_interface::{CycleStats, HeapId, Tracer};
 
 use crate::{
     program::Program,
     world_diff::{DecommitState, WorldDiff},
-    World,
+    VirtualMachine, World,
 };
+
+/// Ensures that a decommit hash has a materialized reusable page and returns it.
+///
+/// This page is pinned globally in [`WorldDiff`] and additionally kept alive in the
+/// bootloader frame (or current frame if no bootloader frame exists), matching
+/// decommit opcode teardown semantics.
+pub(crate) fn materialize_decommit_page<T: Tracer, W: World<T>>(
+    vm: &mut VirtualMachine<T, W>,
+    code_hash: U256,
+    code: &[u8],
+) -> HeapId {
+    if let Some(existing) = vm.world_diff.decommit_page(code_hash) {
+        return existing;
+    }
+
+    let heap = vm.state.heaps.allocate_with_content(code);
+    vm.world_diff.set_decommit_page(code_hash, heap);
+
+    let heaps_to_keep_alive = if let Some(bootloader_frame) = vm.state.previous_frames.first_mut() {
+        &mut bootloader_frame.heaps_i_am_keeping_alive
+    } else {
+        &mut vm.state.current_frame.heaps_i_am_keeping_alive
+    };
+    heaps_to_keep_alive.push(heap);
+
+    heap
+}
 
 impl WorldDiff {
     #[allow(clippy::too_many_arguments)]
@@ -81,10 +108,8 @@ impl WorldDiff {
         code_info[1] = 0;
         let code_key: U256 = U256::from_big_endian(&code_info);
 
-        let was_decommitted = matches!(
-            self.decommitted_hashes.as_ref().get(&code_key),
-            Some(DecommitState::SucceededNoPage | DecommitState::SucceededWithPage(_))
-        );
+        let decommit_state = self.decommitted_hashes.as_ref().get(&code_key).copied();
+        let was_decommitted = matches!(decommit_state, Some(DecommitState::Succeeded(_)));
         let cost = if was_decommitted {
             0
         } else {
@@ -92,7 +117,16 @@ impl WorldDiff {
             u32::from(code_length_in_words) * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT
         };
 
-        Some((UnpaidDecommit { cost, code_key }, is_evm))
+        let should_materialize = !was_decommitted;
+
+        Some((
+            UnpaidDecommit {
+                cost,
+                code_key,
+                should_materialize,
+            },
+            is_evm,
+        ))
     }
 
     /// Returns the decommitted contract code and a flag set to `true` if this is a fresh decommit (i.e.,
@@ -105,12 +139,8 @@ impl WorldDiff {
         code_hash: U256,
     ) -> (Vec<u8>, bool) {
         let is_new = match self.decommitted_hashes.as_ref().get(&code_hash).copied() {
-            None | Some(DecommitState::Unsuccessful) => {
-                self.decommitted_hashes
-                    .insert(code_hash, DecommitState::SucceededNoPage);
-                true
-            }
-            Some(DecommitState::SucceededNoPage | DecommitState::SucceededWithPage(_)) => false,
+            None | Some(DecommitState::Unsuccessful) => true,
+            Some(DecommitState::Succeeded(_)) => false,
         };
         let code = world.decommit_code(code_hash);
         if is_new {
@@ -133,7 +163,7 @@ impl WorldDiff {
             // This is how the old VM behaves.
             if !matches!(
                 self.decommitted_hashes.as_ref().get(&decommit.code_key),
-                Some(DecommitState::SucceededNoPage | DecommitState::SucceededWithPage(_))
+                Some(DecommitState::Succeeded(_))
             ) {
                 self.decommitted_hashes
                     .insert(decommit.code_key, DecommitState::Unsuccessful);
@@ -148,12 +178,8 @@ impl WorldDiff {
             .get(&decommit.code_key)
             .copied()
         {
-            None | Some(DecommitState::Unsuccessful) => {
-                self.decommitted_hashes
-                    .insert(decommit.code_key, DecommitState::SucceededNoPage);
-                true
-            }
-            Some(DecommitState::SucceededNoPage | DecommitState::SucceededWithPage(_)) => false,
+            None | Some(DecommitState::Unsuccessful) => true,
+            Some(DecommitState::Succeeded(_)) => false,
         };
         *gas -= decommit.cost;
 
@@ -173,6 +199,18 @@ impl WorldDiff {
 pub(crate) struct UnpaidDecommit {
     cost: u32,
     code_key: U256,
+    /// Indicates whether the decommit page should be materialized after successful payment.
+    should_materialize: bool,
+}
+
+impl UnpaidDecommit {
+    pub(crate) const fn code_key(self) -> U256 {
+        self.code_key
+    }
+
+    pub(crate) const fn should_materialize(self) -> bool {
+        self.should_materialize
+    }
 }
 
 pub(crate) fn u256_into_address(source: U256) -> H160 {

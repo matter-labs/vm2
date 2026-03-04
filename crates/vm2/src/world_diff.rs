@@ -32,8 +32,7 @@ pub struct WorldDiff {
     // The fields below are only rolled back when the whole VM is rolled back.
     /// Tracks decommit attempts and successful decommit state for each bytecode hash.
     ///
-    /// This includes failed attempts (out of gas) because they affect old-VM-compatible behavior,
-    /// and successful attempts may or may not already have a materialized decommit page.
+    /// This includes failed attempts (out of gas) because they affect old-VM-compatible behavior.
     ///
     /// This field is rolled back only by external VM snapshots.
     pub(crate) decommitted_hashes: RollbackableMap<U256, DecommitState>,
@@ -72,14 +71,8 @@ pub(crate) enum DecommitState {
     /// in `decommitted_hashes()`, but this state must not make future decommits free.
     #[default]
     Unsuccessful,
-    /// A bytecode hash was successfully decommitted for charging / freshness semantics,
-    /// but no reusable heap page has been materialized yet.
-    ///
-    /// This happens when `pay_for_decommit` succeeds on non-`Decommit` opcode paths
-    /// (e.g. far call), and the first `Decommit` opcode later materializes the page lazily.
-    SucceededNoPage,
     /// A bytecode hash was successfully decommitted and has an assigned reusable heap page.
-    SucceededWithPage(u32),
+    Succeeded(u32),
 }
 
 impl WorldDiff {
@@ -373,7 +366,7 @@ impl WorldDiff {
             .as_ref()
             .get(&code_hash)
             .and_then(|state| {
-                if let DecommitState::SucceededWithPage(page) = state {
+                if let DecommitState::Succeeded(page) = state {
                     Some(HeapId::from_u32_unchecked(*page))
                 } else {
                     None
@@ -387,7 +380,7 @@ impl WorldDiff {
 
     pub(crate) fn set_decommit_page(&mut self, code_hash: U256, page: HeapId) {
         self.decommitted_hashes
-            .insert(code_hash, DecommitState::SucceededWithPage(page.as_u32()));
+            .insert(code_hash, DecommitState::Succeeded(page.as_u32()));
         self.decommit_pinned_pages.add(page.as_u32());
     }
 

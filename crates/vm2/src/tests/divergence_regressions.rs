@@ -583,9 +583,8 @@ fn nonfresh_decommit_should_reuse_existing_memory_page() {
 
 #[test]
 fn decommit_after_far_call_decommit_should_not_panic() {
-    // `pay_for_decommit` marks the hash as decommitted but does not assign a Decommit page.
-    // The first follow-up `Decommit` must materialize a page lazily, while repeated `Decommit`
-    // should reuse that page without creating duplicate keep-alive entries.
+    // Far-call decommit must eagerly materialize a reusable decommit page.
+    // Follow-up `Decommit` calls should return that same page without duplicate keep-alive entries.
     let called_address = Address::from_low_u64_be(2);
     let called_program = Program::from_raw(vec![ret_instruction()], vec![]);
     let mut world = TestWorld::new(&[(called_address, called_program)]);
@@ -638,6 +637,11 @@ fn decommit_after_far_call_decommit_should_not_panic() {
     execute_one_instruction(&mut vm, &mut world, &mut ());
     execute_one_instruction(&mut vm, &mut world, &mut ());
 
+    assert!(
+        vm.world_diff.decommit_page(code_hash).is_some(),
+        "Far-call decommit should materialize a reusable page"
+    );
+
     vm.state.registers[1] = code_hash;
     vm.state.registers[2] = U256::zero();
     vm.state.register_pointer_flags &= !(1 << 1);
@@ -658,7 +662,7 @@ fn decommit_after_far_call_decommit_should_not_panic() {
 
     assert!(
         vm.world_diff.decommit_page(code_hash).is_some(),
-        "Decommit opcode should materialize a reusable page for non-fresh hashes"
+        "Non-fresh decommit should keep using a materialized reusable page"
     );
     assert_eq!(first.memory_page, second.memory_page);
     assert_eq!(

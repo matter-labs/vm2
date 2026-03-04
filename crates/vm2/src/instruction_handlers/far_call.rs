@@ -13,7 +13,7 @@ use super::{
 };
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
-    decommit::{is_kernel, u256_into_address},
+    decommit::{is_kernel, materialize_decommit_page, u256_into_address},
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
     predication::Flags,
@@ -99,12 +99,23 @@ where
             }
             let calldata = maybe_calldata?;
             let (unpaid_decommit, is_evm) = decommit_result?;
+            let code_hash = unpaid_decommit.code_key();
+            let should_materialize = unpaid_decommit.should_materialize();
             let program = vm.world_diff.pay_for_decommit(
                 world,
                 tracer,
                 unpaid_decommit,
                 &mut vm.state.current_frame.gas,
             )?;
+
+            if should_materialize {
+                // TODO: The interfaces that `World` provide exposes either a parsed program OR bytes,
+                // so converting back to bytes here feels like a more reasonable choice; though probably
+                // a more optimal approach is possible if we rework interfaces either for the `World` or
+                // for heap instantiation.
+                let code = program_to_bytes(&program);
+                materialize_decommit_page(vm, code_hash, &code);
+            }
 
             Some((calldata, program, is_evm))
         })();
@@ -176,6 +187,16 @@ fn get_far_call_arguments(abi: U256) -> FarCallABI {
         is_constructor_call: constructor_call_byte != 0,
         is_system_call: system_call_byte != 0,
     }
+}
+
+fn program_to_bytes<T, W>(program: &Program<T, W>) -> Vec<u8> {
+    let mut result = Vec::with_capacity(program.code_page().len() * 32);
+    for word in program.code_page().iter() {
+        let mut bytes = [0u8; 32];
+        word.to_big_endian(&mut bytes);
+        result.extend_from_slice(&bytes);
+    }
+    result
 }
 
 /// Forms a new fat pointer or narrows an existing one, as dictated by the ABI.

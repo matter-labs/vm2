@@ -5,6 +5,7 @@ use zksync_vm2_interface::{opcodes, Tracer};
 use super::common::boilerplate_ext;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
+    decommit::materialize_decommit_page,
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
@@ -33,40 +34,12 @@ fn decommit<T: Tracer, W: World<T>>(
             return;
         }
 
-        let (program, is_fresh) = vm.world_diff.decommit_opcode(world, tracer, code_hash);
+        let (code, is_fresh) = vm.world_diff.decommit_opcode(world, tracer, code_hash);
         if !is_fresh {
             vm.state.current_frame.gas += extra_cost;
         }
 
-        // We only need to mutate keep-alive state when this opcode allocates a new heap.
-        let (heap, should_record_keep_alive) = if is_fresh {
-            let heap = vm.state.heaps.allocate_with_content(program.as_ref());
-            vm.world_diff.set_decommit_page(code_hash, heap);
-            (heap, true)
-        } else {
-            // `pay_for_decommit` can mark the hash as decommitted without assigning a memory page.
-            // In that case, the first `Decommit` opcode materializes the page lazily and starts
-            // tracking it for frame teardown semantics.
-            if let Some(heap) = vm.world_diff.decommit_page(code_hash) {
-                (heap, false)
-            } else {
-                let heap = vm.state.heaps.allocate_with_content(program.as_ref());
-                vm.world_diff.set_decommit_page(code_hash, heap);
-                (heap, true)
-            }
-        };
-
-        // Decommit page mapping lives for the whole VM run, so nested-frame decommits
-        // must pin pages in the bootloader frame rather than in the current frame.
-        let heaps_to_keep_alive =
-            if let Some(bootloader_frame) = vm.state.previous_frames.first_mut() {
-                &mut bootloader_frame.heaps_i_am_keeping_alive
-            } else {
-                &mut vm.state.current_frame.heaps_i_am_keeping_alive
-            };
-        if should_record_keep_alive {
-            heaps_to_keep_alive.push(heap);
-        }
+        let heap = materialize_decommit_page(vm, code_hash, &code);
 
         let value = FatPointer {
             offset: 0,
