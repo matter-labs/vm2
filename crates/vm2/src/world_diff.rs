@@ -131,7 +131,9 @@ impl WorldDiff {
         self.pubdata_costs.push(0);
         let value = self.just_read_storage(world, contract, key);
         self.storage_logs.push(LogQuery {
-            timestamp: Timestamp(u32::try_from(self.storage_logs.len()).unwrap_or(u32::MAX)),
+            timestamp: Timestamp(
+                u32::try_from(self.storage_logs.len()).expect("Too many storage logs"),
+            ),
             tx_number_in_block,
             aux_byte: STORAGE_AUX_BYTE,
             shard_id: 0,
