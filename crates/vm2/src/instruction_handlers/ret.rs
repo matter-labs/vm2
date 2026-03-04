@@ -114,6 +114,7 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
     };
 
     if return_type.is_failure() {
+        vm.world_diff.append_rollback_logs(&snapshot);
         vm.world_diff.rollback(snapshot);
     }
 

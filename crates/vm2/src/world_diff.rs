@@ -61,8 +61,6 @@ pub(crate) struct ExternalSnapshot {
     written_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
     storage_refunds: <RollbackableLog<u32> as Rollback>::Snapshot,
     pubdata_costs: <RollbackableLog<i32> as Rollback>::Snapshot,
-    storage_logs_len: usize,
-    rollback_storage_logs_len: usize,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -407,8 +405,11 @@ impl WorldDiff {
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)] // intentional: we require a snapshot to be rolled back to no more than once
-    pub(crate) fn rollback(&mut self, snapshot: Snapshot) {
+    /// Appends rollback storage logs recorded after `snapshot` to `storage_logs`.
+    ///
+    /// This is needed for failed frame returns (revert / panic) where rolled-back writes
+    /// must remain observable in the storage log stream.
+    pub(crate) fn append_rollback_logs(&mut self, snapshot: &Snapshot) {
         if self.rollback_storage_logs.len() > snapshot.rollback_storage_logs_len {
             let rollback_logs = self
                 .rollback_storage_logs
@@ -417,6 +418,10 @@ impl WorldDiff {
                 self.storage_logs.push(log);
             }
         }
+    }
+
+    #[allow(clippy::needless_pass_by_value)] // intentional: we require a snapshot to be rolled back to no more than once
+    pub(crate) fn rollback(&mut self, snapshot: Snapshot) {
         self.storage_changes.rollback(snapshot.storage_changes);
         self.paid_changes.rollback(snapshot.paid_changes);
         self.events.rollback(snapshot.events);
@@ -444,12 +449,13 @@ impl WorldDiff {
             written_storage_slots: self.written_storage_slots.snapshot(),
             storage_refunds: self.storage_refunds.snapshot(),
             pubdata_costs: self.pubdata_costs.snapshot(),
-            storage_logs_len: self.storage_logs.len(),
-            rollback_storage_logs_len: self.rollback_storage_logs.len(),
         }
     }
 
     pub(crate) fn external_rollback(&mut self, snapshot: ExternalSnapshot) {
+        let storage_logs_len = snapshot.internal_snapshot.storage_logs_len;
+        let rollback_storage_logs_len = snapshot.internal_snapshot.rollback_storage_logs_len;
+
         self.rollback(snapshot.internal_snapshot);
         self.storage_refunds.rollback(snapshot.storage_refunds);
         self.pubdata_costs.rollback(snapshot.pubdata_costs);
@@ -461,9 +467,9 @@ impl WorldDiff {
             .rollback(snapshot.read_storage_slots);
         self.written_storage_slots
             .rollback(snapshot.written_storage_slots);
-        self.storage_logs.truncate(snapshot.storage_logs_len);
+        self.storage_logs.truncate(storage_logs_len);
         self.rollback_storage_logs
-            .truncate(snapshot.rollback_storage_logs_len);
+            .truncate(rollback_storage_logs_len);
     }
 
     pub(crate) fn delete_history(&mut self) {
@@ -755,6 +761,7 @@ mod tests {
         world_diff.write_storage(&mut world, &mut (), contract, key, U256::from(10), 0);
         let snapshot = world_diff.snapshot();
         world_diff.write_storage(&mut world, &mut (), contract, key, U256::from(20), 0);
+        world_diff.append_rollback_logs(&snapshot);
         world_diff.rollback(snapshot);
 
         let logs = world_diff.storage_log_queries();
@@ -765,6 +772,43 @@ mod tests {
         assert!(logs[3].rw_flag && logs[3].rollback);
         assert_eq!(logs[3].read_value, logs[2].read_value);
         assert_eq!(logs[3].written_value, logs[2].written_value);
+    }
+
+    #[test]
+    fn rollback_without_append_keeps_storage_log_stream_unchanged() {
+        let mut world_diff = WorldDiff::default();
+        let mut world = TestWorld::default();
+        let contract = H160::zero();
+        let key = U256::from(1);
+
+        world_diff.write_storage(&mut world, &mut (), contract, key, U256::from(10), 0);
+        let snapshot = world_diff.snapshot();
+        world_diff.write_storage(&mut world, &mut (), contract, key, U256::from(20), 0);
+        world_diff.rollback(snapshot);
+
+        let logs = world_diff.storage_log_queries();
+        assert_eq!(logs.len(), 2);
+        assert!(logs.iter().all(|log| log.rw_flag && !log.rollback));
+        assert_eq!(world_diff.rollback_storage_logs.len(), 2);
+    }
+
+    #[test]
+    fn external_rollback_truncates_storage_logs_to_internal_snapshot() {
+        let mut world_diff = WorldDiff::default();
+        let mut world = TestWorld::default();
+        let contract = H160::zero();
+        let key = U256::from(1);
+
+        world_diff.write_storage(&mut world, &mut (), contract, key, U256::from(10), 0);
+        let snapshot = world_diff.external_snapshot();
+        world_diff.write_storage(&mut world, &mut (), contract, key, U256::from(20), 0);
+
+        world_diff.external_rollback(snapshot);
+
+        let logs = world_diff.storage_log_queries();
+        assert_eq!(logs.len(), 1);
+        assert!(logs[0].rw_flag && !logs[0].rollback);
+        assert_eq!(world_diff.rollback_storage_logs.len(), 1);
     }
 
     #[test]
