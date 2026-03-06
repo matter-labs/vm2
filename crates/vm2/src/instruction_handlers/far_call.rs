@@ -191,6 +191,7 @@ fn get_far_call_arguments(abi: U256) -> FarCallABI {
 
 fn program_to_bytes<T, W>(program: &Program<T, W>) -> Vec<u8> {
     let mut result = Vec::with_capacity(program.code_page().len() * 32);
+    #[allow(clippy::explicit_iter_loop)] // `.iter()` is required in this case
     for word in program.code_page().iter() {
         let mut bytes = [0u8; 32];
         word.to_big_endian(&mut bytes);
