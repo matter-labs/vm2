@@ -710,7 +710,7 @@ fn nonfresh_decommit_should_reuse_existing_memory_page() {
 
 #[test]
 fn fresh_decommit_should_preserve_existing_heap_bytes_after_code() {
-    let code_word = U256::from(0x363d3d37363d34f0_u64);
+    let code_word = U256::from(0x363d_3d37_363d_34f0_u64);
     let contract = (
         non_kernel_address(),
         Program::from_raw(vec![ret_instruction()], vec![code_word]),

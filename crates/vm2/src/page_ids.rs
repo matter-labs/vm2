@@ -8,14 +8,17 @@ pub(crate) const fn static_memory_page() -> HeapId {
     HeapId::from_u32_unchecked(STATIC_MEMORY_PAGE)
 }
 
+#[cfg_attr(feature = "single_instruction_test", allow(dead_code))]
 pub(crate) const fn bootloader_calldata_page() -> HeapId {
     HeapId::from_u32_unchecked(BOOTLOADER_CALLDATA_PAGE)
 }
 
+#[cfg_attr(feature = "single_instruction_test", allow(dead_code))]
 pub(crate) const fn bootloader_heap_page() -> HeapId {
     HeapId::from_u32_unchecked(BOOTLOADER_HEAP_PAGE)
 }
 
+#[cfg_attr(feature = "single_instruction_test", allow(dead_code))]
 pub(crate) const fn bootloader_aux_heap_page() -> HeapId {
     HeapId::from_u32_unchecked(BOOTLOADER_AUX_HEAP_PAGE)
 }

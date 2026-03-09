@@ -61,6 +61,7 @@ impl<'a> Arbitrary<'a> for Heap {
 
 #[derive(Debug, Clone)]
 pub struct Heaps {
+    #[allow(dead_code)] // For API compatibility with real implementation.
     heap_id: HeapId,
     pub(crate) read: MockRead<HeapId, Heap>,
 }
@@ -71,6 +72,7 @@ impl Heaps {
         unimplemented!("Should use arbitrary heap, not fresh heap in testing.")
     }
 
+    #[allow(dead_code)] // For API compatibility with real implementation.
     pub(crate) fn allocate(&mut self) -> HeapId {
         self.heap_id
     }
@@ -79,6 +81,7 @@ impl Heaps {
         page
     }
 
+    #[allow(dead_code)] // For API compatibility with real implementation.
     pub(crate) fn allocate_with_content(&mut self, content: &[u8]) -> HeapId {
         let id = self.allocate();
         self.read
@@ -87,6 +90,7 @@ impl Heaps {
         id
     }
 
+    #[allow(dead_code)] // For API compatibility with real implementation.
     pub(crate) fn allocate_with_content_at(&mut self, page: HeapId, content: &[u8]) -> HeapId {
         self.read.get_mut(page).write_bytes(0, content);
         page
