@@ -25,7 +25,8 @@ pub(crate) fn materialize_decommit_page<T: Tracer, W: World<T>>(
         return existing;
     }
 
-    let heap = vm.state.heaps.set_content_at(candidate_page, code);
+    vm.state.heaps.write_bytes(candidate_page, 0, code);
+    let heap = candidate_page;
     vm.world_diff.set_decommit_page(code_hash, heap);
 
     if heap != vm.state.current_frame.heap && heap != vm.state.current_frame.aux_heap {

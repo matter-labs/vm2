@@ -1,5 +1,5 @@
 use std::{
-    fmt, mem,
+    fmt,
     ops::{Index, Range},
 };
 
@@ -78,11 +78,6 @@ impl Heap {
         for page in self.pages.into_iter().flatten() {
             pagepool.recycle_page(page);
         }
-    }
-
-    fn replace_contents(&mut self, bytes: &[u8], pagepool: &mut PagePool) {
-        let old = mem::replace(self, Self::from_bytes(bytes, pagepool));
-        old.recycle(pagepool);
     }
 
     pub(crate) fn read_u256(&self, start_address: u32) -> U256 {
@@ -188,6 +183,20 @@ impl Heap {
             for (dst, src) in page.0.iter_mut().zip(bytes_iter) {
                 *dst = src;
             }
+        }
+    }
+
+    fn write_bytes(&mut self, start_address: u32, bytes: &[u8], pagepool: &mut PagePool) {
+        let (mut page_idx, mut offset_in_page) = address_to_page_offset(start_address);
+        let mut remaining = bytes;
+        while !remaining.is_empty() {
+            let bytes_in_page = (HEAP_PAGE_SIZE - offset_in_page).min(remaining.len());
+            let page = self.get_or_insert_page(page_idx, pagepool);
+            page.0[offset_in_page..offset_in_page + bytes_in_page]
+                .copy_from_slice(&remaining[..bytes_in_page]);
+            remaining = &remaining[bytes_in_page..];
+            page_idx += 1;
+            offset_in_page = 0;
         }
     }
 }
@@ -348,28 +357,6 @@ impl Heaps {
         page
     }
 
-    pub(crate) fn set_content_at(&mut self, page: HeapId, memory: &[u8]) -> HeapId {
-        let decoded = DecodedPage::decode(page)
-            .unwrap_or_else(|| panic!("heap page {} is not decodable", page.as_u32()));
-
-        if let DecodedPage::Dynamic { .. } = decoded {
-            let slot = decoded_dynamic_slot_mut(&mut self.dynamic, decoded);
-            let pagepool = &mut self.pagepool;
-            if let Some(heap) = slot.as_mut() {
-                heap.replace_contents(memory, pagepool);
-            } else {
-                *slot = Some(Heap::from_bytes(memory, pagepool));
-            }
-        } else {
-            let (heap, pagepool) = self
-                .try_decoded_page_mut(decoded)
-                .expect("always allocated heap pages must exist");
-            heap.replace_contents(memory, pagepool);
-        }
-
-        page
-    }
-
     #[cfg(test)]
     pub(crate) fn contains(&self, page: HeapId) -> bool {
         DecodedPage::decode(page).is_some_and(|decoded| {
@@ -409,6 +396,21 @@ impl Heaps {
             .try_decoded_page_mut(decoded)
             .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
         heap.write_u256(start_address, value, pagepool);
+    }
+
+    pub(crate) fn write_bytes(&mut self, page: HeapId, start_address: u32, bytes: &[u8]) {
+        let decoded = DecodedPage::decode(page)
+            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
+        if let DecodedPage::Dynamic { .. } = decoded {
+            let slot = decoded_dynamic_slot_mut(&mut self.dynamic, decoded);
+            if slot.is_none() {
+                *slot = Some(Heap::default());
+            }
+        }
+        let (heap, pagepool) = self
+            .try_decoded_page_mut(decoded)
+            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
+        heap.write_bytes(start_address, bytes, pagepool);
     }
 
     pub(crate) fn snapshot(&self) -> (usize, usize) {

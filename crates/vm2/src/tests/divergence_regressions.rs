@@ -709,6 +709,88 @@ fn nonfresh_decommit_should_reuse_existing_memory_page() {
 }
 
 #[test]
+fn fresh_decommit_should_preserve_existing_heap_bytes_after_code() {
+    let code_word = U256::from(0x363d3d37363d34f0_u64);
+    let contract = (
+        non_kernel_address(),
+        Program::from_raw(vec![ret_instruction()], vec![code_word]),
+    );
+    let mut world = TestWorld::new(&[contract]);
+    let code_hash = *world
+        .address_to_hash
+        .values()
+        .next()
+        .expect("test contract hash must exist");
+
+    let decommit = Instruction::from_decommit(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Register1(Register::new(3)),
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let program = Program::from_raw(vec![decommit], vec![]);
+
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+    vm.state.registers[1] = code_hash;
+    vm.state.registers[2] = U256::zero();
+
+    let preserved = [0xda, 0x0a, 0x64, 0x56];
+    let preserved_word = U256::from_big_endian(&[
+        preserved[0],
+        preserved[1],
+        preserved[2],
+        preserved[3],
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ]);
+    let current_heap = vm.state.current_frame.heap;
+    vm.state.heaps.write_u256(current_heap, 32, preserved_word);
+
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+    let pointer = FatPointer::from(vm.state.registers[3]);
+
+    assert_eq!(pointer.memory_page, current_heap);
+    assert_eq!(vm.state.heaps[current_heap].read_u256(0), code_word);
+    assert_eq!(
+        vm.state.heaps[current_heap].read_range_big_endian(32..36),
+        preserved
+    );
+}
+
+#[test]
 fn decommit_after_far_call_decommit_should_not_panic() {
     // Far-call decommit must eagerly materialize a reusable decommit page.
     // Follow-up `Decommit` calls should return that same page without duplicate keep-alive entries.
