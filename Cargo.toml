@@ -4,7 +4,7 @@ members = [
     "crates/vm2-interface",
     "crates/vm2",
     # Testing crates
-    # "tests/afl-fuzz"
+    "tests/afl-fuzz"
 ]
 resolver = "2"
 
@@ -30,9 +30,9 @@ primitive-types = "0.12.1"
 proptest = "1.4"
 
 # "Internal" dependencies
-zkevm_opcode_defs = { path = "../zksync-protocol/crates/zkevm_opcode_defs" }
-zk_evm_abstractions = { path = "../zksync-protocol/crates/zk_evm_abstractions" }
-zk_evm = { path = "../zksync-protocol/crates/zk_evm" }
+zkevm_opcode_defs = { git = "https://github.com/matter-labs/zksync-protocol", branch = "popzxc-airbender-precompiles" } # TODO: Must be pinned before merge
+zk_evm_abstractions = { git = "https://github.com/matter-labs/zksync-protocol", branch = "popzxc-airbender-precompiles" } # TODO: Must be pinned before merge
+zk_evm = { git = "https://github.com/matter-labs/zksync-protocol", branch = "popzxc-airbender-precompiles" } # TODO: Must be pinned before merge
 
 # Dependencies within the workspace
 zksync_vm2_interface = { version = "=0.5.0", path = "crates/vm2-interface" }
