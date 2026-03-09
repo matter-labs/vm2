@@ -13,15 +13,13 @@ use crate::{
     },
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
+    page_ids::static_memory_page,
     state::State,
     ExecutionEnd, Instruction, VirtualMachine, World,
 };
 
-/// Dedicated heap slot used to model `zk_evm` static memory.
-///
-/// `heap_id == 0` is otherwise unused by vm2 heap instructions and thus can safely back
-/// static memory without interfering with regular heap / calldata pages.
-const STATIC_MEMORY_HEAP: HeapId = HeapId::from_u32_unchecked(0);
+/// Dedicated heap page used to model `zk_evm` static memory.
+const STATIC_MEMORY_HEAP: HeapId = static_memory_page();
 
 pub(crate) trait HeapFromState {
     type Read: OpcodeType;

@@ -14,6 +14,7 @@ use crate::{
     callframe::FrameRemnant,
     instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
+    page_ids::base_page_from_heap,
     predication::Flags,
     tracing::VmAndWorld,
     Instruction, Predicate, VirtualMachine, World,
@@ -51,7 +52,7 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
                     // Non-kernel returndata forwarding must be unidirectional: callers may pass
                     // pointers down the stack, but callees must not forward pointers to older pages.
                     // This mirrors zk_evm's restriction based on base memory page checks.
-                    pointer.memory_page.as_u32() >= vm.state.current_frame.heap.as_u32()
+                    pointer.memory_page.as_u32() >= base_page_from_heap(vm.state.current_frame.heap)
                         && pointer.memory_page != vm.state.current_frame.calldata_heap
                 }
             });

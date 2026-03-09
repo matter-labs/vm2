@@ -160,11 +160,11 @@ pub struct HeapId(u32);
 
 impl HeapId {
     /// Identifier of the calldata heap used by the first executed program (i.e., the bootloader).
-    pub const FIRST_CALLDATA: Self = Self(1);
+    pub const FIRST_CALLDATA: Self = Self(7);
     /// Identifier of the heap used by the first executed program (i.e., the bootloader).
-    pub const FIRST: Self = Self(2);
+    pub const FIRST: Self = Self(10);
     /// Identifier of the auxiliary heap used by the first executed program (i.e., the bootloader)
-    pub const FIRST_AUX: Self = Self(3);
+    pub const FIRST_AUX: Self = Self(11);
 
     /// Only for dealing with external data structures, never use internally.
     #[doc(hidden)]

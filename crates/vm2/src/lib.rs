@@ -34,6 +34,7 @@ mod heap;
 mod instruction;
 mod instruction_handlers;
 mod mode_requirements;
+mod page_ids;
 pub mod precompiles;
 mod predication;
 #[cfg(not(feature = "single_instruction_test"))]

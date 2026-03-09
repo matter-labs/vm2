@@ -4,8 +4,8 @@ use zksync_vm2_interface::{HeapId, Tracer};
 
 use super::{heap::Heaps, stack::StackPool};
 use crate::{
-    callframe::Callframe, fat_pointer::FatPointer, state::State, Settings, VirtualMachine, World,
-    WorldDiff,
+    callframe::Callframe, fat_pointer::FatPointer, page_ids::first_dynamic_base_page, state::State,
+    Settings, VirtualMachine, World, WorldDiff,
 };
 
 impl<T: Tracer, W> VirtualMachine<T, W> {
@@ -75,6 +75,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for VirtualMachine<T, W> {
                 heaps,
                 transaction_number: u.arbitrary()?,
                 context_u128: u.arbitrary()?,
+                next_base_page: first_dynamic_base_page(),
             },
             settings: u.arbitrary()?,
             world_diff: WorldDiff::default(),

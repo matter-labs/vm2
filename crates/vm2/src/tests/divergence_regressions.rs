@@ -4,12 +4,15 @@ use zkevm_opcode_defs::{
     Condition, DecodedOpcode, ImmMemHandlerFlags, Opcode, Operand, RegOrImmFlags, UMAOpcode,
     OPCODES_TABLE, UMA_INCREMENT_FLAG_IDX,
 };
-use zksync_vm2_interface::{opcodes, Tracer};
+use zksync_vm2_interface::{opcodes, HeapId, Tracer};
 
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register, Register1, Register2},
     decode::decode,
     fat_pointer::FatPointer,
+    page_ids::{
+        aux_heap_page_from_base, first_dynamic_base_page, heap_page_from_base, next_page_group,
+    },
     precompiles::{PrecompileMemoryReader, PrecompileOutput, Precompiles},
     testonly::TestWorld,
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, StorageInterface,
@@ -43,12 +46,93 @@ fn execute_one_instruction<T: Tracer, W: World<T>>(
     }
 }
 
+fn allocate_standalone_heap<T: Tracer, W: World<T>>(
+    vm: &mut VirtualMachine<T, W>,
+    memory: &[u8],
+) -> HeapId {
+    let mut page = vm.state.next_base_page();
+    loop {
+        let heap = HeapId::from_u32_unchecked(page);
+        if !vm.state.heaps.contains(heap) {
+            vm.state.heaps.allocate_with_content_at(heap, memory);
+            return heap;
+        }
+        page = next_page_group(page);
+    }
+}
+
 fn ret_instruction<T: Tracer, W: World<T>>() -> Instruction<T, W> {
     Instruction::from_ret(
         Register1(Register::new(0)),
         None,
         Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
     )
+}
+
+#[test]
+fn bootloader_calldata_pointer_should_use_reference_page_id() {
+    let program: Program<(), TestWorld<()>> =
+        Program::from_raw(vec![ret_instruction::<(), TestWorld<()>>()], vec![]);
+    let vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[1, 2, 3, 4],
+        1_000_000,
+        default_settings(),
+    );
+
+    let calldata = FatPointer::from(vm.state.registers[1]);
+    assert_eq!(
+        calldata.memory_page,
+        zksync_vm2_interface::HeapId::FIRST_CALLDATA
+    );
+    assert_eq!(calldata.length, 4);
+}
+
+#[test]
+fn far_call_calldata_pointer_should_use_caller_heap_reference_page() {
+    let called_address = Address::from_low_u64_be(2);
+    let called_program = Program::from_raw(vec![ret_instruction()], vec![]);
+    let mut world = TestWorld::new(&[(called_address, called_program)]);
+    let called_address_as_u256 = U256::from(called_address.to_low_u64_be());
+
+    let far_call = Instruction::from_far_call::<opcodes::Normal>(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Immediate1(1),
+        false,
+        false,
+        Arguments::new(Predicate::Always, 200, ModeRequirements::none()),
+    );
+    let program = Program::from_raw(vec![far_call, ret_instruction()], vec![]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let mut far_call_abi = U256::zero();
+    far_call_abi.0[3] = 10_000;
+    vm.state.register_pointer_flags &= !(1 << 1);
+    vm.state.registers[1] = far_call_abi;
+    vm.state.registers[2] = called_address_as_u256;
+
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+
+    let calldata = FatPointer::from(vm.state.registers[1]);
+    assert_eq!(calldata.memory_page, zksync_vm2_interface::HeapId::FIRST);
+    assert_eq!(
+        vm.state.current_frame.heap,
+        heap_page_from_base(first_dynamic_base_page())
+    );
+    assert_eq!(
+        vm.state.current_frame.aux_heap,
+        aux_heap_page_from_base(first_dynamic_base_page())
+    );
 }
 
 fn static_uma_instruction<T: Tracer, W: World<T>>(opcode: UMAOpcode) -> Instruction<T, W> {
@@ -534,6 +618,48 @@ fn non_kernel_returndata_forward_to_older_page_should_panic() {
 }
 
 #[test]
+fn fresh_decommit_should_use_current_heap_page() {
+    let contract = (
+        non_kernel_address(),
+        Program::from_raw(vec![ret_instruction()], vec![]),
+    );
+    let mut world = TestWorld::new(&[contract]);
+    let code_hash = *world
+        .address_to_hash
+        .values()
+        .next()
+        .expect("test contract hash must exist");
+
+    let decommit = Instruction::from_decommit(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Register1(Register::new(3)),
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let program = Program::from_raw(vec![decommit], vec![]);
+
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+    vm.state.registers[1] = code_hash;
+    vm.state.registers[2] = U256::zero();
+
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+    let pointer = FatPointer::from(vm.state.registers[3]);
+
+    assert_eq!(pointer.memory_page, vm.state.current_frame.heap);
+    assert_eq!(
+        vm.world_diff.decommit_page(code_hash),
+        Some(pointer.memory_page)
+    );
+}
+
+#[test]
 fn nonfresh_decommit_should_reuse_existing_memory_page() {
     // zk_evm reuses the same memory page for repeated decommit of the same code hash.
     let contract = (
@@ -574,6 +700,7 @@ fn nonfresh_decommit_should_reuse_existing_memory_page() {
 
     execute_one_instruction(&mut vm, &mut world, &mut ());
     let first = FatPointer::from(vm.state.registers[3]);
+    assert_eq!(first.memory_page, vm.state.current_frame.heap);
 
     execute_one_instruction(&mut vm, &mut world, &mut ());
     let second = FatPointer::from(vm.state.registers[4]);
@@ -727,13 +854,16 @@ fn nonfresh_decommit_should_keep_page_alive_after_nested_frame_returns() {
 
     execute_one_instruction(&mut vm, &mut world, &mut ());
     let first = FatPointer::from(vm.state.registers[3]);
+    let nested_heap = vm.state.current_frame.heap;
     assert_eq!(vm.state.heaps[first.memory_page].read_u256(0), code_word);
+    assert_eq!(first.memory_page, nested_heap);
 
     vm.pop_frame(None)
         .expect("nested frame must be present for pop");
 
     execute_one_instruction(&mut vm, &mut world, &mut ());
     let second = FatPointer::from(vm.state.registers[4]);
+    let bootloader_heap = vm.state.current_frame.heap;
 
     let keep_alive_occurrences = vm
         .state
@@ -744,10 +874,12 @@ fn nonfresh_decommit_should_keep_page_alive_after_nested_frame_returns() {
         .count();
 
     assert_eq!(first.memory_page, second.memory_page);
+    assert_ne!(second.memory_page, bootloader_heap);
     assert_eq!(vm.state.heaps[second.memory_page].read_u256(0), code_word);
+    assert!(vm.world_diff.is_decommit_page_pinned(second.memory_page));
     assert_eq!(
-        keep_alive_occurrences, 1,
-        "Nested and parent decommits should not duplicate keep-alive entries"
+        keep_alive_occurrences, 0,
+        "Pinned decommit pages owned by the current frame should not need a keep-alive entry"
     );
 }
 
@@ -780,8 +912,8 @@ fn decommit_page_in_keep_alive_list_should_not_be_deallocated_on_pop() {
     let code_word = U256::from(0xabcdu64);
     let mut code_bytes = [0_u8; 32];
     code_word.to_big_endian(&mut code_bytes);
-    let decommit_heap = vm.state.heaps.allocate_with_content(&code_bytes);
-    let kept_heap = vm.state.heaps.allocate_with_content(&[0x11; 32]);
+    let decommit_heap = allocate_standalone_heap(&mut vm, &code_bytes);
+    let kept_heap = allocate_standalone_heap(&mut vm, &[0x11; 32]);
 
     vm.world_diff
         .set_decommit_page(U256::from(0x1234_u64), decommit_heap);
@@ -812,7 +944,7 @@ fn rollback_should_preserve_pre_snapshot_decommit_page() {
     let code_word = U256::from(0xdead_beef_u64);
     let mut code_bytes = [0_u8; 32];
     code_word.to_big_endian(&mut code_bytes);
-    let decommit_heap = vm.state.heaps.allocate_with_content(&code_bytes);
+    let decommit_heap = allocate_standalone_heap(&mut vm, &code_bytes);
     vm.world_diff
         .set_decommit_page(U256::from(0xfeed_u64), decommit_heap);
 

@@ -7,6 +7,7 @@ use crate::{
     callframe::{Callframe, FrameRemnant},
     decommit::u256_into_address,
     instruction::ExecutionStatus,
+    page_ids::{aux_heap_page_from_base, heap_page_from_base},
     stack::StackPool,
     state::{State, StateSnapshot},
     world_diff::{ExternalSnapshot, Snapshot, WorldDiff},
@@ -205,6 +206,12 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
         calldata_heap: HeapId,
         world_before_this_frame: Snapshot,
     ) {
+        let base_page = self.state.allocate_base_page();
+        let heap_page = heap_page_from_base(base_page);
+        let aux_heap_page = aux_heap_page_from_base(base_page);
+        self.state.heaps.allocate_at(heap_page);
+        self.state.heaps.allocate_at(aux_heap_page);
+
         let mut new_frame = Callframe::new(
             if M::VALUE == CallingMode::Delegate {
                 self.state.current_frame.address
@@ -219,8 +226,8 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
             },
             program,
             self.stack_pool.get(),
-            self.state.heaps.allocate(),
-            self.state.heaps.allocate(),
+            heap_page,
+            aux_heap_page,
             calldata_heap,
             gas,
             exception_handler,

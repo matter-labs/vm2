@@ -12,27 +12,31 @@ use crate::{
 
 /// Ensures that a decommit hash has a materialized reusable page and returns it.
 ///
-/// This page is pinned globally in [`WorldDiff`] and additionally kept alive in the
-/// bootloader frame (or current frame if no bootloader frame exists), matching
-/// decommit opcode teardown semantics.
+/// The resulting page is pinned globally in [`WorldDiff`]. If that page is not owned by the
+/// current frame, it is also recorded as kept alive in the bootloader frame (or current frame if
+/// no bootloader frame exists), matching decommit opcode teardown semantics.
 pub(crate) fn materialize_decommit_page<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     code_hash: U256,
     code: &[u8],
+    candidate_page: HeapId,
 ) -> HeapId {
     if let Some(existing) = vm.world_diff.decommit_page(code_hash) {
         return existing;
     }
 
-    let heap = vm.state.heaps.allocate_with_content(code);
+    let heap = vm.state.heaps.set_content_at(candidate_page, code);
     vm.world_diff.set_decommit_page(code_hash, heap);
 
-    let heaps_to_keep_alive = if let Some(bootloader_frame) = vm.state.previous_frames.first_mut() {
-        &mut bootloader_frame.heaps_i_am_keeping_alive
-    } else {
-        &mut vm.state.current_frame.heaps_i_am_keeping_alive
-    };
-    heaps_to_keep_alive.push(heap);
+    if heap != vm.state.current_frame.heap && heap != vm.state.current_frame.aux_heap {
+        let heaps_to_keep_alive =
+            if let Some(bootloader_frame) = vm.state.previous_frames.first_mut() {
+                &mut bootloader_frame.heaps_i_am_keeping_alive
+            } else {
+                &mut vm.state.current_frame.heaps_i_am_keeping_alive
+            };
+        heaps_to_keep_alive.push(heap);
+    }
 
     heap
 }

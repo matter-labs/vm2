@@ -16,6 +16,7 @@ use crate::{
     decommit::{is_kernel, materialize_decommit_page, u256_into_address},
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
+    page_ids::code_page_from_base,
     predication::Flags,
     Instruction, Program, VirtualMachine, World,
 };
@@ -58,6 +59,7 @@ where
             } else {
                 0
             };
+        let new_base_page = vm.state.next_base_page();
 
         let fallible_part = (|| {
             let shard_call_failed = IS_SHARD && abi.shard_id != 0;
@@ -114,7 +116,7 @@ where
                 // a more optimal approach is possible if we rework interfaces either for the `World` or
                 // for heap instantiation.
                 let code = program_to_bytes(&program);
-                materialize_decommit_page(vm, code_hash, &code);
+                materialize_decommit_page(vm, code_hash, &code, code_page_from_base(new_base_page));
             }
 
             Some((calldata, program, is_evm))

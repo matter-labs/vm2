@@ -6,6 +6,7 @@ use crate::{
     callframe::{Callframe, CallframeSnapshot},
     fat_pointer::FatPointer,
     heap::Heaps,
+    page_ids::{first_dynamic_base_page, next_page_group},
     predication::Flags,
     program::Program,
     stack::Stack,
@@ -26,6 +27,7 @@ pub(crate) struct State<T, W> {
     pub(crate) heaps: Heaps,
     pub(crate) transaction_number: u16,
     pub(crate) context_u128: u128,
+    pub(crate) next_base_page: u32,
 }
 
 impl<T, W> State<T, W> {
@@ -73,6 +75,7 @@ impl<T, W> State<T, W> {
 
             transaction_number: 0,
             context_u128: 0,
+            next_base_page: first_dynamic_base_page(),
         }
     }
 
@@ -93,6 +96,20 @@ impl<T, W> State<T, W> {
 
     pub(crate) fn get_context_u128(&self) -> u128 {
         self.current_frame.context_u128
+    }
+
+    pub(crate) const fn next_base_page(&self) -> u32 {
+        self.next_base_page
+    }
+
+    /// Reserves the next far-call page group and returns its base page.
+    ///
+    /// The returned base page is used to derive the pages owned by a new frame,
+    /// such as its heap and aux heap.
+    pub(crate) fn allocate_base_page(&mut self) -> u32 {
+        let base_page = self.next_base_page;
+        self.next_base_page = next_page_group(self.next_base_page);
+        base_page
     }
 }
 
@@ -116,6 +133,7 @@ impl<T: Tracer, W: World<T>> State<T, W> {
             bootloader_heap_snapshot: self.heaps.snapshot(),
             transaction_number: self.transaction_number,
             context_u128: self.context_u128,
+            next_base_page: self.next_base_page,
         }
     }
 
@@ -132,6 +150,7 @@ impl<T: Tracer, W: World<T>> State<T, W> {
             bootloader_heap_snapshot,
             transaction_number,
             context_u128,
+            next_base_page,
         } = snapshot;
 
         for heap in self.current_frame.rollback(bootloader_frame) {
@@ -145,6 +164,7 @@ impl<T: Tracer, W: World<T>> State<T, W> {
         self.flags = flags;
         self.transaction_number = transaction_number;
         self.context_u128 = context_u128;
+        self.next_base_page = next_base_page;
     }
 
     pub(crate) fn delete_history(&mut self) {
@@ -163,6 +183,7 @@ impl<T, W> Clone for State<T, W> {
             heaps: self.heaps.clone(),
             transaction_number: self.transaction_number,
             context_u128: self.context_u128,
+            next_base_page: self.next_base_page,
         }
     }
 }
@@ -176,6 +197,7 @@ impl<T, W> PartialEq for State<T, W> {
             && self.flags == other.flags
             && self.transaction_number == other.transaction_number
             && self.context_u128 == other.context_u128
+            && self.next_base_page == other.next_base_page
             && self.current_frame == other.current_frame
             && self.previous_frames == other.previous_frames
             && self.heaps == other.heaps
@@ -233,4 +255,5 @@ pub(crate) struct StateSnapshot {
     bootloader_heap_snapshot: (usize, usize),
     transaction_number: u16,
     context_u128: u128,
+    next_base_page: u32,
 }

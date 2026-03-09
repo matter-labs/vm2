@@ -39,7 +39,7 @@ fn decommit<T: Tracer, W: World<T>>(
             vm.state.current_frame.gas += extra_cost;
         }
 
-        let heap = materialize_decommit_page(vm, code_hash, &code);
+        let heap = materialize_decommit_page(vm, code_hash, &code, vm.state.current_frame.heap);
 
         let value = FatPointer {
             offset: 0,
