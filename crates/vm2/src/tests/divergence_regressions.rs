@@ -1039,3 +1039,47 @@ fn rollback_should_preserve_pre_snapshot_decommit_page() {
 
     assert_eq!(vm.state.heaps[decommit_heap].read_u256(0), code_word);
 }
+
+#[test]
+fn rollback_should_restore_bootloader_heap_after_fresh_decommit() {
+    let code_word = U256::from(0xdead_beef_u64);
+    let contract = (
+        non_kernel_address(),
+        Program::from_raw(vec![ret_instruction()], vec![code_word]),
+    );
+    let mut world = TestWorld::new(&[contract]);
+    let code_hash = *world
+        .address_to_hash
+        .values()
+        .next()
+        .expect("test contract hash must exist");
+
+    let decommit = Instruction::from_decommit(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Register1(Register::new(3)),
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let bootloader_program = Program::from_raw(vec![decommit], vec![]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        bootloader_program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let bootloader_heap = vm.state.current_frame.heap;
+    let sentinel = U256::from(0x1234_5678_u64);
+    vm.state.heaps.write_u256(bootloader_heap, 0, sentinel);
+    vm.state.registers[1] = code_hash;
+    vm.state.registers[2] = U256::zero();
+
+    vm.make_snapshot();
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+    assert_eq!(vm.state.heaps[bootloader_heap].read_u256(0), code_word);
+
+    vm.rollback();
+    assert_eq!(vm.state.heaps[bootloader_heap].read_u256(0), sentinel);
+}

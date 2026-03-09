@@ -381,15 +381,7 @@ impl Heaps {
     }
 
     pub(crate) fn write_u256(&mut self, page: HeapId, start_address: u32, value: U256) {
-        if page == HeapId::FIRST {
-            let prev_value = self[page].read_u256(start_address);
-            self.bootloader_heap_rollback_info
-                .push((start_address, prev_value));
-        } else if page == HeapId::FIRST_AUX {
-            let prev_value = self[page].read_u256(start_address);
-            self.bootloader_aux_rollback_info
-                .push((start_address, prev_value));
-        }
+        self.record_bootloader_word_rollback(page, start_address);
         let decoded = DecodedPage::decode(page)
             .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
         let (heap, pagepool) = self
@@ -399,6 +391,7 @@ impl Heaps {
     }
 
     pub(crate) fn write_bytes(&mut self, page: HeapId, start_address: u32, bytes: &[u8]) {
+        self.record_bootloader_range_rollback(page, start_address, bytes.len());
         let decoded = DecodedPage::decode(page)
             .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
         if let DecodedPage::Dynamic { .. } = decoded {
@@ -435,6 +428,36 @@ impl Heaps {
     pub(crate) fn delete_history(&mut self) {
         self.bootloader_heap_rollback_info.clear();
         self.bootloader_aux_rollback_info.clear();
+    }
+
+    fn record_bootloader_word_rollback(&mut self, page: HeapId, start_address: u32) {
+        if page == HeapId::FIRST {
+            let prev_value = self[page].read_u256(start_address);
+            self.bootloader_heap_rollback_info
+                .push((start_address, prev_value));
+        } else if page == HeapId::FIRST_AUX {
+            let prev_value = self[page].read_u256(start_address);
+            self.bootloader_aux_rollback_info
+                .push((start_address, prev_value));
+        }
+    }
+
+    fn record_bootloader_range_rollback(&mut self, page: HeapId, start_address: u32, len: usize) {
+        if len == 0 {
+            return;
+        }
+
+        let start = usize::try_from(start_address).expect("heap write address overflow");
+        let end = start.checked_add(len).expect("heap write range overflow");
+        let first_word = start / 32 * 32;
+        let last_word = (end - 1) / 32 * 32;
+
+        for address in (first_word..=last_word).step_by(32) {
+            self.record_bootloader_word_rollback(
+                page,
+                u32::try_from(address).expect("heap write address overflow"),
+            );
+        }
     }
 
     fn try_decoded_page(&self, page: DecodedPage) -> Option<&Heap> {
@@ -785,6 +808,27 @@ mod tests {
         assert_eq!(heaps[HeapId::FIRST_AUX].read_u256(0), 42.into());
         assert_eq!(heaps.bootloader_heap_rollback_info.len(), 1);
         assert_eq!(heaps.bootloader_aux_rollback_info.len(), 1);
+    }
+
+    #[test]
+    fn rolling_back_bootloader_range_writes() {
+        let mut heaps = Heaps::new(&[]);
+        let first_word = repeat_byte(0x11);
+        let second_word = repeat_byte(0x22);
+        heaps.write_u256(HeapId::FIRST, 0, first_word);
+        heaps.write_u256(HeapId::FIRST, 32, second_word);
+
+        let snapshot = heaps.snapshot();
+
+        heaps.write_bytes(HeapId::FIRST, 8, &[0xaa; 40]);
+        assert_ne!(heaps[HeapId::FIRST].read_u256(0), first_word);
+        assert_ne!(heaps[HeapId::FIRST].read_u256(32), second_word);
+
+        heaps.rollback(snapshot);
+
+        assert_eq!(heaps[HeapId::FIRST].read_u256(0), first_word);
+        assert_eq!(heaps[HeapId::FIRST].read_u256(32), second_word);
+        assert_eq!(heaps.bootloader_heap_rollback_info.len(), 2);
     }
 
     #[test]
