@@ -35,3 +35,4 @@ jobs:
           run_build: ${{ inputs.run-build }}
           run_tests: ${{ inputs.run-tests }}
           gh_token: ${{ secrets.GITHUB_TOKEN }}
+          cargo_build_args: '--workspace --exclude zksync_vm2_afl_fuzz'
