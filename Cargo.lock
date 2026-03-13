@@ -1472,9 +1472,9 @@ checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
 
 [[package]]
 name = "zk_evm"
-version = "0.153.3"
+version = "0.153.8-1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02aab29500e8021fb6fab4b5df7cf1df322d8edd76bc8dfed12ffd1f47988f0d"
+checksum = "025bc48bad62c54f3e6c9636cf0c79f0da293d477e60df1a16e73d5ca4f74330"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -1487,9 +1487,9 @@ dependencies = [
 
 [[package]]
 name = "zk_evm_abstractions"
-version = "0.153.3"
+version = "0.153.8-1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6937012712525098ce376465c33fc0e6b0e833a4b72f0e4b58713944ed3d3eee"
+checksum = "5debd4fbb25268968fa085d75cc07f6767e52013886e6625ad797361e8951825"
 dependencies = [
  "anyhow",
  "num_enum",
@@ -1500,9 +1500,9 @@ dependencies = [
 
 [[package]]
 name = "zkevm_opcode_defs"
-version = "0.153.3"
+version = "0.153.8-1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cca091066c3b64c6d7b6e411fd5a1c81db1f21b0a497c4578e1c55e35ed6f01a"
+checksum = "a18342d2cd5d087319163bce7a03332eb2c049a370ea108f4bbe316e3b39f13d"
 dependencies = [
  "bitflags",
  "blake2",
@@ -1518,9 +1518,9 @@ dependencies = [
 
 [[package]]
 name = "zksync_ff"
-version = "0.32.5"
+version = "0.32.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3f2aba6f5ee6c4f138eb49d419d2447bb369e7d7a6f256b31ad478795641d0a"
+checksum = "783a1c981e5e5259fb66189446b5d632f45cf6c90130e0db6a2af74f88ee032c"
 dependencies = [
  "byteorder",
  "hex",
@@ -1531,9 +1531,9 @@ dependencies = [
 
 [[package]]
 name = "zksync_ff_derive"
-version = "0.32.5"
+version = "0.32.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e62c7d995701bfd053958ce2050fced2013ff136bb53d350ffcac6d149a1fd3"
+checksum = "d03756d057957fd66756181334206bc578e47043158f0f9c68a51543f8b914ff"
 dependencies = [
  "num-bigint",
  "num-integer",
@@ -1546,9 +1546,9 @@ dependencies = [
 
 [[package]]
 name = "zksync_pairing"
-version = "0.32.5"
+version = "0.32.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8348a287108fbb8a1b761ae66f9b344d74df444cb365f8a8259c091be708c5a"
+checksum = "794c099180c75961b07bd96e5066b88b35eac27780cc42528d4a9fae27ce20f6"
 dependencies = [
  "byteorder",
  "cfg-if",
@@ -1559,7 +1559,7 @@ dependencies = [
 
 [[package]]
 name = "zksync_vm2"
-version = "0.5.0"
+version = "0.5.0-1"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -1575,7 +1575,7 @@ dependencies = [
 
 [[package]]
 name = "zksync_vm2_afl_fuzz"
-version = "0.5.0"
+version = "0.5.0-1"
 dependencies = [
  "afl",
  "arbitrary",
@@ -1587,7 +1587,7 @@ dependencies = [
 
 [[package]]
 name = "zksync_vm2_interface"
-version = "0.5.0"
+version = "0.5.0-1"
 dependencies = [
  "primitive-types",
 ]
