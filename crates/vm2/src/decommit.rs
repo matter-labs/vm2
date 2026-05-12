@@ -2,11 +2,48 @@ use primitive_types::{H160, U256};
 use zkevm_opcode_defs::{
     ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
 };
-use zksync_vm2_interface::{CycleStats, Tracer};
+use zksync_vm2_interface::{CycleStats, HeapId, Tracer};
 
-use crate::{program::Program, world_diff::WorldDiff, World};
+use crate::{
+    program::Program,
+    world_diff::{DecommitState, WorldDiff},
+    VirtualMachine, World,
+};
+
+/// Ensures that a decommit hash has a materialized reusable page and returns it.
+///
+/// The resulting page is pinned globally in [`WorldDiff`]. If that page is not owned by the
+/// current frame, it is also recorded as kept alive in the bootloader frame (or current frame if
+/// no bootloader frame exists), matching decommit opcode teardown semantics.
+pub(crate) fn materialize_decommit_page<T: Tracer, W: World<T>>(
+    vm: &mut VirtualMachine<T, W>,
+    code_hash: U256,
+    code: &[u8],
+    candidate_page: HeapId,
+) -> HeapId {
+    if let Some(existing) = vm.world_diff.decommit_page(code_hash) {
+        return existing;
+    }
+
+    vm.state.heaps.write_bytes(candidate_page, 0, code);
+    let heap = candidate_page;
+    vm.world_diff.set_decommit_page(code_hash, heap);
+
+    if heap != vm.state.current_frame.heap && heap != vm.state.current_frame.aux_heap {
+        let heaps_to_keep_alive =
+            if let Some(bootloader_frame) = vm.state.previous_frames.first_mut() {
+                &mut bootloader_frame.heaps_i_am_keeping_alive
+            } else {
+                &mut vm.state.current_frame.heaps_i_am_keeping_alive
+            };
+        heaps_to_keep_alive.push(heap);
+    }
+
+    heap
+}
 
 impl WorldDiff {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn decommit<T: Tracer>(
         &mut self,
         world: &mut impl World<T>,
@@ -15,6 +52,7 @@ impl WorldDiff {
         default_aa_code_hash: [u8; 32],
         evm_interpreter_code_hash: [u8; 32],
         is_constructor_call: bool,
+        tx_number_in_block: u16,
     ) -> Option<(UnpaidDecommit, bool)> {
         let deployer_system_contract_address =
             Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW.into());
@@ -27,6 +65,7 @@ impl WorldDiff {
                 tracer,
                 deployer_system_contract_address,
                 address,
+                tx_number_in_block,
             );
             let mut code_info_bytes = [0; 32];
             code_info.to_big_endian(&mut code_info_bytes);
@@ -74,7 +113,8 @@ impl WorldDiff {
         code_info[1] = 0;
         let code_key: U256 = U256::from_big_endian(&code_info);
 
-        let was_decommitted = self.decommitted_hashes.as_ref().get(&code_key) == Some(&true);
+        let decommit_state = self.decommitted_hashes.as_ref().get(&code_key).copied();
+        let was_decommitted = matches!(decommit_state, Some(DecommitState::Succeeded(_)));
         let cost = if was_decommitted {
             0
         } else {
@@ -82,7 +122,16 @@ impl WorldDiff {
             u32::from(code_length_in_words) * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT
         };
 
-        Some((UnpaidDecommit { cost, code_key }, is_evm))
+        let should_materialize = !was_decommitted;
+
+        Some((
+            UnpaidDecommit {
+                cost,
+                code_key,
+                should_materialize,
+            },
+            is_evm,
+        ))
     }
 
     /// Returns the decommitted contract code and a flag set to `true` if this is a fresh decommit (i.e.,
@@ -94,7 +143,10 @@ impl WorldDiff {
         tracer: &mut T,
         code_hash: U256,
     ) -> (Vec<u8>, bool) {
-        let is_new = self.decommitted_hashes.insert(code_hash, true) != Some(true);
+        let is_new = match self.decommitted_hashes.as_ref().get(&code_hash).copied() {
+            None | Some(DecommitState::Unsuccessful) => true,
+            Some(DecommitState::Succeeded(_)) => false,
+        };
         let code = world.decommit_code(code_hash);
         if is_new {
             let code_len = u32::try_from(code.len()).expect("bytecode length overflow");
@@ -112,14 +164,29 @@ impl WorldDiff {
         gas: &mut u32,
     ) -> Option<Program<T, W>> {
         if decommit.cost > *gas {
-            // We intentionally record a decommitment event even if actual decommitment never happens because of an out-of-gas error.
-            // This is how the old VM behaves.
-            self.decommitted_hashes.insert(decommit.code_key, false);
+            // We intentionally keep this hash visible even though decommit did not execute.
+            // Legacy VM includes far-call OOG attempts in "used contracts", and shadow mode
+            // compares that output.
+            if !matches!(
+                self.decommitted_hashes.as_ref().get(&decommit.code_key),
+                Some(DecommitState::Succeeded(_))
+            ) {
+                self.decommitted_hashes
+                    .insert(decommit.code_key, DecommitState::Unsuccessful);
+            }
             // Unlike all other gas costs, this one is not paid if low on gas.
             return None;
         }
 
-        let is_new = self.decommitted_hashes.insert(decommit.code_key, true) != Some(true);
+        let is_new = match self
+            .decommitted_hashes
+            .as_ref()
+            .get(&decommit.code_key)
+            .copied()
+        {
+            None | Some(DecommitState::Unsuccessful) => true,
+            Some(DecommitState::Succeeded(_)) => false,
+        };
         *gas -= decommit.cost;
 
         let decommit = world.decommit(decommit.code_key);
@@ -138,6 +205,18 @@ impl WorldDiff {
 pub(crate) struct UnpaidDecommit {
     cost: u32,
     code_key: U256,
+    /// Indicates whether the decommit page should be materialized after successful payment.
+    should_materialize: bool,
+}
+
+impl UnpaidDecommit {
+    pub(crate) const fn code_key(self) -> U256 {
+        self.code_key
+    }
+
+    pub(crate) const fn should_materialize(self) -> bool {
+        self.should_materialize
+    }
 }
 
 pub(crate) fn u256_into_address(source: U256) -> H160 {

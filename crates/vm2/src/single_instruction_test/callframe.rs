@@ -82,7 +82,7 @@ impl<T: Tracer, W: World<T>> Callframe<T, W> {
             aux_heap: HeapId::FIRST_AUX,
             heap_size: 0,
             aux_heap_size: 0,
-            calldata_heap: HeapId::from_u32_unchecked(1),
+            calldata_heap: HeapId::FIRST_CALLDATA,
             heaps_i_am_keeping_alive: vec![],
             world_before_this_frame: WorldDiff::default().snapshot(),
         }

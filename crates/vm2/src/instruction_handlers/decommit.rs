@@ -5,6 +5,7 @@ use zksync_vm2_interface::{opcodes, Tracer};
 use super::common::boilerplate_ext;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
+    decommit::materialize_decommit_page,
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
@@ -33,13 +34,12 @@ fn decommit<T: Tracer, W: World<T>>(
             return;
         }
 
-        let (program, is_fresh) = vm.world_diff.decommit_opcode(world, tracer, code_hash);
+        let (code, is_fresh) = vm.world_diff.decommit_opcode(world, tracer, code_hash);
         if !is_fresh {
             vm.state.current_frame.gas += extra_cost;
         }
 
-        let heap = vm.state.heaps.allocate_with_content(program.as_ref());
-        vm.state.current_frame.heaps_i_am_keeping_alive.push(heap);
+        let heap = materialize_decommit_page(vm, code_hash, &code, vm.state.current_frame.heap);
 
         let value = FatPointer {
             offset: 0,

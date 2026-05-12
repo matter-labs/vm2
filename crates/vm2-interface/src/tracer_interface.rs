@@ -34,6 +34,8 @@ macro_rules! forall_simple_opcodes {
         $m!(HeapWrite);
         $m!(AuxHeapRead);
         $m!(AuxHeapWrite);
+        $m!(StaticMemoryRead);
+        $m!(StaticMemoryWrite);
         $m!(PointerRead);
         $m!(PointerAdd);
         $m!(PointerSub);
@@ -165,6 +167,8 @@ pub enum Opcode {
     HeapWrite,
     AuxHeapRead,
     AuxHeapWrite,
+    StaticMemoryRead,
+    StaticMemoryWrite,
     PointerRead,
     PointerAdd,
     PointerSub,

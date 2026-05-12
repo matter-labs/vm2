@@ -13,9 +13,13 @@ use crate::{
     },
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
+    page_ids::static_memory_page,
     state::State,
     ExecutionEnd, Instruction, VirtualMachine, World,
 };
+
+/// Dedicated heap page used to model `zk_evm` static memory.
+const STATIC_MEMORY_HEAP: HeapId = static_memory_page();
 
 pub(crate) trait HeapFromState {
     type Read: OpcodeType;
@@ -190,6 +194,62 @@ fn load_pointer<T: Tracer, W: World<T>, const INCREMENT: bool>(
     })
 }
 
+fn load_static<T: Tracer, W: World<T>, In: Source, const INCREMENT: bool>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
+    tracer: &mut T,
+) -> ExecutionStatus {
+    boilerplate::<opcodes::StaticMemoryRead, _, _>(vm, world, tracer, |vm, args| {
+        // Static memory uses a plain 32-bit offset in src0, same as heap UMA ops.
+        // Pointer-typed values are still accepted as raw words and then validated by range check.
+        let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
+
+        if bigger_than_last_address(pointer) {
+            vm.state.current_frame.pc = spontaneous_panic();
+            return;
+        }
+
+        let address = pointer.low_u32();
+        let value = vm.state.heaps[STATIC_MEMORY_HEAP].read_u256(address);
+        Register1::set(args, &mut vm.state, value);
+
+        if INCREMENT {
+            Register2::set(args, &mut vm.state, pointer + 32);
+        }
+    })
+}
+
+fn store_static<T, W: World<T>, In, const INCREMENT: bool>(
+    vm: &mut VirtualMachine<T, W>,
+    world: &mut W,
+    tracer: &mut T,
+) -> ExecutionStatus
+where
+    T: Tracer,
+    In: Source,
+{
+    boilerplate::<opcodes::StaticMemoryWrite, _, _>(vm, world, tracer, |vm, args| {
+        // Static memory uses a plain 32-bit offset in src0, same as heap UMA ops.
+        // Pointer-typed values are still accepted as raw words and then validated by range check.
+        let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
+
+        if bigger_than_last_address(pointer) {
+            vm.state.current_frame.pc = spontaneous_panic();
+            return;
+        }
+
+        let address = pointer.low_u32();
+        let value = Register2::get(args, &mut vm.state);
+        vm.state
+            .heaps
+            .write_u256(STATIC_MEMORY_HEAP, address, value);
+
+        if INCREMENT {
+            Register1::set(args, &mut vm.state, pointer + 32);
+        }
+    })
+}
+
 impl<T: Tracer, W: World<T>> Instruction<T, W> {
     /// Creates a [`HeapRead`](opcodes::HeapRead) instruction with the provided params.
     pub fn from_heap_read(
@@ -209,6 +269,26 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
         arguments: Arguments,
     ) -> Self {
         Self::from_read::<AuxHeap>(src, out, incremented_out, arguments)
+    }
+
+    /// Creates a static memory read instruction.
+    pub fn from_static_memory_read(
+        src: RegisterOrImmediate,
+        out: Register1,
+        incremented_out: Option<Register2>,
+        arguments: Arguments,
+    ) -> Self {
+        let mut arguments = arguments.write_source(&src).write_destination(&out);
+
+        let increment = incremented_out.is_some();
+        if let Some(out2) = incremented_out {
+            out2.write_destination(&mut arguments);
+        }
+
+        Self {
+            handler: monomorphize!(load_static [T W] match_reg_imm src match_boolean increment),
+            arguments,
+        }
     }
 
     fn from_read<H: HeapFromState>(
@@ -249,6 +329,23 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
         arguments: Arguments,
     ) -> Self {
         Self::from_write::<AuxHeap>(src1, src2, incremented_out, arguments, false)
+    }
+
+    /// Creates a static memory write instruction.
+    pub fn from_static_memory_write(
+        src1: RegisterOrImmediate,
+        src2: Register2,
+        incremented_out: Option<Register1>,
+        arguments: Arguments,
+    ) -> Self {
+        let increment = incremented_out.is_some();
+        Self {
+            handler: monomorphize!(store_static [T W] match_reg_imm src1 match_boolean increment),
+            arguments: arguments
+                .write_source(&src1)
+                .write_source(&src2)
+                .write_destination(&incremented_out),
+        }
     }
 
     fn from_write<H: HeapFromState>(

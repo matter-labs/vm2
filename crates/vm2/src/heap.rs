@@ -1,10 +1,15 @@
 use std::{
-    fmt, mem,
+    fmt,
     ops::{Index, Range},
 };
 
 use primitive_types::U256;
+use zkevm_opcode_defs::{NEW_MEMORY_PAGES_PER_FAR_CALL, STARTING_BASE_PAGE};
 use zksync_vm2_interface::HeapId;
+
+use crate::page_ids::{
+    bootloader_aux_heap_page, bootloader_calldata_page, bootloader_heap_page, static_memory_page,
+};
 
 /// Heap page size in bytes.
 const HEAP_PAGE_SIZE: usize = 1 << 12;
@@ -67,6 +72,12 @@ impl Heap {
             })
             .collect();
         Self { pages }
+    }
+
+    fn recycle(self, pagepool: &mut PagePool) {
+        for page in self.pages.into_iter().flatten() {
+            pagepool.recycle_page(page);
+        }
     }
 
     pub(crate) fn read_u256(&self, start_address: u32) -> U256 {
@@ -174,6 +185,20 @@ impl Heap {
             }
         }
     }
+
+    fn write_bytes(&mut self, start_address: u32, bytes: &[u8], pagepool: &mut PagePool) {
+        let (mut page_idx, mut offset_in_page) = address_to_page_offset(start_address);
+        let mut remaining = bytes;
+        while !remaining.is_empty() {
+            let bytes_in_page = (HEAP_PAGE_SIZE - offset_in_page).min(remaining.len());
+            let page = self.get_or_insert_page(page_idx, pagepool);
+            page.0[offset_in_page..offset_in_page + bytes_in_page]
+                .copy_from_slice(&remaining[..bytes_in_page]);
+            remaining = &remaining[bytes_in_page..];
+            page_idx += 1;
+            offset_in_page = 0;
+        }
+    }
 }
 
 #[inline(always)]
@@ -182,9 +207,111 @@ fn address_to_page_offset(address: u32) -> (usize, usize) {
     (offset >> 12, offset & (HEAP_PAGE_SIZE - 1))
 }
 
+// TODO: With all the additions, this file should be split into several under `heap/` folder.
+// For now I'm keeping it here, since the PR diff is already big and splitting would make the
+// diff more obscure.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct DynamicPageGroup {
+    code: Option<Heap>,
+    heap: Option<Heap>,
+    aux: Option<Heap>,
+}
+
+impl DynamicPageGroup {
+    fn is_empty(&self) -> bool {
+        self.code.is_none() && self.heap.is_none() && self.aux.is_none()
+    }
+
+    fn slot(&self, kind: DynamicPageKind) -> Option<&Heap> {
+        match kind {
+            DynamicPageKind::Code => self.code.as_ref(),
+            DynamicPageKind::Heap => self.heap.as_ref(),
+            DynamicPageKind::Aux => self.aux.as_ref(),
+        }
+    }
+
+    fn slot_mut(&mut self, kind: DynamicPageKind) -> &mut Option<Heap> {
+        match kind {
+            DynamicPageKind::Code => &mut self.code,
+            DynamicPageKind::Heap => &mut self.heap,
+            DynamicPageKind::Aux => &mut self.aux,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum DynamicPageKind {
+    Code,
+    Heap,
+    Aux,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum DecodedPage {
+    Static,
+    BootloaderCalldata,
+    BootloaderHeap,
+    BootloaderAuxHeap,
+    Dynamic { group: usize, kind: DynamicPageKind },
+}
+
+impl DecodedPage {
+    fn decode(page: HeapId) -> Option<Self> {
+        if page == static_memory_page() {
+            return Some(Self::Static);
+        }
+        if page == bootloader_calldata_page() {
+            return Some(Self::BootloaderCalldata);
+        }
+        if page == bootloader_heap_page() {
+            return Some(Self::BootloaderHeap);
+        }
+        if page == bootloader_aux_heap_page() {
+            return Some(Self::BootloaderAuxHeap);
+        }
+
+        let raw = page.as_u32();
+        if raw < STARTING_BASE_PAGE {
+            return None;
+        }
+
+        let rel = raw - STARTING_BASE_PAGE;
+        let group = usize::try_from(rel / NEW_MEMORY_PAGES_PER_FAR_CALL).unwrap();
+        match rel % NEW_MEMORY_PAGES_PER_FAR_CALL {
+            0 => Some(Self::Dynamic {
+                group,
+                kind: DynamicPageKind::Code,
+            }),
+            2 => Some(Self::Dynamic {
+                group,
+                kind: DynamicPageKind::Heap,
+            }),
+            3 => Some(Self::Dynamic {
+                group,
+                kind: DynamicPageKind::Aux,
+            }),
+            _ => None,
+        }
+    }
+
+    const fn is_always_allocated(self) -> bool {
+        matches!(
+            self,
+            Self::Static
+                | Self::BootloaderCalldata
+                | Self::BootloaderHeap
+                | Self::BootloaderAuxHeap
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Heaps {
-    heaps: Vec<Heap>,
+    static_memory: Heap,
+    bootloader_calldata: Heap,
+    bootloader_heap: Heap,
+    bootloader_aux_heap: Heap,
+    dynamic: Vec<DynamicPageGroup>,
     pagepool: PagePool,
     bootloader_heap_rollback_info: Vec<(u32, U256)>,
     bootloader_aux_rollback_info: Vec<(u32, U256)>,
@@ -192,56 +319,91 @@ pub(crate) struct Heaps {
 
 impl Heaps {
     pub(crate) fn new(calldata: &[u8]) -> Self {
-        // The first heap can never be used because heap zero
-        // means the current heap in precompile calls
         let mut pagepool = PagePool::default();
+
         Self {
-            heaps: vec![
-                Heap::default(),
-                Heap::from_bytes(calldata, &mut pagepool),
-                Heap::default(),
-                Heap::default(),
-            ],
+            static_memory: Heap::from_bytes(&[], &mut pagepool),
+            bootloader_calldata: Heap::from_bytes(calldata, &mut pagepool),
+            bootloader_heap: Heap::from_bytes(&[], &mut pagepool),
+            bootloader_aux_heap: Heap::from_bytes(&[], &mut pagepool),
+            dynamic: Vec::new(),
             pagepool,
             bootloader_heap_rollback_info: vec![],
             bootloader_aux_rollback_info: vec![],
         }
     }
 
-    pub(crate) fn allocate(&mut self) -> HeapId {
-        self.allocate_inner(&[])
+    pub(crate) fn allocate_at(&mut self, page: HeapId) -> HeapId {
+        self.allocate_with_content_at(page, &[])
     }
 
-    pub(crate) fn allocate_with_content(&mut self, content: &[u8]) -> HeapId {
-        self.allocate_inner(content)
+    pub(crate) fn allocate_with_content_at(&mut self, page: HeapId, memory: &[u8]) -> HeapId {
+        let decoded = DecodedPage::decode(page)
+            .unwrap_or_else(|| panic!("heap page {} is not decodable", page.as_u32()));
+
+        assert!(
+            !decoded.is_always_allocated(),
+            "heap page {} is already allocated",
+            page.as_u32()
+        );
+
+        let slot = decoded_dynamic_slot_mut(&mut self.dynamic, decoded);
+        assert!(
+            slot.is_none(),
+            "heap page {} is already allocated",
+            page.as_u32()
+        );
+        *slot = Some(Heap::from_bytes(memory, &mut self.pagepool));
+        page
     }
 
-    fn allocate_inner(&mut self, memory: &[u8]) -> HeapId {
-        let id = u32::try_from(self.heaps.len()).expect("heap ID overflow");
-        let id = HeapId::from_u32_unchecked(id);
-        self.heaps
-            .push(Heap::from_bytes(memory, &mut self.pagepool));
-        id
+    #[cfg(test)]
+    pub(crate) fn contains(&self, page: HeapId) -> bool {
+        DecodedPage::decode(page).is_some_and(|decoded| {
+            decoded.is_always_allocated() || self.try_decoded_page(decoded).is_some()
+        })
     }
 
-    pub(crate) fn deallocate(&mut self, heap: HeapId) {
-        let heap = mem::take(&mut self.heaps[heap.as_u32() as usize]);
-        for page in heap.pages.into_iter().flatten() {
-            self.pagepool.recycle_page(page);
+    pub(crate) fn deallocate(&mut self, page: HeapId) {
+        let decoded = DecodedPage::decode(page)
+            .unwrap_or_else(|| panic!("heap page {} is not decodable", page.as_u32()));
+
+        assert!(
+            !decoded.is_always_allocated(),
+            "heap page {} must remain allocated",
+            page.as_u32()
+        );
+
+        let heap = decoded_dynamic_slot_mut(&mut self.dynamic, decoded)
+            .take()
+            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
+        heap.recycle(&mut self.pagepool);
+    }
+
+    pub(crate) fn write_u256(&mut self, page: HeapId, start_address: u32, value: U256) {
+        self.record_bootloader_word_rollback(page, start_address);
+        let decoded = DecodedPage::decode(page)
+            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
+        let (heap, pagepool) = self
+            .try_decoded_page_mut(decoded)
+            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
+        heap.write_u256(start_address, value, pagepool);
+    }
+
+    pub(crate) fn write_bytes(&mut self, page: HeapId, start_address: u32, bytes: &[u8]) {
+        self.record_bootloader_range_rollback(page, start_address, bytes.len());
+        let decoded = DecodedPage::decode(page)
+            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
+        if let DecodedPage::Dynamic { .. } = decoded {
+            let slot = decoded_dynamic_slot_mut(&mut self.dynamic, decoded);
+            if slot.is_none() {
+                *slot = Some(Heap::default());
+            }
         }
-    }
-
-    pub(crate) fn write_u256(&mut self, heap: HeapId, start_address: u32, value: U256) {
-        if heap == HeapId::FIRST {
-            let prev_value = self[heap].read_u256(start_address);
-            self.bootloader_heap_rollback_info
-                .push((start_address, prev_value));
-        } else if heap == HeapId::FIRST_AUX {
-            let prev_value = self[heap].read_u256(start_address);
-            self.bootloader_aux_rollback_info
-                .push((start_address, prev_value));
-        }
-        self.heaps[heap.as_u32() as usize].write_u256(start_address, value, &mut self.pagepool);
+        let (heap, pagepool) = self
+            .try_decoded_page_mut(decoded)
+            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
+        heap.write_bytes(start_address, bytes, pagepool);
     }
 
     pub(crate) fn snapshot(&self) -> (usize, usize) {
@@ -253,19 +415,13 @@ impl Heaps {
 
     pub(crate) fn rollback(&mut self, (heap_snap, aux_snap): (usize, usize)) {
         for (address, value) in self.bootloader_heap_rollback_info.drain(heap_snap..).rev() {
-            self.heaps[HeapId::FIRST.as_u32() as usize].write_u256(
-                address,
-                value,
-                &mut self.pagepool,
-            );
+            self.bootloader_heap
+                .write_u256(address, value, &mut self.pagepool);
         }
 
         for (address, value) in self.bootloader_aux_rollback_info.drain(aux_snap..).rev() {
-            self.heaps[HeapId::FIRST_AUX.as_u32() as usize].write_u256(
-                address,
-                value,
-                &mut self.pagepool,
-            );
+            self.bootloader_aux_heap
+                .write_u256(address, value, &mut self.pagepool);
         }
     }
 
@@ -273,29 +429,136 @@ impl Heaps {
         self.bootloader_heap_rollback_info.clear();
         self.bootloader_aux_rollback_info.clear();
     }
+
+    fn record_bootloader_word_rollback(&mut self, page: HeapId, start_address: u32) {
+        if page == HeapId::FIRST {
+            let prev_value = self[page].read_u256(start_address);
+            self.bootloader_heap_rollback_info
+                .push((start_address, prev_value));
+        } else if page == HeapId::FIRST_AUX {
+            let prev_value = self[page].read_u256(start_address);
+            self.bootloader_aux_rollback_info
+                .push((start_address, prev_value));
+        }
+    }
+
+    fn record_bootloader_range_rollback(&mut self, page: HeapId, start_address: u32, len: usize) {
+        if len == 0 {
+            return;
+        }
+
+        let start = usize::try_from(start_address).expect("heap write address overflow");
+        let end = start.checked_add(len).expect("heap write range overflow");
+        let first_word = start / 32 * 32;
+        let last_word = (end - 1) / 32 * 32;
+
+        for address in (first_word..=last_word).step_by(32) {
+            self.record_bootloader_word_rollback(
+                page,
+                u32::try_from(address).expect("heap write address overflow"),
+            );
+        }
+    }
+
+    fn try_decoded_page(&self, page: DecodedPage) -> Option<&Heap> {
+        match page {
+            DecodedPage::Static => Some(&self.static_memory),
+            DecodedPage::BootloaderCalldata => Some(&self.bootloader_calldata),
+            DecodedPage::BootloaderHeap => Some(&self.bootloader_heap),
+            DecodedPage::BootloaderAuxHeap => Some(&self.bootloader_aux_heap),
+            DecodedPage::Dynamic { group, kind } => {
+                self.dynamic.get(group).and_then(|group| group.slot(kind))
+            }
+        }
+    }
+
+    fn decoded_page(&self, page: DecodedPage) -> &Heap {
+        self.try_decoded_page(page)
+            .unwrap_or_else(|| panic!("decoded page {page:?} is not allocated"))
+    }
+
+    fn try_decoded_page_mut(&mut self, page: DecodedPage) -> Option<(&mut Heap, &mut PagePool)> {
+        let Self {
+            static_memory,
+            bootloader_calldata,
+            bootloader_heap,
+            bootloader_aux_heap,
+            dynamic,
+            pagepool,
+            ..
+        } = self;
+
+        let heap = match page {
+            DecodedPage::Static => static_memory,
+            DecodedPage::BootloaderCalldata => bootloader_calldata,
+            DecodedPage::BootloaderHeap => bootloader_heap,
+            DecodedPage::BootloaderAuxHeap => bootloader_aux_heap,
+            DecodedPage::Dynamic { group, kind } => dynamic
+                .get_mut(group)
+                .and_then(|group| group.slot_mut(kind).as_mut())?,
+        };
+        Some((heap, pagepool))
+    }
 }
 
 impl Index<HeapId> for Heaps {
     type Output = Heap;
 
     fn index(&self, index: HeapId) -> &Self::Output {
-        &self.heaps[index.as_u32() as usize]
+        let decoded = DecodedPage::decode(index)
+            .unwrap_or_else(|| panic!("heap page {} is not allocated", index.as_u32()));
+        self.decoded_page(decoded)
     }
 }
 
-// Since we never remove `Heap` entries (even after rollbacks – although we do deallocate heaps in this case),
-// we allow additional empty heaps at the end of `Heaps`.
 impl PartialEq for Heaps {
     fn eq(&self, other: &Self) -> bool {
-        for i in 0..self.heaps.len().max(other.heaps.len()) {
-            if self.heaps.get(i).unwrap_or(&Heap::default())
-                != other.heaps.get(i).unwrap_or(&Heap::default())
-            {
-                return false;
+        if self.static_memory != other.static_memory
+            || self.bootloader_calldata != other.bootloader_calldata
+            || self.bootloader_heap != other.bootloader_heap
+            || self.bootloader_aux_heap != other.bootloader_aux_heap
+        {
+            return false;
+        }
+
+        for idx in 0..self.dynamic.len().max(other.dynamic.len()) {
+            match (self.dynamic.get(idx), other.dynamic.get(idx)) {
+                (Some(this_group), Some(other_group)) => {
+                    if this_group != other_group {
+                        return false;
+                    }
+                }
+                (Some(group), None) | (None, Some(group)) => {
+                    if !group.is_empty() {
+                        return false;
+                    }
+                }
+                (None, None) => {}
             }
         }
         true
     }
+}
+
+fn dynamic_slot_mut(
+    dynamic: &mut Vec<DynamicPageGroup>,
+    group: usize,
+    kind: DynamicPageKind,
+) -> &mut Option<Heap> {
+    if dynamic.len() <= group {
+        dynamic.resize_with(group + 1, DynamicPageGroup::default);
+    }
+    dynamic[group].slot_mut(kind)
+}
+
+fn decoded_dynamic_slot_mut(
+    dynamic: &mut Vec<DynamicPageGroup>,
+    page: DecodedPage,
+) -> &mut Option<Heap> {
+    let DecodedPage::Dynamic { group, kind } = page else {
+        panic!("decoded page {page:?} is not dynamic");
+    };
+    dynamic_slot_mut(dynamic, group, kind)
 }
 
 #[derive(Default, Clone)]
@@ -545,5 +808,39 @@ mod tests {
         assert_eq!(heaps[HeapId::FIRST_AUX].read_u256(0), 42.into());
         assert_eq!(heaps.bootloader_heap_rollback_info.len(), 1);
         assert_eq!(heaps.bootloader_aux_rollback_info.len(), 1);
+    }
+
+    #[test]
+    fn rolling_back_bootloader_range_writes() {
+        let mut heaps = Heaps::new(&[]);
+        let first_word = repeat_byte(0x11);
+        let second_word = repeat_byte(0x22);
+        heaps.write_u256(HeapId::FIRST, 0, first_word);
+        heaps.write_u256(HeapId::FIRST, 32, second_word);
+
+        let snapshot = heaps.snapshot();
+
+        heaps.write_bytes(HeapId::FIRST, 8, &[0xaa; 40]);
+        assert_ne!(heaps[HeapId::FIRST].read_u256(0), first_word);
+        assert_ne!(heaps[HeapId::FIRST].read_u256(32), second_word);
+
+        heaps.rollback(snapshot);
+
+        assert_eq!(heaps[HeapId::FIRST].read_u256(0), first_word);
+        assert_eq!(heaps[HeapId::FIRST].read_u256(32), second_word);
+        assert_eq!(heaps.bootloader_heap_rollback_info.len(), 2);
+    }
+
+    #[test]
+    fn heaps_ignore_trailing_empty_dynamic_groups_in_equality() {
+        let mut with_trailing_group = Heaps::new(&[]);
+        let empty = Heaps::new(&[]);
+        let page = crate::page_ids::heap_page_from_base(crate::page_ids::first_dynamic_base_page());
+
+        with_trailing_group.allocate_at(page);
+        with_trailing_group.deallocate(page);
+
+        assert_eq!(with_trailing_group, empty);
+        assert_eq!(empty, with_trailing_group);
     }
 }

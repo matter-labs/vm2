@@ -1,7 +1,7 @@
 use primitive_types::U256;
 use zksync_vm2_interface::{opcodes, HeapId, Tracer};
 
-use super::{common::boilerplate_ext, ret::spontaneous_panic};
+use super::common::boilerplate_ext;
 use crate::{
     addressing_modes::{Arguments, Destination, Register1, Register2, Source},
     instruction::ExecutionStatus,
@@ -78,7 +78,7 @@ fn precompile_call<T: Tracer, W: World<T>>(
             // This is safe because system contracts are trusted
             let aux_data = PrecompileAuxData::from_u256(Register2::get(args, &mut vm.state));
             let Ok(()) = vm.state.use_gas(aux_data.extra_ergs_cost) else {
-                vm.state.current_frame.pc = spontaneous_panic();
+                Register1::set(args, &mut vm.state, U256::zero());
                 return;
             };
 
@@ -88,6 +88,8 @@ fn precompile_call<T: Tracer, W: World<T>>(
             }
 
             let mut abi = PrecompileCallAbi::from_u256(Register1::get(args, &mut vm.state));
+            // `zk_evm` uses `memory_page == 0` in precompile ABI as a sentinel meaning
+            // "use the current heap", so remap it before heap lookup.
             if abi.memory_page_to_read.as_u32() == 0 {
                 abi.memory_page_to_read = vm.state.current_frame.heap;
             }

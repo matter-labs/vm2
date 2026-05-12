@@ -95,3 +95,54 @@ fn trace_failing_far_call() {
 
     assert!(tracer.witnessed_all_opcodes());
 }
+
+#[test]
+fn trace_static_memory_opcodes() {
+    let instructions = vec![
+        Instruction::from_static_memory_write(
+            Register1(Register::new(1)).into(),
+            Register2(Register::new(2)),
+            None,
+            Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+        ),
+        Instruction::from_static_memory_read(
+            Register1(Register::new(1)).into(),
+            Register1(Register::new(3)),
+            None,
+            Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+        ),
+        Instruction::from_ret(
+            Register1(Register::new(0)),
+            None,
+            Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+        ),
+    ];
+    let program = Program::from_raw(instructions, vec![]);
+
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        Address::from_low_u64_be(1),
+        program,
+        Address::zero(),
+        &[],
+        1000,
+        Settings {
+            default_aa_code_hash: [0; 32],
+            evm_interpreter_code_hash: [0; 32],
+            hook_address: 0,
+        },
+    );
+
+    vm.state.register_pointer_flags &= !(1 << 1);
+    vm.state.registers[1] = 0.into();
+    vm.state.registers[2] = 0xdead_u32.into();
+
+    let mut tracer = ExpectingTracer::new(vec![
+        Opcode::StaticMemoryWrite,
+        Opcode::StaticMemoryRead,
+        Opcode::Ret(ReturnType::Normal),
+    ]);
+    vm.run(&mut world, &mut tracer);
+
+    assert!(tracer.witnessed_all_opcodes());
+}

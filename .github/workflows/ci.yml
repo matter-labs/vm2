@@ -11,7 +11,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   # Nightly Rust necessary for building docs.
-  RUST_NIGHTLY_VERSION: nightly-2024-08-01
+  RUST_NIGHTLY_VERSION: nightly-2026-02-10
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -27,7 +27,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable
+          toolchain: ${{ env.RUST_NIGHTLY_VERSION }}
           components: rustfmt, clippy, rust-src
 
       - name: Rust Cache

@@ -19,6 +19,13 @@ impl Heap {
         self.write = Some((start_address, value));
     }
 
+    fn write_bytes(&mut self, start_address: u32, bytes: &[u8]) {
+        let mut word = [0_u8; 32];
+        let copied = bytes.len().min(word.len());
+        word[..copied].copy_from_slice(&bytes[..copied]);
+        self.write_u256(start_address, U256::from_big_endian(&word));
+    }
+
     pub(crate) fn read_byte(&self, _: u32) -> u8 {
         unimplemented!()
     }
@@ -54,6 +61,7 @@ impl<'a> Arbitrary<'a> for Heap {
 
 #[derive(Debug, Clone)]
 pub struct Heaps {
+    #[allow(dead_code)] // For API compatibility with real implementation.
     heap_id: HeapId,
     pub(crate) read: MockRead<HeapId, Heap>,
 }
@@ -64,16 +72,28 @@ impl Heaps {
         unimplemented!("Should use arbitrary heap, not fresh heap in testing.")
     }
 
+    #[allow(dead_code)] // For API compatibility with real implementation.
     pub(crate) fn allocate(&mut self) -> HeapId {
         self.heap_id
     }
 
+    pub(crate) fn allocate_at(&mut self, page: HeapId) -> HeapId {
+        page
+    }
+
+    #[allow(dead_code)] // For API compatibility with real implementation.
     pub(crate) fn allocate_with_content(&mut self, content: &[u8]) -> HeapId {
         let id = self.allocate();
         self.read
             .get_mut(id)
             .write_u256(0, U256::from_big_endian(content));
         id
+    }
+
+    #[allow(dead_code)] // For API compatibility with real implementation.
+    pub(crate) fn allocate_with_content_at(&mut self, page: HeapId, content: &[u8]) -> HeapId {
+        self.read.get_mut(page).write_bytes(0, content);
+        page
     }
 
     pub(crate) fn deallocate(&mut self, _: HeapId) {}
@@ -90,6 +110,10 @@ impl Heaps {
 
     pub fn write_u256(&mut self, heap: HeapId, start_address: u32, value: U256) {
         self.read.get_mut(heap).write_u256(start_address, value);
+    }
+
+    pub(crate) fn write_bytes(&mut self, heap: HeapId, start_address: u32, bytes: &[u8]) {
+        self.read.get_mut(heap).write_bytes(start_address, bytes);
     }
 
     pub(crate) fn snapshot(&self) -> (usize, usize) {

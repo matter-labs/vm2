@@ -1,3 +1,4 @@
+use zkevm_opcode_defs::VM_MAX_STACK_DEPTH;
 use zksync_vm2_interface::{opcodes, OpcodeType, Tracer};
 
 use super::ret::free_panic;
@@ -45,6 +46,16 @@ pub(crate) fn full_boilerplate<Opcode: OpcodeType, T: Tracer, W: World<T>>(
     ) -> ExecutionStatus,
 ) -> ExecutionStatus {
     let args = unsafe { &(*vm.state.current_frame.pc).arguments };
+
+    // We are not checking whether the callstack is full here. However,
+    // the callstack depth limit on EraVM is so high that it will not be hit in practice,
+    // so it is fine to not have this check, even though `zk_evm` has it.
+    // Introducing this check would require additional bookkeeping for far/near calls, which
+    // doesn't currently make sense.
+
+    // Make sure that call stack depth is very high, just in case.
+    #[allow(clippy::items_after_statements)] // Invariant for the code below
+    const _: () = assert!(VM_MAX_STACK_DEPTH >= 214_748_444);
 
     if vm.state.use_gas(args.get_static_gas_cost()).is_err()
         || !args.mode_requirements().met(

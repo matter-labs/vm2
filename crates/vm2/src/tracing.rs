@@ -284,20 +284,14 @@ impl<T: Tracer, W: World<T>> CallframeInterface for CallframeWrapper<'_, T, W> {
         }
     }
 
-    // we don't expect the VM to run on 16-bit machines, and sign loss / wrap is checked
-    #[allow(
-        clippy::cast_sign_loss,
-        clippy::cast_possible_truncation,
-        clippy::cast_possible_wrap
-    )]
+    // we don't expect the VM to run on 16-bit machines, and truncation is checked
+    #[allow(clippy::cast_possible_truncation)]
     fn program_counter(&self) -> Option<u16> {
         if let Some(call) = self.near_call_on_top() {
             Some(call.previous_frame_pc)
         } else {
             let offset = self.frame.get_raw_pc();
-            if offset < 0
-                || offset > u16::MAX as isize
-                || self.frame.program.instruction(offset as u16).is_none()
+            if offset > u16::MAX as usize || self.frame.program.instruction(offset as u16).is_none()
             {
                 None
             } else {
@@ -499,5 +493,33 @@ mod test {
             assert_eq!(vm.callframe(fwd).exception_handler(), rev);
             assert_eq!(vm.callframe(fwd).gas(), rev.into());
         }
+    }
+
+    #[test]
+    fn program_counter_with_pointer_before_program() {
+        let program = Program::from_raw(vec![Instruction::from_invalid()], vec![]);
+
+        let address = Address::from_low_u64_be(0x_1234_5678_90ab_cdef);
+        let mut world = TestWorld::<()>::new(&[(address, program)]);
+        let program = initial_decommit(&mut world, address);
+
+        let mut vm = VirtualMachine::new(
+            address,
+            program,
+            Address::zero(),
+            &[],
+            1000,
+            crate::Settings {
+                default_aa_code_hash: [0; 32],
+                evm_interpreter_code_hash: [0; 32],
+                hook_address: 0,
+            },
+        );
+
+        let first_instruction = vm.state.current_frame.pc;
+        vm.state.current_frame.pc = first_instruction.wrapping_sub(1);
+
+        let result = vm.current_frame().program_counter();
+        assert_eq!(result, None);
     }
 }

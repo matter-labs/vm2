@@ -13,9 +13,10 @@ use super::{
 };
 use crate::{
     addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
-    decommit::{is_kernel, u256_into_address},
+    decommit::{is_kernel, materialize_decommit_page, u256_into_address},
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
+    page_ids::code_page_from_base,
     predication::Flags,
     Instruction, Program, VirtualMachine, World,
 };
@@ -58,22 +59,32 @@ where
             } else {
                 0
             };
+        let new_base_page = vm.state.next_base_page();
 
         let fallible_part = (|| {
-            let decommit_result = vm.world_diff.decommit(
-                world,
-                tracer,
-                destination_address,
-                vm.settings.default_aa_code_hash,
-                vm.settings.evm_interpreter_code_hash,
-                abi.is_constructor_call,
-            );
+            let shard_call_failed = IS_SHARD && abi.shard_id != 0;
 
-            // calldata has to be constructed even if we already know we will panic because
-            // overflowing start + length makes the heap resize even when already panicking.
-            let already_failed = decommit_result.is_none() || IS_SHARD && abi.shard_id != 0;
+            let (maybe_calldata, decommit_result) = if shard_call_failed {
+                // calldata has to be constructed even if we already know we will panic because
+                // overflowing start + length makes the heap resize even when already panicking.
+                (get_calldata(raw_abi, raw_abi_is_pointer, vm, true), None)
+            } else {
+                let decommit_result = vm.world_diff.decommit(
+                    world,
+                    tracer,
+                    destination_address,
+                    vm.settings.default_aa_code_hash,
+                    vm.settings.evm_interpreter_code_hash,
+                    abi.is_constructor_call,
+                    vm.state.transaction_number,
+                );
 
-            let maybe_calldata = get_calldata(raw_abi, raw_abi_is_pointer, vm, already_failed);
+                // calldata has to be constructed even if we already know we will panic because
+                // overflowing start + length makes the heap resize even when already panicking.
+                let already_failed = decommit_result.is_none();
+                let maybe_calldata = get_calldata(raw_abi, raw_abi_is_pointer, vm, already_failed);
+                (maybe_calldata, decommit_result)
+            };
 
             // mandated gas is passed even if it means transferring more than the 63/64 rule allows
             if let Some(gas_left) = vm.state.current_frame.gas.checked_sub(mandated_gas) {
@@ -85,17 +96,28 @@ where
                 return None;
             }
 
-            if IS_SHARD && abi.shard_id != 0 {
+            if shard_call_failed {
                 return None;
             }
             let calldata = maybe_calldata?;
             let (unpaid_decommit, is_evm) = decommit_result?;
+            let code_hash = unpaid_decommit.code_key();
+            let should_materialize = unpaid_decommit.should_materialize();
             let program = vm.world_diff.pay_for_decommit(
                 world,
                 tracer,
                 unpaid_decommit,
                 &mut vm.state.current_frame.gas,
             )?;
+
+            if should_materialize {
+                // TODO: The interfaces that `World` provide exposes either a parsed program OR bytes,
+                // so converting back to bytes here feels like a more reasonable choice; though probably
+                // a more optimal approach is possible if we rework interfaces either for the `World` or
+                // for heap instantiation.
+                let code = program_to_bytes(&program);
+                materialize_decommit_page(vm, code_hash, &code, code_page_from_base(new_base_page));
+            }
 
             Some((calldata, program, is_evm))
         })();
@@ -167,6 +189,17 @@ fn get_far_call_arguments(abi: U256) -> FarCallABI {
         is_constructor_call: constructor_call_byte != 0,
         is_system_call: system_call_byte != 0,
     }
+}
+
+fn program_to_bytes<T, W>(program: &Program<T, W>) -> Vec<u8> {
+    let mut result = Vec::with_capacity(program.code_page().len() * 32);
+    #[allow(clippy::explicit_iter_loop)] // `.iter()` is required in this case
+    for word in program.code_page().iter() {
+        let mut bytes = [0u8; 32];
+        word.to_big_endian(&mut bytes);
+        result.extend_from_slice(&bytes);
+    }
+    result
 }
 
 /// Forms a new fat pointer or narrows an existing one, as dictated by the ABI.

@@ -7,6 +7,7 @@ use crate::{
     callframe::{Callframe, FrameRemnant},
     decommit::u256_into_address,
     instruction::ExecutionStatus,
+    page_ids::{aux_heap_page_from_base, heap_page_from_base},
     stack::StackPool,
     state::{State, StateSnapshot},
     world_diff::{ExternalSnapshot, Snapshot, WorldDiff},
@@ -161,7 +162,9 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
             .take()
             .expect("`rollback()` called without a snapshot");
         self.world_diff.external_rollback(snapshot.world_snapshot);
-        self.state.rollback(snapshot.state_snapshot);
+        self.state.rollback(snapshot.state_snapshot, |heap| {
+            self.world_diff.is_decommit_page_pinned(heap)
+        });
         self.delete_history();
     }
 
@@ -203,6 +206,12 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
         calldata_heap: HeapId,
         world_before_this_frame: Snapshot,
     ) {
+        let base_page = self.state.allocate_base_page();
+        let heap_page = heap_page_from_base(base_page);
+        let aux_heap_page = aux_heap_page_from_base(base_page);
+        self.state.heaps.allocate_at(heap_page);
+        self.state.heaps.allocate_at(aux_heap_page);
+
         let mut new_frame = Callframe::new(
             if M::VALUE == CallingMode::Delegate {
                 self.state.current_frame.address
@@ -217,8 +226,8 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
             },
             program,
             self.stack_pool.get(),
-            self.state.heaps.allocate(),
-            self.state.heaps.allocate(),
+            heap_page,
+            aux_heap_page,
             calldata_heap,
             gas,
             exception_handler,
@@ -238,38 +247,38 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
     }
 
     pub(crate) fn pop_frame(&mut self, heap_to_keep: Option<HeapId>) -> Option<FrameRemnant> {
-        self.state.previous_frames.pop().map(|mut frame| {
-            for &heap in [
-                self.state.current_frame.heap,
-                self.state.current_frame.aux_heap,
-            ]
-            .iter()
-            .chain(&self.state.current_frame.heaps_i_am_keeping_alive)
-            {
-                if Some(heap) != heap_to_keep {
-                    self.state.heaps.deallocate(heap);
-                }
+        let mut frame = self.state.previous_frames.pop()?;
+
+        for &heap in [
+            self.state.current_frame.heap,
+            self.state.current_frame.aux_heap,
+        ]
+        .iter()
+        .chain(&self.state.current_frame.heaps_i_am_keeping_alive)
+        {
+            if Some(heap) != heap_to_keep && !self.world_diff.is_decommit_page_pinned(heap) {
+                self.state.heaps.deallocate(heap);
             }
+        }
 
-            std::mem::swap(&mut self.state.current_frame, &mut frame);
-            let Callframe {
-                exception_handler,
-                world_before_this_frame,
-                stack,
-                ..
-            } = frame;
+        std::mem::swap(&mut self.state.current_frame, &mut frame);
+        let Callframe {
+            exception_handler,
+            world_before_this_frame,
+            stack,
+            ..
+        } = frame;
 
-            self.stack_pool.recycle(stack);
+        self.stack_pool.recycle(stack);
 
-            self.state
-                .current_frame
-                .heaps_i_am_keeping_alive
-                .extend(heap_to_keep);
+        self.state
+            .current_frame
+            .heaps_i_am_keeping_alive
+            .extend(heap_to_keep);
 
-            FrameRemnant {
-                exception_handler,
-                snapshot: world_before_this_frame,
-            }
+        Some(FrameRemnant {
+            exception_handler,
+            snapshot: world_before_this_frame,
         })
     }
 
