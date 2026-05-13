@@ -1,6 +1,8 @@
 use primitive_types::{H160, U256};
 use zkevm_opcode_defs::{
-    decoding::EncodingModeProduction, ethereum_types::Address, system_params::VM_MAX_STACK_DEPTH,
+    decoding::EncodingModeProduction,
+    ethereum_types::Address,
+    system_params::{NEW_EVM_FRAME_MEMORY_STIPEND, NEW_FRAME_MEMORY_STIPEND, VM_MAX_STACK_DEPTH},
     Condition, DecodedOpcode, ImmMemHandlerFlags, Opcode, Operand, RegOrImmFlags, UMAOpcode,
     OPCODES_TABLE, UMA_INCREMENT_FLAG_IDX,
 };
@@ -10,6 +12,7 @@ use crate::{
     addressing_modes::{Arguments, Immediate1, Register, Register1, Register2},
     decode::decode,
     fat_pointer::FatPointer,
+    instruction_handlers::address_into_u256,
     page_ids::{
         aux_heap_page_from_base, first_dynamic_base_page, heap_page_from_base, next_page_group,
     },
@@ -67,6 +70,68 @@ fn ret_instruction<T: Tracer, W: World<T>>() -> Instruction<T, W> {
         None,
         Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
     )
+}
+
+fn bytes32(value: U256) -> [u8; 32] {
+    let mut bytes = [0; 32];
+    value.to_big_endian(&mut bytes);
+    bytes
+}
+
+fn masked_default_aa_far_call(version_byte: u8) -> VirtualMachine<(), TestWorld<()>> {
+    let default_aa_address = Address::from_low_u64_be(0x100);
+    let destination_address = non_kernel_address();
+    let default_aa_program = Program::from_raw(vec![ret_instruction()], vec![]);
+    let mut world = TestWorld::new(&[(default_aa_address, default_aa_program)]);
+
+    let default_aa_hash = *world
+        .address_to_hash
+        .get(&address_into_u256(default_aa_address))
+        .expect("default AA hash must be registered in test world");
+
+    // The target storage slot describes code that cannot be called in this mode:
+    // byte 1 marks the contract as still in construction, while the call below is
+    // a regular non-constructor call. Reference zk_evm masks this to default AA but
+    // still uses byte 0 when selecting the new frame memory stipend.
+    let mut masked_code_info = [0; 32];
+    masked_code_info[0] = version_byte;
+    masked_code_info[1] = 1;
+    world.address_to_hash.insert(
+        address_into_u256(destination_address),
+        U256::from_big_endian(&masked_code_info),
+    );
+
+    let far_call = Instruction::from_far_call::<opcodes::Normal>(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Immediate1(1),
+        false,
+        false,
+        Arguments::new(Predicate::Always, 200, ModeRequirements::none()),
+    );
+    let program = Program::from_raw(vec![far_call, ret_instruction()], vec![]);
+    let mut vm = VirtualMachine::new(
+        non_kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        Settings {
+            default_aa_code_hash: bytes32(default_aa_hash),
+            evm_interpreter_code_hash: [0; 32],
+            hook_address: 0,
+        },
+    );
+
+    let mut far_call_abi = U256::zero();
+    far_call_abi.0[3] = 10_000;
+    vm.state.register_pointer_flags &= !(1 << 1);
+    vm.state.registers[1] = far_call_abi;
+    vm.state.registers[2] = address_into_u256(destination_address);
+    vm.state.current_frame.is_static = true;
+
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+    vm
 }
 
 #[test]
@@ -132,6 +197,35 @@ fn far_call_calldata_pointer_should_use_caller_heap_reference_page() {
     assert_eq!(
         vm.state.current_frame.aux_heap,
         aux_heap_page_from_base(first_dynamic_base_page())
+    );
+}
+
+#[test]
+fn masked_evm_blob_far_call_should_keep_evm_stipend() {
+    let vm = masked_default_aa_far_call(2);
+
+    assert_eq!(
+        vm.state.current_frame.heap_size,
+        NEW_EVM_FRAME_MEMORY_STIPEND
+    );
+    assert_eq!(
+        vm.state.current_frame.aux_heap_size,
+        NEW_EVM_FRAME_MEMORY_STIPEND
+    );
+    assert!(
+        vm.state.current_frame.is_static,
+        "masked EVM blob calls should keep default-AA static behavior; only the stipend uses the blob version byte"
+    );
+}
+
+#[test]
+fn masked_native_far_call_should_keep_regular_stipend() {
+    let vm = masked_default_aa_far_call(1);
+
+    assert_eq!(vm.state.current_frame.heap_size, NEW_FRAME_MEMORY_STIPEND);
+    assert_eq!(
+        vm.state.current_frame.aux_heap_size,
+        NEW_FRAME_MEMORY_STIPEND
     );
 }
 

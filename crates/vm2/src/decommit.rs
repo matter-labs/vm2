@@ -53,11 +53,16 @@ impl WorldDiff {
         evm_interpreter_code_hash: [u8; 32],
         is_constructor_call: bool,
         tx_number_in_block: u16,
-    ) -> Option<(UnpaidDecommit, bool)> {
+    ) -> Option<(UnpaidDecommit, bool, bool)> {
         let deployer_system_contract_address =
             Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW.into());
 
         let mut is_evm = false;
+        // zk_evm grants the larger EVM frame stipend based on the version byte alone.
+        // Keep this separate from `is_evm`: calls masked to default AA should not execute
+        // via the EVM interpreter, but their frame bounds still expose the original blob
+        // format classification.
+        let mut is_evm_blob_format = false;
 
         let mut code_info = {
             let code_info = self.read_storage_without_refund(
@@ -98,6 +103,7 @@ impl WorldDiff {
                     }
                 }
                 2 => {
+                    is_evm_blob_format = true;
                     if is_constructed == is_constructor_call {
                         try_default_aa?
                     } else {
@@ -131,6 +137,7 @@ impl WorldDiff {
                 should_materialize,
             },
             is_evm,
+            is_evm_blob_format,
         ))
     }
 
