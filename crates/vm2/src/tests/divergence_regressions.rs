@@ -404,6 +404,66 @@ fn static_memory_should_be_isolated_from_regular_heap() {
     assert_eq!(vm.state.registers[4], static_value);
 }
 
+fn assert_uma_read_increment_preserves_pointer_flag(
+    read_instruction: Instruction<(), TestWorld<()>>,
+    address: Address,
+) {
+    let program = Program::from_raw(vec![read_instruction], vec![]);
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        address,
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    // Panic returndata is represented as an empty fat pointer: value zero, with
+    // the pointer tag still set. UMA range checks accept that value, so the
+    // incremented register must preserve the tag exactly as zk_evm does.
+    vm.state.registers[1] = U256::zero();
+    vm.state.register_pointer_flags = 1 << 1;
+
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+
+    assert_eq!(vm.state.registers[3], U256::from(32));
+    assert_eq!(vm.state.register_pointer_flags & (1 << 3), 1 << 3);
+}
+
+#[test]
+fn uma_read_increment_should_preserve_source_pointer_flag() {
+    assert_uma_read_increment_preserves_pointer_flag(
+        Instruction::from_heap_read(
+            Register1(Register::new(1)).into(),
+            Register1(Register::new(2)),
+            Some(Register2(Register::new(3))),
+            Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+        ),
+        non_kernel_address(),
+    );
+
+    assert_uma_read_increment_preserves_pointer_flag(
+        Instruction::from_aux_heap_read(
+            Register1(Register::new(1)).into(),
+            Register1(Register::new(2)),
+            Some(Register2(Register::new(3))),
+            Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+        ),
+        non_kernel_address(),
+    );
+
+    assert_uma_read_increment_preserves_pointer_flag(
+        Instruction::from_static_memory_read(
+            Register1(Register::new(1)).into(),
+            Register1(Register::new(2)),
+            Some(Register2(Register::new(3))),
+            Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+        ),
+        kernel_address(),
+    );
+}
+
 #[derive(Debug, Default)]
 struct IncrementingPrecompiles;
 
