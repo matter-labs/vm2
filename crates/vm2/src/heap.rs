@@ -222,6 +222,12 @@ impl DynamicPageGroup {
         self.code.is_none() && self.heap.is_none() && self.aux.is_none()
     }
 
+    fn recycle(self, pagepool: &mut PagePool) {
+        for heap in [self.code, self.heap, self.aux].into_iter().flatten() {
+            heap.recycle(pagepool);
+        }
+    }
+
     fn slot(&self, kind: DynamicPageKind) -> Option<&Heap> {
         match kind {
             DynamicPageKind::Code => self.code.as_ref(),
@@ -380,6 +386,10 @@ impl Heaps {
         heap.recycle(&mut self.pagepool);
     }
 
+    pub(crate) fn dynamic_len(&self) -> usize {
+        self.dynamic.len()
+    }
+
     pub(crate) fn write_u256(&mut self, page: HeapId, start_address: u32, value: U256) {
         self.record_bootloader_word_rollback(page, start_address);
         let decoded = DecodedPage::decode(page)
@@ -422,6 +432,19 @@ impl Heaps {
         for (address, value) in self.bootloader_aux_rollback_info.drain(aux_snap..).rev() {
             self.bootloader_aux_heap
                 .write_u256(address, value, &mut self.pagepool);
+        }
+    }
+
+    pub(crate) fn truncate_dynamic_to(&mut self, len: usize) {
+        assert!(
+            len <= self.dynamic.len(),
+            "cannot restore dynamic heap length {} from current length {}",
+            len,
+            self.dynamic.len()
+        );
+
+        for group in self.dynamic.drain(len..) {
+            group.recycle(&mut self.pagepool);
         }
     }
 

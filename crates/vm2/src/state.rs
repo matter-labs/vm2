@@ -131,6 +131,7 @@ impl<T: Tracer, W: World<T>> State<T, W> {
             flags: self.flags.clone(),
             bootloader_frame: self.current_frame.snapshot(),
             bootloader_heap_snapshot: self.heaps.snapshot(),
+            dynamic_heap_groups: self.heaps.dynamic_len(),
             transaction_number: self.transaction_number,
             context_u128: self.context_u128,
             next_base_page: self.next_base_page,
@@ -148,6 +149,7 @@ impl<T: Tracer, W: World<T>> State<T, W> {
             flags,
             bootloader_frame,
             bootloader_heap_snapshot,
+            dynamic_heap_groups,
             transaction_number,
             context_u128,
             next_base_page,
@@ -159,6 +161,13 @@ impl<T: Tracer, W: World<T>> State<T, W> {
             }
         }
         self.heaps.rollback(bootloader_heap_snapshot);
+
+        // Pages created after the host snapshot may no longer be reachable from any frame-level
+        // keep-alive list. Decommit pages are the important case: rollback first removes the
+        // global pin, so frame bookkeeping alone can miss a dynamic page that was kept alive only
+        // by that pin.
+        self.heaps.truncate_dynamic_to(dynamic_heap_groups);
+
         self.registers = registers;
         self.register_pointer_flags = register_pointer_flags;
         self.flags = flags;
@@ -253,6 +262,7 @@ pub(crate) struct StateSnapshot {
     flags: Flags,
     bootloader_frame: CallframeSnapshot,
     bootloader_heap_snapshot: (usize, usize),
+    dynamic_heap_groups: usize,
     transaction_number: u16,
     context_u128: u128,
     next_base_page: u32,

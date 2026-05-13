@@ -7,7 +7,9 @@ use zkevm_opcode_defs::{
 use zksync_vm2_interface::{opcodes, HeapId, Tracer};
 
 use crate::{
-    addressing_modes::{Arguments, Immediate1, Register, Register1, Register2},
+    addressing_modes::{
+        Arguments, CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
+    },
     decode::decode,
     fat_pointer::FatPointer,
     page_ids::{
@@ -67,6 +69,45 @@ fn ret_instruction<T: Tracer, W: World<T>>() -> Instruction<T, W> {
         None,
         Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
     )
+}
+
+fn load_code_page_word<T: Tracer, W: World<T>>(
+    index: u16,
+    destination: Register,
+) -> Instruction<T, W> {
+    Instruction::from_add(
+        CodePage(RegisterAndImmediate {
+            immediate: index,
+            register: Register::new(0),
+        })
+        .into(),
+        Register2(Register::new(0)),
+        Register1(destination).into(),
+        Arguments::new(Predicate::Always, 6, ModeRequirements::none()),
+        false,
+        false,
+    )
+}
+
+fn normal_far_call<T: Tracer, W: World<T>>(
+    abi_register: Register,
+    address_register: Register,
+) -> Instruction<T, W> {
+    Instruction::from_far_call::<opcodes::Normal>(
+        Register1(abi_register),
+        Register2(address_register),
+        Immediate1(0),
+        false,
+        false,
+        Arguments::new(Predicate::Always, 200, ModeRequirements::none()),
+    )
+}
+
+fn system_far_call_abi(gas_to_pass: u32) -> U256 {
+    let mut abi = U256::zero();
+    let system_call_bit_within_settings = 1_u64 << 24;
+    abi.0[3] = u64::from(gas_to_pass) | (system_call_bit_within_settings << 32);
+    abi
 }
 
 #[test]
@@ -1082,4 +1123,109 @@ fn rollback_should_restore_bootloader_heap_after_fresh_decommit() {
 
     vm.rollback();
     assert_eq!(vm.state.heaps[bootloader_heap].read_u256(0), sentinel);
+}
+
+#[test]
+fn rollback_should_deallocate_dynamic_decommit_page_from_nested_frame() {
+    let validation_address = Address::from_low_u64_be(2);
+    let decommitter_address = Address::from_low_u64_be(3);
+    let target_address = Address::from_low_u64_be(4);
+
+    let validation_program = Program::from_raw(
+        vec![
+            load_code_page_word(0, Register::new(1)),
+            load_code_page_word(1, Register::new(2)),
+            normal_far_call(Register::new(1), Register::new(2)),
+            ret_instruction(),
+        ],
+        vec![
+            system_far_call_abi(1_000_000),
+            U256::from(decommitter_address.to_low_u64_be()),
+        ],
+    );
+    let decommitter_program = Program::from_raw(
+        vec![
+            Instruction::from_decommit(
+                Register1(Register::new(3)),
+                Register2(Register::new(2)),
+                Register1(Register::new(4)),
+                Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+            ),
+            ret_instruction(),
+        ],
+        vec![],
+    );
+    let target_program = Program::from_raw(vec![ret_instruction()], vec![U256::from(0xfeed_u64)]);
+
+    let mut world = TestWorld::new(&[
+        (validation_address, validation_program),
+        (decommitter_address, decommitter_program),
+        (target_address, target_program),
+    ]);
+    let target_hash = *world
+        .address_to_hash
+        .get(&U256::from(target_address.to_low_u64_be()))
+        .expect("target contract hash must exist");
+
+    let bootloader_program = Program::from_raw(
+        vec![
+            normal_far_call(Register::new(1), Register::new(2)),
+            ret_instruction(),
+        ],
+        vec![],
+    );
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        bootloader_program,
+        Address::zero(),
+        &[],
+        10_000_000,
+        default_settings(),
+    );
+    vm.state.register_pointer_flags &= !(1 << 1);
+    vm.state.registers[1] = system_far_call_abi(5_000_000);
+    vm.state.registers[2] = U256::from(validation_address.to_low_u64_be());
+    vm.state.registers[3] = target_hash;
+
+    vm.make_snapshot();
+    let first_run_end = vm.run(&mut world, &mut ());
+    assert!(
+        matches!(first_run_end, ExecutionEnd::ProgramFinished(_)),
+        "first run should finish cleanly: {first_run_end:?}"
+    );
+
+    // The decommitter frame is the second far-call frame. Its Decommit opcode materializes the
+    // target code into that frame's own heap, then frame popping keeps the heap alive only through
+    // the global decommit pin.
+    let decommitter_base = next_page_group(first_dynamic_base_page());
+    let decommitter_heap = heap_page_from_base(decommitter_base);
+    assert_eq!(
+        vm.world_diff.decommit_page(target_hash),
+        Some(decommitter_heap)
+    );
+    assert!(vm.world_diff.is_decommit_page_pinned(decommitter_heap));
+    assert!(vm.state.heaps.contains(decommitter_heap));
+    assert!(!vm
+        .state
+        .current_frame
+        .heaps_i_am_keeping_alive
+        .contains(&decommitter_heap));
+
+    vm.rollback();
+    assert!(!vm.world_diff.is_decommit_page_pinned(decommitter_heap));
+    assert!(
+        !vm.state.heaps.contains(decommitter_heap),
+        "rollback must sweep dynamic heaps that were reachable only through post-snapshot pins"
+    );
+
+    let replay_end = vm.run(&mut world, &mut ());
+    assert!(
+        matches!(replay_end, ExecutionEnd::ProgramFinished(_)),
+        "replay after rollback should not hit a dynamic heap allocation conflict: {replay_end:?}"
+    );
+    assert_eq!(
+        vm.world_diff.decommit_page(target_hash),
+        Some(decommitter_heap)
+    );
+    assert!(vm.state.heaps.contains(decommitter_heap));
 }

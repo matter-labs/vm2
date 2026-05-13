@@ -98,6 +98,10 @@ impl Heaps {
 
     pub(crate) fn deallocate(&mut self, _: HeapId) {}
 
+    pub(crate) fn dynamic_len(&self) -> usize {
+        unimplemented!()
+    }
+
     pub(crate) fn from_id(
         heap_id: HeapId,
         u: &mut arbitrary::Unstructured<'_>,
@@ -121,6 +125,10 @@ impl Heaps {
     }
 
     pub(crate) fn rollback(&mut self, _: (usize, usize)) {
+        unimplemented!()
+    }
+
+    pub(crate) fn truncate_dynamic_to(&mut self, _: usize) {
         unimplemented!()
     }
 
