@@ -8,7 +8,7 @@ use super::{
 };
 use crate::{
     addressing_modes::{
-        Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
+        Addressable, Arguments, Destination, DestinationWriter, Immediate1, Register1, Register2,
         RegisterOrImmediate, Source,
     },
     fat_pointer::FatPointer,
@@ -68,6 +68,23 @@ fn bigger_than_last_address(x: U256) -> bool {
     x.0[0] > LAST_ADDRESS.into() || x.0[1] != 0 || x.0[2] != 0 || x.0[3] != 0
 }
 
+fn set_incremented_read_offset(
+    args: &Arguments,
+    state: &mut impl Addressable,
+    value: U256,
+    is_pointer: bool,
+) {
+    // zk_evm treats heap and static memory reads as raw offset accesses, but the
+    // incremented dst1 register still inherits src0's pointer tag. The observable
+    // case is a zero-valued panic returndata pointer: the range check accepts it,
+    // and later pointer operations must still see a pointer.
+    if is_pointer {
+        Register2::set_fat_ptr(args, state, value);
+    } else {
+        Register2::set(args, state, value);
+    }
+}
+
 fn load<T: Tracer, W: World<T>, H: HeapFromState, In: Source, const INCREMENT: bool>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
@@ -76,7 +93,7 @@ fn load<T: Tracer, W: World<T>, H: HeapFromState, In: Source, const INCREMENT: b
     boilerplate::<H::Read, _, _>(vm, world, tracer, |vm, args| {
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
-        let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
+        let (pointer, input_is_pointer) = In::get_with_pointer_flag(args, &mut vm.state);
 
         if bigger_than_last_address(pointer) {
             let _ = vm.state.use_gas(u32::MAX);
@@ -96,7 +113,7 @@ fn load<T: Tracer, W: World<T>, H: HeapFromState, In: Source, const INCREMENT: b
         Register1::set(args, &mut vm.state, value);
 
         if INCREMENT {
-            Register2::set(args, &mut vm.state, pointer + 32);
+            set_incremented_read_offset(args, &mut vm.state, pointer + 32, input_is_pointer);
         }
     })
 }
@@ -202,7 +219,7 @@ fn load_static<T: Tracer, W: World<T>, In: Source, const INCREMENT: bool>(
     boilerplate::<opcodes::StaticMemoryRead, _, _>(vm, world, tracer, |vm, args| {
         // Static memory uses a plain 32-bit offset in src0, same as heap UMA ops.
         // Pointer-typed values are still accepted as raw words and then validated by range check.
-        let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
+        let (pointer, input_is_pointer) = In::get_with_pointer_flag(args, &mut vm.state);
 
         if bigger_than_last_address(pointer) {
             vm.state.current_frame.pc = spontaneous_panic();
@@ -214,7 +231,7 @@ fn load_static<T: Tracer, W: World<T>, In: Source, const INCREMENT: bool>(
         Register1::set(args, &mut vm.state, value);
 
         if INCREMENT {
-            Register2::set(args, &mut vm.state, pointer + 32);
+            set_incremented_read_offset(args, &mut vm.state, pointer + 32, input_is_pointer);
         }
     })
 }
