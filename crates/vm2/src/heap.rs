@@ -30,6 +30,11 @@ pub(crate) struct Heap {
     pages: Vec<Option<HeapPage>>,
 }
 
+// The reference VM treats reads from missing memory pages as reads from an
+// all-zero page. Keep write paths strict, but make read-only indexing total so
+// panic-produced or otherwise empty fat pointers cannot abort the host.
+static EMPTY_HEAP: Heap = Heap { pages: Vec::new() };
+
 // We never remove `HeapPage`s (even after rollbacks – although we do zero all added pages in this case),
 // we allow additional pages to be present if they are zeroed.
 impl PartialEq for Heap {
@@ -496,8 +501,7 @@ impl Heaps {
     }
 
     fn decoded_page(&self, page: DecodedPage) -> &Heap {
-        self.try_decoded_page(page)
-            .unwrap_or_else(|| panic!("decoded page {page:?} is not allocated"))
+        self.try_decoded_page(page).unwrap_or(&EMPTY_HEAP)
     }
 
     fn try_decoded_page_mut(&mut self, page: DecodedPage) -> Option<(&mut Heap, &mut PagePool)> {
@@ -528,9 +532,10 @@ impl Index<HeapId> for Heaps {
     type Output = Heap;
 
     fn index(&self, index: HeapId) -> &Self::Output {
-        let decoded = DecodedPage::decode(index)
-            .unwrap_or_else(|| panic!("heap page {} is not allocated", index.as_u32()));
-        self.decoded_page(decoded)
+        match DecodedPage::decode(index) {
+            Some(decoded) => self.decoded_page(decoded),
+            None => &EMPTY_HEAP,
+        }
     }
 }
 

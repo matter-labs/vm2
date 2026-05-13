@@ -270,6 +270,53 @@ fn masked_native_far_call_should_keep_regular_stipend() {
     );
 }
 
+#[test]
+fn pointer_read_after_failed_far_call_should_return_zero() {
+    let failed_call = Instruction::from_far_call::<opcodes::Normal>(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Immediate1(1),
+        false,
+        false,
+        Arguments::new(Predicate::Always, 200, ModeRequirements::none()),
+    );
+    let read_returned_pointer = Instruction::from_pointer_read(
+        Register1(Register::new(1)),
+        Register1(Register::new(3)),
+        None,
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let program = Program::from_raw(
+        vec![failed_call, read_returned_pointer, ret_instruction()],
+        vec![],
+    );
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        non_kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    // The missing callee makes `far_call` enter a panicking frame. The reference
+    // VM still returns an empty fat pointer in r1, so reading through it must
+    // behave like a zero-length read rather than crashing the host.
+    let mut far_call_abi = U256::zero();
+    far_call_abi.0[3] = 10_000;
+    vm.state.register_pointer_flags &= !(1 << 1);
+    vm.state.registers[1] = far_call_abi;
+    vm.state.registers[2] = U256::zero();
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+    assert_eq!(vm.state.registers[3], U256::zero());
+    assert_eq!(vm.state.register_pointer_flags & (1 << 1), 1 << 1);
+}
+
 fn static_uma_instruction<T: Tracer, W: World<T>>(opcode: UMAOpcode) -> Instruction<T, W> {
     let variant = OPCODES_TABLE
         .iter()
