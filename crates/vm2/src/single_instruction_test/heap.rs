@@ -82,6 +82,9 @@ impl Heaps {
     }
 
     #[allow(dead_code)] // For API compatibility with real implementation.
+    pub(crate) fn reserve_dynamic_groups(&mut self, _n: usize) {}
+
+    #[allow(dead_code)] // For API compatibility with real implementation.
     pub(crate) fn allocate_with_content(&mut self, content: &[u8]) -> HeapId {
         let id = self.allocate();
         self.read

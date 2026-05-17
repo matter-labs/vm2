@@ -333,6 +333,18 @@ impl Heaps {
         }
     }
 
+    /// Pre-reserve capacity for the dynamic heap-pages Vec to avoid Vec
+    /// doubling during execution. Each `far_call` allocates a new
+    /// `DynamicPageGroup`; large batches push this Vec past 70+ MiB through
+    /// the doubling sequence. A one-shot reserve keeps it as a single
+    /// allocation.
+    pub(crate) fn reserve_dynamic_groups(&mut self, n: usize) {
+        let extra = n.saturating_sub(self.dynamic.len());
+        if extra > 0 {
+            self.dynamic.reserve_exact(extra);
+        }
+    }
+
     pub(crate) fn allocate_at(&mut self, page: HeapId) -> HeapId {
         self.allocate_with_content_at(page, &[])
     }
