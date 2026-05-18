@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use primitive_types::{H160, U256};
 use zk_evm::{
-    aux_structures::LogQuery,
+    aux_structures::{DecommittmentQuery, LogQuery},
     vm_state::{CallStackEntry, VmLocalState, VmState},
 };
 use zkevm_opcode_defs::{
@@ -29,6 +29,7 @@ pub struct UniversalVmState {
     l2_to_l1_logs: Vec<UniversalEvent>,
     storage_logs: Vec<UniversalStorageLog>,
     precompile_logs: Vec<UniversalPrecompileLog>,
+    decommit_queries: Vec<UniversalDecommitQuery>,
     transient_storage_logs: Vec<UniversalTransientLog>,
     will_panic: bool,
 }
@@ -98,6 +99,15 @@ struct UniversalPrecompileLog {
     tx_number: u16,
 }
 
+#[derive(PartialEq, Debug)]
+struct UniversalDecommitQuery {
+    header: [u8; 4],
+    normalized_preimage: [u8; 28],
+    memory_page: u32,
+    decommitted_length: u16,
+    is_fresh: bool,
+}
+
 impl
     From<
         VmState<
@@ -140,6 +150,12 @@ impl
             .iter()
             .filter_map(zk_evm_precompile_log_to_universal)
             .collect();
+        state.decommit_queries = vm
+            .witness_tracer
+            .decommit_queries()
+            .iter()
+            .map(zk_evm_decommit_query_to_universal)
+            .collect();
         state.transient_storage_logs = vm
             .storage
             .transient_logs()
@@ -172,6 +188,7 @@ pub fn vm2_to_universal<T: Tracer, W: World<T>>(vm: &VirtualMachine<T, W>) -> Un
         .filter_map(zk_evm_storage_log_to_universal)
         .collect();
     state.precompile_logs = Vec::new();
+    state.decommit_queries = Vec::new();
     state.transient_storage_logs = Vec::new();
     state
 }
@@ -227,6 +244,7 @@ fn zk_evm_state_to_universal(vm: &VmLocalState<8, EncodingModeProduction>) -> Un
         l2_to_l1_logs: Vec::new(),
         storage_logs: Vec::new(),
         precompile_logs: Vec::new(),
+        decommit_queries: Vec::new(),
         transient_storage_logs: Vec::new(),
         will_panic: vm.pending_exception,
     }
@@ -371,4 +389,14 @@ fn zk_evm_precompile_log_to_universal(query: &LogQuery) -> Option<UniversalPreco
         shard_id: query.shard_id,
         tx_number: query.tx_number_in_block,
     })
+}
+
+fn zk_evm_decommit_query_to_universal(query: &DecommittmentQuery) -> UniversalDecommitQuery {
+    UniversalDecommitQuery {
+        header: query.header.0,
+        normalized_preimage: query.normalized_preimage.0,
+        memory_page: query.memory_page.0,
+        decommitted_length: query.decommitted_length,
+        is_fresh: query.is_fresh,
+    }
 }

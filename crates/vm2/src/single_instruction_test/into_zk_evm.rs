@@ -492,11 +492,16 @@ impl tracing::Tracer for NoTracer {
 #[derive(Debug, Clone, Default)]
 pub struct NoOracle {
     precompile_logs: Vec<zk_evm::aux_structures::LogQuery>,
+    decommit_queries: Vec<zk_evm::aux_structures::DecommittmentQuery>,
 }
 
 impl NoOracle {
     pub(crate) fn precompile_logs(&self) -> &[zk_evm::aux_structures::LogQuery] {
         &self.precompile_logs
+    }
+
+    pub(crate) fn decommit_queries(&self) -> &[zk_evm::aux_structures::DecommittmentQuery] {
+        &self.decommit_queries
     }
 }
 
@@ -601,7 +606,12 @@ impl VmWitnessTracer<8, EncodingModeProduction> for NoOracle {
     ) {
     }
 
-    fn prepare_for_decommittment(&mut self, _: u32, _: zk_evm::aux_structures::DecommittmentQuery) {
+    fn prepare_for_decommittment(
+        &mut self,
+        _: u32,
+        query: zk_evm::aux_structures::DecommittmentQuery,
+    ) {
+        self.decommit_queries.push(query);
     }
 
     fn execute_decommittment(
