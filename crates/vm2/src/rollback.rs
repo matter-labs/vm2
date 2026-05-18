@@ -137,6 +137,13 @@ impl<T> RollbackableLog<T> {
         self.entries.push(entry);
     }
 
+    pub(crate) fn reserve(&mut self, n: usize) {
+        let extra = n.saturating_sub(self.entries.len());
+        if extra > 0 {
+            self.entries.reserve_exact(extra);
+        }
+    }
+
     pub(crate) fn logs_after(&self, snapshot: <RollbackableLog<T> as Rollback>::Snapshot) -> &[T] {
         &self.entries[snapshot..]
     }

@@ -28,6 +28,21 @@ pub struct WorldDiff {
     pubdata_costs: RollbackableLog<i32>,
     storage_logs: Vec<LogQuery>,
     rollback_storage_logs: Vec<LogQuery>,
+    /// Slots that were *committed-read at depth zero* — read at a moment when
+    /// there was no pending write for that slot. This is the dedup's
+    /// `did_read_at_depth_zero` predicate, materialized incrementally so the
+    /// verifier can derive deduplicated storage logs without the full
+    /// storage_logs trace.
+    ///
+    /// Why not just use `read_storage_slots`?
+    ///   `read_storage_slots` also gets populated by `write_storage` (for
+    ///   refund/cold-write tracking) and is *not* rolled back on internal
+    ///   frame revert. So a slot whose only operation was a write that
+    ///   reverted still ends up in `read_storage_slots`. The dedup correctly
+    ///   skips such a slot; `committed_reads_at_depth_zero` matches that
+    ///   semantic by only being added by `read_storage_inner` and only when
+    ///   `storage_changes` is empty for the slot at the time of read.
+    committed_reads_at_depth_zero: RollbackableSet<(H160, U256)>,
 
     // The fields below are only rolled back when the whole VM is rolled back.
     /// Tracks decommit visibility state for each bytecode hash.
@@ -59,6 +74,7 @@ pub(crate) struct ExternalSnapshot {
     decommit_pinned_pages: <RollbackableSet<u32> as Rollback>::Snapshot,
     read_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
     written_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
+    committed_reads_at_depth_zero: <RollbackableSet<(H160, U256)> as Rollback>::Snapshot,
     storage_refunds: <RollbackableLog<u32> as Rollback>::Snapshot,
     pubdata_costs: <RollbackableLog<i32> as Rollback>::Snapshot,
 }
@@ -80,6 +96,20 @@ pub(crate) enum DecommitState {
 }
 
 impl WorldDiff {
+    /// Reserve capacity for the auxiliary log Vecs (events, pubdata_costs,
+    /// storage_refunds). Each of these doubles during execution and the
+    /// transient peak is non-trivial inside the verifier guest.
+    pub fn reserve_auxiliary_log_capacity(
+        &mut self,
+        events: usize,
+        pubdata_costs: usize,
+        storage_refunds: usize,
+    ) {
+        self.events.reserve(events);
+        self.pubdata_costs.reserve(pubdata_costs);
+        self.storage_refunds.reserve(storage_refunds);
+    }
+
     /// Returns the storage slot's value and a refund based on its hot/cold status.
     pub(crate) fn read_storage(
         &mut self,
@@ -129,24 +159,30 @@ impl WorldDiff {
         }
 
         self.pubdata_costs.push(0);
-        let value = self.just_read_storage(world, contract, key);
-        // Note: timestamp logic does not match `zk_evm`, we're only ensuring that the timestamps
-        // are unique. This is fine as long as we don't need to actually generate witness based on these logs.
-        self.storage_logs.push(LogQuery {
-            timestamp: Timestamp(
-                u32::try_from(self.storage_logs.len()).expect("Too many storage logs"),
-            ),
-            tx_number_in_block,
-            aux_byte: STORAGE_AUX_BYTE,
-            shard_id: 0,
-            address: contract,
-            key,
-            read_value: value,
-            written_value: value,
-            rw_flag: false,
-            rollback: false,
-            is_service: false,
-        });
+        // Cache the initial value on first read so downstream summarizers can
+        // recover it without a separate backend call (write_storage already
+        // caches this for writes).
+        let initial_value = self
+            .storage_initial_values
+            .entry((contract, key))
+            .or_insert_with(|| world.read_storage(contract, key))
+            .value;
+        // Live write for this slot? If so, that's the current value; otherwise
+        // the slot still reads its initial. One backend call total (only on
+        // the first read of a slot), versus the previous path which routed
+        // through `just_read_storage` *and* `world.read_storage`.
+        let live_write = self
+            .storage_changes
+            .as_ref()
+            .get(&(contract, key))
+            .copied();
+        let value = live_write.unwrap_or(initial_value);
+        if live_write.is_none() {
+            // No pending write for this slot at read time — mirrors the dedup
+            // function's `did_read_at_depth_zero` flag.
+            self.committed_reads_at_depth_zero.add((contract, key));
+        }
+        let _ = tx_number_in_block;
         (value, newly_added)
     }
 
@@ -175,26 +211,7 @@ impl WorldDiff {
         value: U256,
         tx_number_in_block: u16,
     ) -> u32 {
-        let read_value = self.just_read_storage(world, contract, key);
-        let log_query = LogQuery {
-            timestamp: Timestamp(u32::try_from(self.storage_logs.len()).unwrap_or(u32::MAX)),
-            tx_number_in_block,
-            aux_byte: STORAGE_AUX_BYTE,
-            shard_id: 0,
-            address: contract,
-            key,
-            read_value,
-            written_value: value,
-            rw_flag: true,
-            rollback: false,
-            is_service: false,
-        };
-        self.storage_logs.push(log_query);
-        self.rollback_storage_logs.push(LogQuery {
-            rollback: true,
-            ..log_query
-        });
-
+        let _ = tx_number_in_block;
         self.storage_changes.insert((contract, key), value);
 
         let initial_value = self
@@ -253,6 +270,21 @@ impl WorldDiff {
     /// Returns recorded pubdata costs for all storage operations.
     pub fn pubdata_costs(&self) -> &[i32] {
         self.pubdata_costs.as_ref()
+    }
+
+    /// Iterates over slots that were committed-read at depth zero (the
+    /// dedup's `did_read_at_depth_zero` set). Combined with `storage_changes`
+    /// this is the set of slots that appear in the deduplicated storage logs.
+    /// Sorted by (address, key) via the BTreeSet backing.
+    pub fn committed_reads_at_depth_zero_iter(&self) -> impl Iterator<Item = (H160, U256)> + '_ {
+        self.committed_reads_at_depth_zero.as_ref().iter().copied()
+    }
+
+    /// Returns the initial (pre-batch) value of a slot if it has been
+    /// touched by a read or write during execution. Used by per-slot summary
+    /// derivation in place of walking the storage_logs trace.
+    pub fn initial_storage_value(&self, contract: H160, key: U256) -> Option<crate::StorageSlot> {
+        self.storage_initial_values.get(&(contract, key)).copied()
     }
 
     /// Returns all recorded storage log queries.
@@ -451,6 +483,7 @@ impl WorldDiff {
             decommit_pinned_pages: self.decommit_pinned_pages.snapshot(),
             read_storage_slots: self.read_storage_slots.snapshot(),
             written_storage_slots: self.written_storage_slots.snapshot(),
+            committed_reads_at_depth_zero: self.committed_reads_at_depth_zero.snapshot(),
             storage_refunds: self.storage_refunds.snapshot(),
             pubdata_costs: self.pubdata_costs.snapshot(),
         }
@@ -471,6 +504,8 @@ impl WorldDiff {
             .rollback(snapshot.read_storage_slots);
         self.written_storage_slots
             .rollback(snapshot.written_storage_slots);
+        self.committed_reads_at_depth_zero
+            .rollback(snapshot.committed_reads_at_depth_zero);
         self.storage_logs.truncate(storage_logs_len);
         self.rollback_storage_logs
             .truncate(rollback_storage_logs_len);
@@ -489,6 +524,7 @@ impl WorldDiff {
         self.decommit_pinned_pages.delete_history();
         self.read_storage_slots.delete_history();
         self.written_storage_slots.delete_history();
+        self.committed_reads_at_depth_zero.delete_history();
     }
 
     pub(crate) fn clear_transient_storage(&mut self) {

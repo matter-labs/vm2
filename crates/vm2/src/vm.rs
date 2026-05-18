@@ -66,6 +66,13 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
         }
     }
 
+    /// Pre-reserve dynamic heap-group capacity to suppress mid-execution
+    /// Vec doublings inside `Heaps`. Hint with the worst-case far-call
+    /// count estimable from the witness.
+    pub fn reserve_dynamic_heap_capacity(&mut self, n: usize) {
+        self.state.heaps.reserve_dynamic_groups(n);
+    }
+
     /// Provides a reference to the [`World`] diff accumulated by VM execution so far.
     pub fn world_diff(&self) -> &WorldDiff {
         &self.world_diff
