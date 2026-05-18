@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use primitive_types::{H160, U256};
 use zk_evm::{
     aux_structures::LogQuery,
@@ -223,14 +225,25 @@ fn vm2_l2_to_l1_log_to_universal(log: &L2ToL1Log) -> UniversalEvent {
 fn zk_evm_events_to_universal(
     event_sink: &MockEventSink,
 ) -> (Vec<UniversalEvent>, Vec<UniversalEvent>) {
-    let mut events = Vec::new();
-    let mut l2_to_l1_logs = Vec::new();
-
+    let mut flattened = BTreeMap::new();
     for query in event_sink
         .frames_stack
         .iter()
         .flat_map(|frame| frame.forward.iter())
     {
+        if flattened.contains_key(&query.timestamp.0) {
+            if query.rollback {
+                flattened.remove(&query.timestamp.0);
+            }
+        } else if !query.rollback {
+            flattened.insert(query.timestamp.0, query);
+        }
+    }
+
+    let mut events = Vec::new();
+    let mut l2_to_l1_logs = Vec::new();
+
+    for query in flattened.into_values() {
         if let Some(event) = zk_evm_log_query_to_universal(query) {
             match query.aux_byte {
                 EVENT_AUX_BYTE => events.push(event),
