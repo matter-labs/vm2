@@ -13,7 +13,7 @@ use zk_evm_abstractions::vm::EventSink;
 use zkevm_opcode_defs::{
     decoding::EncodingModeProduction,
     system_params::{
-        STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST,
+        PRECOMPILE_AUX_BYTE, STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST,
         STORAGE_ACCESS_WARM_READ_COST, STORAGE_ACCESS_WARM_WRITE_COST,
     },
     PrecompileCallABI, KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
@@ -57,9 +57,9 @@ pub fn vm2_to_zk_evm<T: Tracer, W: World<T>>(
             heap_write: None,
         },
         event_sink,
-        precompiles_processor: NoOracle,
+        precompiles_processor: NoOracle::default(),
         decommittment_processor: MockDecommitter,
-        witness_tracer: NoOracle,
+        witness_tracer: NoOracle::default(),
         version: Version::Version27,
     }
 }
@@ -489,8 +489,16 @@ impl tracing::Tracer for NoTracer {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct NoOracle;
+#[derive(Debug, Clone, Default)]
+pub struct NoOracle {
+    precompile_logs: Vec<zk_evm::aux_structures::LogQuery>,
+}
+
+impl NoOracle {
+    pub(crate) fn precompile_logs(&self) -> &[zk_evm::aux_structures::LogQuery] {
+        &self.precompile_logs
+    }
+}
 
 impl PrecompilesProcessor for NoOracle {
     fn execute_precompile<M: Memory>(
@@ -579,7 +587,11 @@ impl VmWitnessTracer<8, EncodingModeProduction> for NoOracle {
     ) {
     }
 
-    fn add_log_query(&mut self, _: u32, _: zk_evm::aux_structures::LogQuery) {}
+    fn add_log_query(&mut self, _: u32, query: zk_evm::aux_structures::LogQuery) {
+        if query.aux_byte == PRECOMPILE_AUX_BYTE {
+            self.precompile_logs.push(query);
+        }
+    }
 
     fn record_pubdata_cost_for_query(
         &mut self,

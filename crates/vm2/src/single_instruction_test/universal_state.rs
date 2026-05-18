@@ -7,7 +7,7 @@ use zk_evm::{
 };
 use zkevm_opcode_defs::{
     decoding::EncodingModeProduction,
-    system_params::{EVENT_AUX_BYTE, L1_MESSAGE_AUX_BYTE, STORAGE_AUX_BYTE},
+    system_params::{EVENT_AUX_BYTE, L1_MESSAGE_AUX_BYTE, PRECOMPILE_AUX_BYTE, STORAGE_AUX_BYTE},
     ADDRESS_EVENT_WRITER,
 };
 use zksync_vm2_interface::{Event, L2ToL1Log, Tracer};
@@ -28,6 +28,7 @@ pub struct UniversalVmState {
     events: Vec<UniversalEvent>,
     l2_to_l1_logs: Vec<UniversalEvent>,
     storage_logs: Vec<UniversalStorageLog>,
+    precompile_logs: Vec<UniversalPrecompileLog>,
     transient_storage_logs: Vec<UniversalTransientLog>,
     will_panic: bool,
 }
@@ -84,6 +85,19 @@ struct UniversalStorageLog {
     tx_number: u16,
 }
 
+#[derive(PartialEq, Debug)]
+struct UniversalPrecompileLog {
+    address: H160,
+    key: U256,
+    read_value: U256,
+    written_value: U256,
+    rw_flag: bool,
+    rollback: bool,
+    is_service: bool,
+    shard_id: u8,
+    tx_number: u16,
+}
+
 impl
     From<
         VmState<
@@ -120,6 +134,12 @@ impl
             .iter()
             .filter_map(zk_evm_storage_log_to_universal)
             .collect();
+        state.precompile_logs = vm
+            .witness_tracer
+            .precompile_logs()
+            .iter()
+            .filter_map(zk_evm_precompile_log_to_universal)
+            .collect();
         state.transient_storage_logs = vm
             .storage
             .transient_logs()
@@ -151,6 +171,7 @@ pub fn vm2_to_universal<T: Tracer, W: World<T>>(vm: &VirtualMachine<T, W>) -> Un
         .iter()
         .filter_map(zk_evm_storage_log_to_universal)
         .collect();
+    state.precompile_logs = Vec::new();
     state.transient_storage_logs = Vec::new();
     state
 }
@@ -205,6 +226,7 @@ fn zk_evm_state_to_universal(vm: &VmLocalState<8, EncodingModeProduction>) -> Un
         events: Vec::new(),
         l2_to_l1_logs: Vec::new(),
         storage_logs: Vec::new(),
+        precompile_logs: Vec::new(),
         transient_storage_logs: Vec::new(),
         will_panic: vm.pending_exception,
     }
@@ -321,6 +343,24 @@ fn zk_evm_storage_log_to_universal(query: &LogQuery) -> Option<UniversalStorageL
     }
 
     Some(UniversalStorageLog {
+        address: query.address,
+        key: query.key,
+        read_value: query.read_value,
+        written_value: query.written_value,
+        rw_flag: query.rw_flag,
+        rollback: query.rollback,
+        is_service: query.is_service,
+        shard_id: query.shard_id,
+        tx_number: query.tx_number_in_block,
+    })
+}
+
+fn zk_evm_precompile_log_to_universal(query: &LogQuery) -> Option<UniversalPrecompileLog> {
+    if query.aux_byte != PRECOMPILE_AUX_BYTE {
+        return None;
+    }
+
+    Some(UniversalPrecompileLog {
         address: query.address,
         key: query.key,
         read_value: query.read_value,
