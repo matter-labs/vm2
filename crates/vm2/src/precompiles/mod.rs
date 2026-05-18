@@ -25,6 +25,18 @@ impl<'a> PrecompileMemoryReader<'a> {
         Self { heap, offset, len }
     }
 
+    pub(crate) fn offset(&self) -> u32 {
+        self.offset
+    }
+
+    pub(crate) fn len_u32(&self) -> u32 {
+        self.len
+    }
+
+    pub(crate) fn read_u256_by_word_index(&self, word_index: u32) -> U256 {
+        self.heap.read_u256(word_index * 32)
+    }
+
     /// Assumes that the input offset and length passed via ABI are measured in 32-byte words, rather than bytes.
     pub fn assume_offset_in_words(self) -> PrecompileMemoryReader<'a, true> {
         PrecompileMemoryReader {

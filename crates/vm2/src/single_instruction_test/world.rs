@@ -1,6 +1,8 @@
 use arbitrary::Arbitrary;
 use primitive_types::{H160, U256};
-use zkevm_opcode_defs::SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS;
+use zkevm_opcode_defs::{
+    KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS, SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
+};
 use zksync_vm2_interface::Tracer;
 
 use super::mock_array::MockRead;
@@ -19,8 +21,25 @@ impl Precompiles for MockPrecompiles {
         memory: PrecompileMemoryReader<'_>,
         _: u64,
     ) -> PrecompileOutput {
-        if address_low == SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS && memory.len() != 0 {
-            let _ = memory.assume_offset_in_words().next();
+        match address_low {
+            SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS if memory.len() != 0 => {
+                let _ = memory.assume_offset_in_words().next();
+            }
+            KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS if memory.len() != 0 => {
+                let mut input_byte_offset = memory.offset() as usize;
+                let mut bytes_left = memory.len_u32() as usize;
+                let mut reads = 0;
+                while bytes_left != 0 && reads < 2 {
+                    let memory_index = input_byte_offset / 32;
+                    let unalignment = input_byte_offset % 32;
+                    let bytes_in_query = bytes_left.min(32 - unalignment);
+                    let _ = memory.read_u256_by_word_index(memory_index as u32);
+                    input_byte_offset += bytes_in_query;
+                    bytes_left -= bytes_in_query;
+                    reads += 1;
+                }
+            }
+            _ => {}
         }
         [U256::zero(), U256::zero()].into()
     }

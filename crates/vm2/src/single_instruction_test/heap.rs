@@ -35,8 +35,10 @@ impl Heap {
         self.write_u256(start_address, U256::from_big_endian(&word));
     }
 
-    pub(crate) fn read_byte(&self, _: u32) -> u8 {
-        unimplemented!()
+    pub(crate) fn read_byte(&self, address: u32) -> u8 {
+        let word_start = address & !31;
+        let byte_index = (address - word_start) as usize;
+        self.read.get(word_start)[31 - byte_index]
     }
 
     pub(crate) fn read_u256(&self, start_address: u32) -> U256 {

@@ -16,7 +16,8 @@ use zkevm_opcode_defs::{
         STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST,
         STORAGE_ACCESS_WARM_READ_COST, STORAGE_ACCESS_WARM_WRITE_COST,
     },
-    PrecompileCallABI, SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS, TRANSIENT_STORAGE_AUX_BYTE,
+    PrecompileCallABI, KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
+    SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS, TRANSIENT_STORAGE_AUX_BYTE,
 };
 use zksync_vm2_interface::Tracer;
 
@@ -452,23 +453,49 @@ impl PrecompilesProcessor for NoOracle {
     )> {
         let address_bytes = query.address.0;
         let address_low = u16::from_le_bytes([address_bytes[19], address_bytes[18]]);
-        if address_low != SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS {
-            return None;
-        }
-
         let abi = PrecompileCallABI::from_u256(query.key);
-        let memory_query = zk_evm::aux_structures::MemoryQuery {
-            timestamp: query.timestamp,
-            location: zk_evm::aux_structures::MemoryLocation {
-                memory_type: MemoryType::Heap,
-                page: zk_evm::aux_structures::MemoryPage(abi.memory_page_to_read),
-                index: zk_evm::aux_structures::MemoryIndex(abi.input_memory_offset),
-            },
-            value: U256::zero(),
-            value_is_pointer: false,
-            rw_flag: false,
-        };
-        let _ = memory.execute_partial_query(monotonic_cycle_counter, memory_query);
+        match address_low {
+            SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
+                let memory_query = zk_evm::aux_structures::MemoryQuery {
+                    timestamp: query.timestamp,
+                    location: zk_evm::aux_structures::MemoryLocation {
+                        memory_type: MemoryType::Heap,
+                        page: zk_evm::aux_structures::MemoryPage(abi.memory_page_to_read),
+                        index: zk_evm::aux_structures::MemoryIndex(abi.input_memory_offset),
+                    },
+                    value: U256::zero(),
+                    value_is_pointer: false,
+                    rw_flag: false,
+                };
+                let _ = memory.execute_partial_query(monotonic_cycle_counter, memory_query);
+            }
+            KECCAK256_ROUND_FUNCTION_PRECOMPILE_ADDRESS => {
+                let mut input_byte_offset = abi.input_memory_offset as usize;
+                let mut bytes_left = abi.input_memory_length as usize;
+                let mut reads = 0;
+                while bytes_left != 0 && reads < 2 {
+                    let memory_index = input_byte_offset / 32;
+                    let unalignment = input_byte_offset % 32;
+                    let bytes_in_query = bytes_left.min(32 - unalignment);
+                    let memory_query = zk_evm::aux_structures::MemoryQuery {
+                        timestamp: query.timestamp,
+                        location: zk_evm::aux_structures::MemoryLocation {
+                            memory_type: MemoryType::FatPointer,
+                            page: zk_evm::aux_structures::MemoryPage(abi.memory_page_to_read),
+                            index: zk_evm::aux_structures::MemoryIndex(memory_index as u32),
+                        },
+                        value: U256::zero(),
+                        value_is_pointer: false,
+                        rw_flag: false,
+                    };
+                    let _ = memory.execute_partial_query(monotonic_cycle_counter, memory_query);
+                    input_byte_offset += bytes_in_query;
+                    bytes_left -= bytes_in_query;
+                    reads += 1;
+                }
+            }
+            _ => return None,
+        }
         None
     }
 
