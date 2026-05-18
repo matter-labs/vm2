@@ -25,6 +25,7 @@ pub struct UniversalVmState {
     frames: Vec<UniversalVmFrame>,
     events: Vec<UniversalEvent>,
     l2_to_l1_logs: Vec<UniversalEvent>,
+    transient_storage_logs: Vec<UniversalTransientLog>,
     will_panic: bool,
 }
 
@@ -50,6 +51,19 @@ struct UniversalEvent {
     key: U256,
     value: U256,
     is_first: bool,
+    shard_id: u8,
+    tx_number: u16,
+}
+
+#[derive(PartialEq, Debug)]
+struct UniversalTransientLog {
+    address: H160,
+    key: U256,
+    read_value: U256,
+    written_value: U256,
+    rw_flag: bool,
+    rollback: bool,
+    is_service: bool,
     shard_id: u8,
     tx_number: u16,
 }
@@ -84,6 +98,12 @@ impl
         let (events, l2_to_l1_logs) = zk_evm_events_to_universal(&vm.event_sink);
         state.events = events;
         state.l2_to_l1_logs = l2_to_l1_logs;
+        state.transient_storage_logs = vm
+            .storage
+            .transient_logs()
+            .iter()
+            .map(zk_evm_transient_log_to_universal)
+            .collect();
         state
     }
 }
@@ -103,6 +123,7 @@ pub fn vm2_to_universal<T: Tracer, W: World<T>>(vm: &VirtualMachine<T, W>) -> Un
         .iter()
         .map(vm2_l2_to_l1_log_to_universal)
         .collect();
+    state.transient_storage_logs = Vec::new();
     state
 }
 
@@ -155,6 +176,7 @@ fn zk_evm_state_to_universal(vm: &VmLocalState<8, EncodingModeProduction>) -> Un
         frames,
         events: Vec::new(),
         l2_to_l1_logs: Vec::new(),
+        transient_storage_logs: Vec::new(),
         will_panic: vm.pending_exception,
     }
 }
@@ -237,4 +259,18 @@ fn zk_evm_log_query_to_universal(query: &LogQuery) -> Option<UniversalEvent> {
         shard_id: query.shard_id,
         tx_number: query.tx_number_in_block,
     })
+}
+
+fn zk_evm_transient_log_to_universal(query: &LogQuery) -> UniversalTransientLog {
+    UniversalTransientLog {
+        address: query.address,
+        key: query.key,
+        read_value: query.read_value,
+        written_value: query.written_value,
+        rw_flag: query.rw_flag,
+        rollback: query.rollback,
+        is_service: query.is_service,
+        shard_id: query.shard_id,
+        tx_number: query.tx_number_in_block,
+    }
 }

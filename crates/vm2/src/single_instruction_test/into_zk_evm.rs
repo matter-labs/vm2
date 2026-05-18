@@ -1,6 +1,6 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
-use primitive_types::U256;
+use primitive_types::{H160, U256};
 use zk_evm::{
     abstractions::{DecommittmentProcessor, Memory, MemoryType, PrecompilesProcessor, Storage},
     aux_structures::PubdataCost,
@@ -11,8 +11,12 @@ use zk_evm::{
 };
 use zk_evm_abstractions::vm::EventSink;
 use zkevm_opcode_defs::{
-    decoding::EncodingModeProduction, PrecompileCallABI, SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
-    TRANSIENT_STORAGE_AUX_BYTE,
+    decoding::EncodingModeProduction,
+    system_params::{
+        STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST,
+        STORAGE_ACCESS_WARM_READ_COST, STORAGE_ACCESS_WARM_WRITE_COST,
+    },
+    PrecompileCallABI, SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS, TRANSIENT_STORAGE_AUX_BYTE,
 };
 use zksync_vm2_interface::Tracer;
 
@@ -44,7 +48,7 @@ pub fn vm2_to_zk_evm<T: Tracer, W: World<T>>(
             evm_emulator_code_hash: U256::from_big_endian(&vm.settings.evm_interpreter_code_hash),
             zkporter_is_available: false,
         },
-        storage: MockWorldWrapper(world),
+        storage: MockWorldWrapper::new(world),
         memory: MockMemory {
             code_page: vm.state.current_frame.program.code_page().clone(),
             stack: *vm.state.current_frame.stack.clone(),
@@ -241,15 +245,76 @@ impl Memory for MockMemory {
 }
 
 #[derive(Debug)]
-pub struct MockWorldWrapper(MockWorld);
+pub struct MockWorldWrapper {
+    world: MockWorld,
+    storage_changes: BTreeMap<(H160, U256), U256>,
+    paid_storage_costs: BTreeMap<(H160, U256), u32>,
+    read_storage_slots: BTreeMap<(H160, U256), ()>,
+    written_storage_slots: BTreeMap<(H160, U256), ()>,
+    transient_storage: BTreeMap<(H160, U256), U256>,
+    transient_logs: Vec<zk_evm::aux_structures::LogQuery>,
+}
+
+impl MockWorldWrapper {
+    pub(crate) fn new(world: MockWorld) -> Self {
+        Self {
+            world,
+            storage_changes: BTreeMap::new(),
+            paid_storage_costs: BTreeMap::new(),
+            read_storage_slots: BTreeMap::new(),
+            written_storage_slots: BTreeMap::new(),
+            transient_storage: BTreeMap::new(),
+            transient_logs: Vec::new(),
+        }
+    }
+
+    pub(crate) fn transient_logs(&self) -> &[zk_evm::aux_structures::LogQuery] {
+        &self.transient_logs
+    }
+
+    fn read_storage_value(&mut self, address: H160, key: U256) -> U256 {
+        self.storage_changes
+            .get(&(address, key))
+            .copied()
+            .unwrap_or_else(|| self.world.read_storage_value(address, key))
+    }
+}
+
+const WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST - STORAGE_ACCESS_WARM_READ_COST;
+const WARM_WRITE_REFUND: u32 = STORAGE_ACCESS_COLD_WRITE_COST - STORAGE_ACCESS_WARM_WRITE_COST;
+const COLD_WRITE_AFTER_WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST;
+const MOCK_STORAGE_WRITE_COST: u32 = 50;
 
 impl Storage for MockWorldWrapper {
     fn get_access_refund(
         &mut self, // to avoid any hacks inside, like prefetch
         _: u32,
-        _partial_query: &zk_evm::aux_structures::LogQuery,
+        partial_query: &zk_evm::aux_structures::LogQuery,
     ) -> zk_evm::abstractions::StorageAccessRefund {
-        zk_evm::abstractions::StorageAccessRefund::Cold
+        if partial_query.aux_byte == TRANSIENT_STORAGE_AUX_BYTE {
+            return zk_evm::abstractions::StorageAccessRefund::Cold;
+        }
+
+        let key = (partial_query.address, partial_query.key);
+        let refund = if partial_query.rw_flag {
+            if self.written_storage_slots.contains_key(&key) {
+                WARM_WRITE_REFUND
+            } else if self.read_storage_slots.contains_key(&key) {
+                COLD_WRITE_AFTER_WARM_READ_REFUND
+            } else {
+                0
+            }
+        } else if self.read_storage_slots.contains_key(&key) {
+            WARM_READ_REFUND
+        } else {
+            0
+        };
+
+        if refund == 0 {
+            zk_evm::abstractions::StorageAccessRefund::Cold
+        } else {
+            zk_evm::abstractions::StorageAccessRefund::Warm { ergs: refund }
+        }
     }
 
     fn execute_partial_query(
@@ -257,14 +322,48 @@ impl Storage for MockWorldWrapper {
         _: u32,
         mut query: zk_evm::aux_structures::LogQuery,
     ) -> (zk_evm::aux_structures::LogQuery, PubdataCost) {
+        let is_transient = query.aux_byte == TRANSIENT_STORAGE_AUX_BYTE;
         if query.rw_flag {
-            (query, PubdataCost(0))
-        } else {
-            query.read_value = if query.aux_byte == TRANSIENT_STORAGE_AUX_BYTE {
-                U256::zero()
+            if is_transient {
+                query.read_value = self
+                    .transient_storage
+                    .get(&(query.address, query.key))
+                    .copied()
+                    .unwrap_or_default();
+                self.transient_storage
+                    .insert((query.address, query.key), query.written_value);
+                self.transient_logs.push(query);
+                (query, PubdataCost(0))
             } else {
-                self.0.read_storage_value(query.address, query.key)
+                let key = (query.address, query.key);
+                query.read_value = self.read_storage_value(query.address, query.key);
+                self.storage_changes.insert(key, query.written_value);
+                self.read_storage_slots.insert(key, ());
+                self.written_storage_slots.insert(key, ());
+                let prepaid = self
+                    .paid_storage_costs
+                    .insert(key, MOCK_STORAGE_WRITE_COST)
+                    .unwrap_or_default();
+                (
+                    query,
+                    PubdataCost(MOCK_STORAGE_WRITE_COST as i32 - prepaid as i32),
+                )
+            }
+        } else {
+            query.read_value = if is_transient {
+                self.transient_storage
+                    .get(&(query.address, query.key))
+                    .copied()
+                    .unwrap_or_default()
+            } else {
+                self.read_storage_value(query.address, query.key)
             };
+            if is_transient {
+                self.transient_logs.push(query);
+            } else {
+                self.read_storage_slots
+                    .insert((query.address, query.key), ());
+            }
             (query, PubdataCost(0))
         }
     }
