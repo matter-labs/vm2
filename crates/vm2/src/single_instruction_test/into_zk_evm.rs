@@ -10,7 +10,10 @@ use zk_evm::{
     witness_trace::VmWitnessTracer,
 };
 use zk_evm_abstractions::vm::EventSink;
-use zkevm_opcode_defs::{decoding::EncodingModeProduction, TRANSIENT_STORAGE_AUX_BYTE};
+use zkevm_opcode_defs::{
+    decoding::EncodingModeProduction, PrecompileCallABI, SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS,
+    TRANSIENT_STORAGE_AUX_BYTE,
+};
 use zksync_vm2_interface::Tracer;
 
 use super::{stack::Stack, state_to_zk_evm::vm2_state_to_zk_evm_state, MockWorld};
@@ -201,7 +204,12 @@ impl Memory for MockMemory {
 
                     assert_eq!(query.location.page.0, heap.heap);
 
-                    query.value = heap.partially_overlapping_u256(query.location.index.0 * 32);
+                    query.value = query
+                        .location
+                        .index
+                        .0
+                        .checked_mul(32)
+                        .map_or_else(U256::zero, |start| heap.partially_overlapping_u256(start));
                 }
                 query
             }
@@ -335,14 +343,33 @@ pub struct NoOracle;
 impl PrecompilesProcessor for NoOracle {
     fn execute_precompile<M: Memory>(
         &mut self,
-        _: u32,
-        _: zk_evm::aux_structures::LogQuery,
-        _: &mut M,
+        monotonic_cycle_counter: u32,
+        query: zk_evm::aux_structures::LogQuery,
+        memory: &mut M,
     ) -> Option<(
         Vec<zk_evm::aux_structures::MemoryQuery>,
         Vec<zk_evm::aux_structures::MemoryQuery>,
         zk_evm::abstractions::PrecompileCyclesWitness,
     )> {
+        let address_bytes = query.address.0;
+        let address_low = u16::from_le_bytes([address_bytes[19], address_bytes[18]]);
+        if address_low != SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS {
+            return None;
+        }
+
+        let abi = PrecompileCallABI::from_u256(query.key);
+        let memory_query = zk_evm::aux_structures::MemoryQuery {
+            timestamp: query.timestamp,
+            location: zk_evm::aux_structures::MemoryLocation {
+                memory_type: MemoryType::Heap,
+                page: zk_evm::aux_structures::MemoryPage(abi.memory_page_to_read),
+                index: zk_evm::aux_structures::MemoryIndex(abi.input_memory_offset),
+            },
+            value: U256::zero(),
+            value_is_pointer: false,
+            rw_flag: false,
+        };
+        let _ = memory.execute_partial_query(monotonic_cycle_counter, memory_query);
         None
     }
 

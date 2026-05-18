@@ -1,5 +1,6 @@
 use arbitrary::Arbitrary;
 use primitive_types::{H160, U256};
+use zkevm_opcode_defs::SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS;
 use zksync_vm2_interface::Tracer;
 
 use super::mock_array::MockRead;
@@ -12,7 +13,15 @@ use crate::{
 struct MockPrecompiles;
 
 impl Precompiles for MockPrecompiles {
-    fn call_precompile(&self, _: u16, _: PrecompileMemoryReader<'_>, _: u64) -> PrecompileOutput {
+    fn call_precompile(
+        &self,
+        address_low: u16,
+        memory: PrecompileMemoryReader<'_>,
+        _: u64,
+    ) -> PrecompileOutput {
+        if address_low == SHA256_ROUND_FUNCTION_PRECOMPILE_ADDRESS && memory.len() != 0 {
+            let _ = memory.assume_offset_in_words().next();
+        }
         [U256::zero(), U256::zero()].into()
     }
 }
