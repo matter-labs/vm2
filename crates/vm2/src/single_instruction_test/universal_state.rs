@@ -1,11 +1,20 @@
 use primitive_types::{H160, U256};
 use zk_evm::{
-    reference_impls::event_sink::InMemoryEventSink,
+    aux_structures::LogQuery,
     vm_state::{CallStackEntry, VmLocalState, VmState},
 };
-use zkevm_opcode_defs::decoding::EncodingModeProduction;
+use zkevm_opcode_defs::{
+    decoding::EncodingModeProduction,
+    system_params::{EVENT_AUX_BYTE, L1_MESSAGE_AUX_BYTE},
+    ADDRESS_EVENT_WRITER,
+};
+use zksync_vm2_interface::{Event, L2ToL1Log, Tracer};
 
-use super::into_zk_evm::{MockDecommitter, MockMemory, MockWorldWrapper, NoOracle};
+use super::{
+    into_zk_evm::{MockDecommitter, MockEventSink, MockMemory, MockWorldWrapper, NoOracle},
+    state_to_zk_evm::vm2_state_to_zk_evm_state,
+};
+use crate::{VirtualMachine, World};
 
 #[derive(PartialEq, Debug)]
 pub struct UniversalVmState {
@@ -14,6 +23,8 @@ pub struct UniversalVmState {
     transaction_number: u16,
     context_u128: u128,
     frames: Vec<UniversalVmFrame>,
+    events: Vec<UniversalEvent>,
+    l2_to_l1_logs: Vec<UniversalEvent>,
     will_panic: bool,
 }
 
@@ -33,12 +44,22 @@ pub(crate) struct UniversalVmFrame {
     stipend: u32,
 }
 
+#[derive(PartialEq, Debug)]
+struct UniversalEvent {
+    address: H160,
+    key: U256,
+    value: U256,
+    is_first: bool,
+    shard_id: u8,
+    tx_number: u16,
+}
+
 impl
     From<
         VmState<
             MockWorldWrapper,
             MockMemory,
-            InMemoryEventSink,
+            MockEventSink,
             NoOracle,
             MockDecommitter,
             NoOracle,
@@ -51,7 +72,7 @@ impl
         vm: VmState<
             MockWorldWrapper,
             MockMemory,
-            InMemoryEventSink,
+            MockEventSink,
             NoOracle,
             MockDecommitter,
             NoOracle,
@@ -59,8 +80,30 @@ impl
             EncodingModeProduction,
         >,
     ) -> Self {
-        zk_evm_state_to_universal(&vm.local_state)
+        let mut state = zk_evm_state_to_universal(&vm.local_state);
+        let (events, l2_to_l1_logs) = zk_evm_events_to_universal(&vm.event_sink);
+        state.events = events;
+        state.l2_to_l1_logs = l2_to_l1_logs;
+        state
     }
+}
+
+pub fn vm2_to_universal<T: Tracer, W: World<T>>(vm: &VirtualMachine<T, W>) -> UniversalVmState {
+    let local_state = vm2_state_to_zk_evm_state(&vm.state);
+    let mut state = zk_evm_state_to_universal(&local_state);
+    state.events = vm
+        .world_diff
+        .events()
+        .iter()
+        .map(vm2_event_to_universal)
+        .collect();
+    state.l2_to_l1_logs = vm
+        .world_diff
+        .l2_to_l1_logs()
+        .iter()
+        .map(vm2_l2_to_l1_log_to_universal)
+        .collect();
+    state
 }
 
 fn zk_evm_state_to_universal(vm: &VmLocalState<8, EncodingModeProduction>) -> UniversalVmState {
@@ -110,6 +153,8 @@ fn zk_evm_state_to_universal(vm: &VmLocalState<8, EncodingModeProduction>) -> Un
         transaction_number: vm.tx_number_in_block,
         context_u128: vm.context_u128_register,
         frames,
+        events: Vec::new(),
+        l2_to_l1_logs: Vec::new(),
         will_panic: vm.pending_exception,
     }
 }
@@ -129,4 +174,67 @@ fn zk_evm_frame_to_universal(frame: &CallStackEntry) -> UniversalVmFrame {
         aux_heap_bound: frame.aux_heap_bound,
         stipend: frame.stipend,
     }
+}
+
+fn vm2_event_to_universal(event: &Event) -> UniversalEvent {
+    UniversalEvent {
+        address: H160::from_low_u64_be(ADDRESS_EVENT_WRITER.into()),
+        key: event.key,
+        value: event.value,
+        is_first: event.is_first,
+        shard_id: event.shard_id,
+        tx_number: event.tx_number,
+    }
+}
+
+fn vm2_l2_to_l1_log_to_universal(log: &L2ToL1Log) -> UniversalEvent {
+    UniversalEvent {
+        address: log.address,
+        key: log.key,
+        value: log.value,
+        is_first: log.is_service,
+        shard_id: log.shard_id,
+        tx_number: log.tx_number,
+    }
+}
+
+fn zk_evm_events_to_universal(
+    event_sink: &MockEventSink,
+) -> (Vec<UniversalEvent>, Vec<UniversalEvent>) {
+    let mut events = Vec::new();
+    let mut l2_to_l1_logs = Vec::new();
+
+    for query in event_sink
+        .frames_stack
+        .iter()
+        .flat_map(|frame| frame.forward.iter())
+    {
+        if let Some(event) = zk_evm_log_query_to_universal(query) {
+            match query.aux_byte {
+                EVENT_AUX_BYTE => events.push(event),
+                L1_MESSAGE_AUX_BYTE => l2_to_l1_logs.push(event),
+                _ => {}
+            }
+        }
+    }
+
+    (events, l2_to_l1_logs)
+}
+
+fn zk_evm_log_query_to_universal(query: &LogQuery) -> Option<UniversalEvent> {
+    if query.rollback {
+        return None;
+    }
+    if query.aux_byte != EVENT_AUX_BYTE && query.aux_byte != L1_MESSAGE_AUX_BYTE {
+        return None;
+    }
+
+    Some(UniversalEvent {
+        address: query.address,
+        key: query.key,
+        value: query.written_value,
+        is_first: query.is_service,
+        shard_id: query.shard_id,
+        tx_number: query.tx_number_in_block,
+    })
 }

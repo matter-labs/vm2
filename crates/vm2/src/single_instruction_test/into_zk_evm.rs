@@ -5,7 +5,6 @@ use zk_evm::{
     abstractions::{DecommittmentProcessor, Memory, MemoryType, PrecompilesProcessor, Storage},
     aux_structures::PubdataCost,
     block_properties::BlockProperties,
-    reference_impls::event_sink::InMemoryEventSink,
     tracing,
     vm_state::{Version, VmState},
     witness_trace::VmWitnessTracer,
@@ -20,7 +19,7 @@ use crate::{StorageInterface, VirtualMachine, World};
 type ZkEvmState = VmState<
     MockWorldWrapper,
     MockMemory,
-    InMemoryEventSink,
+    MockEventSink,
     NoOracle,
     MockDecommitter,
     NoOracle,
@@ -32,7 +31,7 @@ pub fn vm2_to_zk_evm<T: Tracer, W: World<T>>(
     vm: &VirtualMachine<T, W>,
     world: MockWorld,
 ) -> ZkEvmState {
-    let mut event_sink = InMemoryEventSink::new();
+    let mut event_sink = MockEventSink::new();
     event_sink.start_frame(zk_evm::aux_structures::Timestamp(0));
 
     VmState {
@@ -80,6 +79,52 @@ pub fn add_heap_to_zk_evm<T, W>(
                 start_index,
                 value,
             });
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct MockEventFrame {
+    pub forward: Vec<zk_evm::aux_structures::LogQuery>,
+    pub rollbacks: Vec<zk_evm::aux_structures::LogQuery>,
+}
+
+#[derive(Clone, Debug)]
+pub struct MockEventSink {
+    pub frames_stack: Vec<MockEventFrame>,
+}
+
+impl MockEventSink {
+    fn new() -> Self {
+        Self {
+            frames_stack: vec![MockEventFrame::default()],
+        }
+    }
+}
+
+impl EventSink for MockEventSink {
+    fn add_partial_query(&mut self, _: u32, mut query: zk_evm::aux_structures::LogQuery) {
+        let frame = self.frames_stack.last_mut().expect("frame must be started");
+        frame.forward.push(query);
+        query.rollback = true;
+        frame.rollbacks.push(query);
+    }
+
+    fn start_frame(&mut self, _: zk_evm::aux_structures::Timestamp) {
+        self.frames_stack.push(MockEventFrame::default());
+    }
+
+    fn finish_frame(&mut self, panicked: bool, _: zk_evm::aux_structures::Timestamp) {
+        let current = self.frames_stack.pop().unwrap_or_default();
+        if let Some(parent) = self.frames_stack.last_mut() {
+            parent.forward.extend(current.forward);
+            if panicked {
+                parent.forward.extend(current.rollbacks.into_iter().rev());
+            } else {
+                parent.rollbacks.extend(current.rollbacks);
+            }
+        } else {
+            self.frames_stack.push(current);
         }
     }
 }
@@ -295,7 +340,7 @@ impl PrecompilesProcessor for NoOracle {
         Vec<zk_evm::aux_structures::MemoryQuery>,
         zk_evm::abstractions::PrecompileCyclesWitness,
     )> {
-        unimplemented!()
+        None
     }
 
     fn start_frame(&mut self) {}

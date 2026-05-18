@@ -19,15 +19,13 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
         self.state.is_valid()
     }
 
-    pub fn instruction_is_not_precompile_call(&self) -> bool {
+    pub fn instruction_is_covered_by_harness(&self) -> bool {
         // TODO PLA-972 implement StaticMemoryRead/Write
         if (1096..=1103).contains(&self.current_opcode()) {
             return false;
         }
 
-        // Precompilecall is not allowed because it accesses memory multiple times
-        // and only needs to work as used by trusted code
-        self.current_opcode() != 1056u64
+        true
     }
 
     pub fn instruction_is_far_call(&self) -> bool {

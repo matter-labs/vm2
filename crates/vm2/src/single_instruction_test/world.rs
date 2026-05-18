@@ -3,7 +3,21 @@ use primitive_types::{H160, U256};
 use zksync_vm2_interface::Tracer;
 
 use super::mock_array::MockRead;
-use crate::{Program, StorageInterface, StorageSlot, World};
+use crate::{
+    precompiles::{PrecompileMemoryReader, PrecompileOutput, Precompiles},
+    Program, StorageInterface, StorageSlot, World,
+};
+
+#[derive(Debug)]
+struct MockPrecompiles;
+
+impl Precompiles for MockPrecompiles {
+    fn call_precompile(&self, _: u16, _: PrecompileMemoryReader<'_>, _: u64) -> PrecompileOutput {
+        [U256::zero(), U256::zero()].into()
+    }
+}
+
+static MOCK_PRECOMPILES: MockPrecompiles = MockPrecompiles;
 
 #[derive(Debug, Arbitrary, Clone)]
 pub struct MockWorld {
@@ -17,6 +31,18 @@ impl<T: Tracer> World<T> for MockWorld {
 
     fn decommit_code(&mut self, _hash: U256) -> Vec<u8> {
         vec![0; 32]
+    }
+
+    fn precompiles(&self) -> &impl Precompiles {
+        &MOCK_PRECOMPILES
+    }
+}
+
+impl MockWorld {
+    pub fn with_storage_read(value: Option<U256>) -> Self {
+        Self {
+            storage_slot: MockRead::new(value),
+        }
     }
 }
 

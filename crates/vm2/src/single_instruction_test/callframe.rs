@@ -88,9 +88,3 @@ impl<T: Tracer, W: World<T>> Callframe<T, W> {
         }
     }
 }
-
-impl<T, W> Callframe<T, W> {
-    pub(crate) fn raw_first_instruction(&self) -> u64 {
-        self.program.raw_first_instruction
-    }
-}

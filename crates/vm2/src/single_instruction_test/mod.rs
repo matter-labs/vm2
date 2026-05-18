@@ -9,7 +9,11 @@
 
 pub use self::{
     into_zk_evm::{add_heap_to_zk_evm, vm2_to_zk_evm, NoTracer},
-    universal_state::UniversalVmState,
+    scenario::{
+        build_scenario_vm, ScenarioFrameConfig, ScenarioMemoryConfig, ScenarioStackConfig,
+        ScenarioVmConfig,
+    },
+    universal_state::{vm2_to_universal, UniversalVmState},
     world::MockWorld,
 };
 
@@ -19,6 +23,7 @@ mod into_zk_evm;
 mod mock_array;
 mod print_mock_info;
 pub mod program;
+mod scenario;
 pub mod stack;
 mod state_to_zk_evm;
 mod universal_state;

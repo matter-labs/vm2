@@ -1,6 +1,5 @@
 use std::iter;
 
-use primitive_types::U256;
 use zk_evm::{
     aux_structures::{MemoryPage, PubdataCost},
     vm_state::{execution_stack::CallStackEntry, Callstack, PrimitiveValue, VmLocalState},
@@ -31,7 +30,7 @@ pub(crate) fn vm2_state_to_zk_evm_state<T: Tracer, W: World<T>>(
         .collect();
 
     VmLocalState {
-        previous_code_word: U256([0, 0, 0, state.current_frame.raw_first_instruction()]),
+        previous_code_word: state.current_frame.program.initial_code_word(),
         previous_code_memory_page: MemoryPage(0),
         registers: state
             .registers

@@ -15,6 +15,15 @@ pub struct Stack {
 
 #[allow(clippy::unused_self)] // to align signatures with real implementation
 impl Stack {
+    pub fn with_read(value: U256, is_pointer: bool) -> Self {
+        Self {
+            read: MockRead::new((value, is_pointer)),
+            slot_written: None,
+            value_written: U256::zero(),
+            pointer_tag_written: false,
+        }
+    }
+
     pub(crate) fn new_arbitrary(
         u: &mut arbitrary::Unstructured,
         calldata_heap: HeapId,

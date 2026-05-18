@@ -14,6 +14,15 @@ pub struct Heap {
 
 #[allow(clippy::unused_self)] // to align signatures with real implementation
 impl Heap {
+    pub fn with_read_u256(value: U256) -> Self {
+        let mut read = [0_u8; 32];
+        value.to_little_endian(&mut read);
+        Self {
+            read: MockRead::new(read),
+            write: None,
+        }
+    }
+
     fn write_u256(&mut self, start_address: u32, value: U256) {
         assert!(self.write.is_none());
         self.write = Some((start_address, value));
@@ -68,6 +77,13 @@ pub struct Heaps {
 
 #[allow(clippy::unused_self)] // to align signatures with real implementation
 impl Heaps {
+    pub fn with_read(heap_id: HeapId, heap: Heap) -> Self {
+        Self {
+            heap_id,
+            read: MockRead::new(heap),
+        }
+    }
+
     pub(crate) fn new(_: &[u8]) -> Self {
         unimplemented!("Should use arbitrary heap, not fresh heap in testing.")
     }
@@ -113,10 +129,16 @@ impl Heaps {
     }
 
     pub fn write_u256(&mut self, heap: HeapId, start_address: u32, value: U256) {
+        if heap != self.heap_id {
+            panic!("heap page {} is not allocated", heap.as_u32());
+        }
         self.read.get_mut(heap).write_u256(start_address, value);
     }
 
     pub(crate) fn write_bytes(&mut self, heap: HeapId, start_address: u32, bytes: &[u8]) {
+        if heap != self.heap_id {
+            panic!("heap page {} is not allocated", heap.as_u32());
+        }
         self.read.get_mut(heap).write_bytes(start_address, bytes);
     }
 

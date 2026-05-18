@@ -13,7 +13,12 @@ publish = false
 [dependencies]
 afl.workspace = true
 arbitrary.workspace = true
+hex.workspace = true
 pretty_assertions.workspace = true
+primitive-types.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
 zkevm_opcode_defs.workspace = true
 zksync_vm2_interface.workspace = true
 zksync_vm2 = { workspace = true, features = ["single_instruction_test"] }
@@ -21,6 +26,10 @@ zksync_vm2 = { workspace = true, features = ["single_instruction_test"] }
 [[bin]]
 name = "show_testcase"
 path = "src/show_testcase.rs"
+
+[[bin]]
+name = "vm2-divergence-validator"
+path = "src/divergence_validator.rs"
 
 [[bin]]
 name = "check_input_size"
