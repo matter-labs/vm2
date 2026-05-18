@@ -7,7 +7,7 @@ use zk_evm::{
 };
 use zkevm_opcode_defs::{
     decoding::EncodingModeProduction,
-    system_params::{EVENT_AUX_BYTE, L1_MESSAGE_AUX_BYTE},
+    system_params::{EVENT_AUX_BYTE, L1_MESSAGE_AUX_BYTE, STORAGE_AUX_BYTE},
     ADDRESS_EVENT_WRITER,
 };
 use zksync_vm2_interface::{Event, L2ToL1Log, Tracer};
@@ -27,6 +27,7 @@ pub struct UniversalVmState {
     frames: Vec<UniversalVmFrame>,
     events: Vec<UniversalEvent>,
     l2_to_l1_logs: Vec<UniversalEvent>,
+    storage_logs: Vec<UniversalStorageLog>,
     transient_storage_logs: Vec<UniversalTransientLog>,
     will_panic: bool,
 }
@@ -70,6 +71,19 @@ struct UniversalTransientLog {
     tx_number: u16,
 }
 
+#[derive(PartialEq, Debug)]
+struct UniversalStorageLog {
+    address: H160,
+    key: U256,
+    read_value: U256,
+    written_value: U256,
+    rw_flag: bool,
+    rollback: bool,
+    is_service: bool,
+    shard_id: u8,
+    tx_number: u16,
+}
+
 impl
     From<
         VmState<
@@ -100,6 +114,12 @@ impl
         let (events, l2_to_l1_logs) = zk_evm_events_to_universal(&vm.event_sink);
         state.events = events;
         state.l2_to_l1_logs = l2_to_l1_logs;
+        state.storage_logs = vm
+            .storage
+            .storage_logs()
+            .iter()
+            .filter_map(zk_evm_storage_log_to_universal)
+            .collect();
         state.transient_storage_logs = vm
             .storage
             .transient_logs()
@@ -124,6 +144,12 @@ pub fn vm2_to_universal<T: Tracer, W: World<T>>(vm: &VirtualMachine<T, W>) -> Un
         .l2_to_l1_logs()
         .iter()
         .map(vm2_l2_to_l1_log_to_universal)
+        .collect();
+    state.storage_logs = vm
+        .world_diff
+        .storage_log_queries()
+        .iter()
+        .filter_map(zk_evm_storage_log_to_universal)
         .collect();
     state.transient_storage_logs = Vec::new();
     state
@@ -178,6 +204,7 @@ fn zk_evm_state_to_universal(vm: &VmLocalState<8, EncodingModeProduction>) -> Un
         frames,
         events: Vec::new(),
         l2_to_l1_logs: Vec::new(),
+        storage_logs: Vec::new(),
         transient_storage_logs: Vec::new(),
         will_panic: vm.pending_exception,
     }
@@ -286,4 +313,22 @@ fn zk_evm_transient_log_to_universal(query: &LogQuery) -> UniversalTransientLog 
         shard_id: query.shard_id,
         tx_number: query.tx_number_in_block,
     }
+}
+
+fn zk_evm_storage_log_to_universal(query: &LogQuery) -> Option<UniversalStorageLog> {
+    if query.aux_byte != STORAGE_AUX_BYTE {
+        return None;
+    }
+
+    Some(UniversalStorageLog {
+        address: query.address,
+        key: query.key,
+        read_value: query.read_value,
+        written_value: query.written_value,
+        rw_flag: query.rw_flag,
+        rollback: query.rollback,
+        is_service: query.is_service,
+        shard_id: query.shard_id,
+        tx_number: query.tx_number_in_block,
+    })
 }

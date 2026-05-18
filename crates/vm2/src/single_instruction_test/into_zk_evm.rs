@@ -137,6 +137,12 @@ impl EventSink for MockEventSink {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+struct MockStorageFrame {
+    forward: Vec<zk_evm::aux_structures::LogQuery>,
+    rollbacks: Vec<zk_evm::aux_structures::LogQuery>,
+}
+
 #[derive(Debug)]
 pub struct MockMemory {
     code_page: Arc<[U256]>,
@@ -252,6 +258,7 @@ pub struct MockWorldWrapper {
     paid_storage_costs: BTreeMap<(H160, U256), u32>,
     read_storage_slots: BTreeMap<(H160, U256), ()>,
     written_storage_slots: BTreeMap<(H160, U256), ()>,
+    storage_frames_stack: Vec<MockStorageFrame>,
     transient_storage: BTreeMap<(H160, U256), U256>,
     transient_logs: Vec<zk_evm::aux_structures::LogQuery>,
 }
@@ -264,6 +271,7 @@ impl MockWorldWrapper {
             paid_storage_costs: BTreeMap::new(),
             read_storage_slots: BTreeMap::new(),
             written_storage_slots: BTreeMap::new(),
+            storage_frames_stack: vec![MockStorageFrame::default()],
             transient_storage: BTreeMap::new(),
             transient_logs: Vec::new(),
         }
@@ -271,6 +279,13 @@ impl MockWorldWrapper {
 
     pub(crate) fn transient_logs(&self) -> &[zk_evm::aux_structures::LogQuery] {
         &self.transient_logs
+    }
+
+    pub(crate) fn storage_logs(&self) -> Vec<zk_evm::aux_structures::LogQuery> {
+        self.storage_frames_stack
+            .iter()
+            .flat_map(|frame| frame.forward.iter().copied())
+            .collect()
     }
 
     fn read_storage_value(&mut self, address: H160, key: U256) -> U256 {
@@ -341,6 +356,14 @@ impl Storage for MockWorldWrapper {
                 self.storage_changes.insert(key, query.written_value);
                 self.read_storage_slots.insert(key, ());
                 self.written_storage_slots.insert(key, ());
+                let mut rollback = query;
+                rollback.rollback = true;
+                let frame = self
+                    .storage_frames_stack
+                    .last_mut()
+                    .expect("storage frame must exist");
+                frame.forward.push(query);
+                frame.rollbacks.push(rollback);
                 let prepaid = self
                     .paid_storage_costs
                     .insert(key, MOCK_STORAGE_WRITE_COST)
@@ -364,14 +387,41 @@ impl Storage for MockWorldWrapper {
             } else {
                 self.read_storage_slots
                     .insert((query.address, query.key), ());
+                self.storage_frames_stack
+                    .last_mut()
+                    .expect("storage frame must exist")
+                    .forward
+                    .push(query);
             }
             (query, PubdataCost(0))
         }
     }
 
-    fn start_frame(&mut self, _: zk_evm::aux_structures::Timestamp) {}
+    fn start_frame(&mut self, _: zk_evm::aux_structures::Timestamp) {
+        self.storage_frames_stack.push(MockStorageFrame::default());
+    }
 
-    fn finish_frame(&mut self, _: zk_evm::aux_structures::Timestamp, _panicked: bool) {}
+    fn finish_frame(&mut self, _: zk_evm::aux_structures::Timestamp, panicked: bool) {
+        let current = self
+            .storage_frames_stack
+            .pop()
+            .expect("storage frame must exist");
+        if let Some(parent) = self.storage_frames_stack.last_mut() {
+            if panicked {
+                for query in current.rollbacks.iter().rev() {
+                    self.storage_changes
+                        .insert((query.address, query.key), query.read_value);
+                }
+                parent.forward.extend(current.forward);
+                parent.forward.extend(current.rollbacks.into_iter().rev());
+            } else {
+                parent.forward.extend(current.forward);
+                parent.rollbacks.extend(current.rollbacks);
+            }
+        } else {
+            self.storage_frames_stack.push(current);
+        }
+    }
 
     fn start_new_tx(&mut self, _: zk_evm::aux_structures::Timestamp) {
         self.transient_storage.clear();
