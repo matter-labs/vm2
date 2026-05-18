@@ -184,7 +184,10 @@ impl Memory for MockMemory {
                 }
                 query
             }
-            MemoryType::Heap | MemoryType::AuxHeap | MemoryType::FatPointer => {
+            MemoryType::Heap
+            | MemoryType::AuxHeap
+            | MemoryType::FatPointer
+            | MemoryType::StaticMemory => {
                 if query.rw_flag {
                     let heap = self.heap_write.unwrap();
                     assert_eq!(heap.heap, query.location.page.0);

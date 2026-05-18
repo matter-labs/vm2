@@ -20,11 +20,6 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
     }
 
     pub fn instruction_is_covered_by_harness(&self) -> bool {
-        // TODO PLA-972 implement StaticMemoryRead/Write
-        if (1096..=1103).contains(&self.current_opcode()) {
-            return false;
-        }
-
         true
     }
 
