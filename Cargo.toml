@@ -9,7 +9,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.5.0" # x-release-please-version
+version = "0.5.0-3" # x-release-please-version
 edition = "2021"
 authors = ["The Matter Labs Team <hello@matterlabs.dev>"]
 homepage = "https://zksync.io/"
@@ -30,13 +30,13 @@ primitive-types = "0.12.1"
 proptest = "1.4"
 
 # "Internal" dependencies
-zkevm_opcode_defs = "=0.153.9"
-zk_evm_abstractions = "=0.153.9"
-zk_evm = "=0.153.9"
+zkevm_opcode_defs = "=0.153.11"
+zk_evm_abstractions = "=0.153.11"
+zk_evm = "=0.153.11"
 
 # Dependencies within the workspace
-zksync_vm2_interface = { version = "=0.5.0", path = "crates/vm2-interface" }
-zksync_vm2 = { version = "=0.5.0", path = "crates/vm2" }
+zksync_vm2_interface = { version = "=0.5.0-3", path = "crates/vm2-interface" }
+zksync_vm2 = { version = "=0.5.0-3", path = "crates/vm2" }
 
 [workspace.lints.rust]
 missing_docs = "warn"
