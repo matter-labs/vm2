@@ -58,7 +58,7 @@ pub fn vm2_to_zk_evm<T: Tracer, W: World<T>>(
         },
         event_sink,
         precompiles_processor: NoOracle::default(),
-        decommittment_processor: MockDecommitter,
+        decommittment_processor: MockDecommitter::default(),
         witness_tracer: NoOracle::default(),
         version: Version::Version27,
     }
@@ -428,8 +428,10 @@ impl Storage for MockWorldWrapper {
     }
 }
 
-#[derive(Debug)]
-pub struct MockDecommitter;
+#[derive(Debug, Default)]
+pub struct MockDecommitter {
+    history: BTreeMap<[u8; 28], (u32, u16)>,
+}
 
 impl DecommittmentProcessor for MockDecommitter {
     fn prepare_to_decommit(
@@ -437,16 +439,31 @@ impl DecommittmentProcessor for MockDecommitter {
         _: u32,
         mut partial_query: zk_evm::aux_structures::DecommittmentQuery,
     ) -> anyhow::Result<zk_evm::aux_structures::DecommittmentQuery> {
-        partial_query.is_fresh = true;
+        if let Some((page, len)) = self.history.get(&partial_query.normalized_preimage.0) {
+            partial_query.is_fresh = false;
+            partial_query.memory_page = zk_evm::aux_structures::MemoryPage(*page);
+            partial_query.decommitted_length = *len;
+        } else {
+            partial_query.is_fresh = true;
+        }
         Ok(partial_query)
     }
 
     fn decommit_into_memory<M: Memory>(
         &mut self,
         _: u32,
-        _partial_query: zk_evm::aux_structures::DecommittmentQuery,
+        partial_query: zk_evm::aux_structures::DecommittmentQuery,
         _memory: &mut M,
     ) -> anyhow::Result<Option<Vec<U256>>> {
+        if partial_query.is_fresh {
+            self.history.insert(
+                partial_query.normalized_preimage.0,
+                (
+                    partial_query.memory_page.0,
+                    partial_query.decommitted_length,
+                ),
+            );
+        }
         Ok(None)
     }
 }

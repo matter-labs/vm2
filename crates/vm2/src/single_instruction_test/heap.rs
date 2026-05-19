@@ -24,8 +24,10 @@ impl Heap {
     }
 
     fn write_u256(&mut self, start_address: u32, value: U256) {
-        assert!(self.write.is_none());
-        self.write = Some((start_address, value));
+        match self.write {
+            None => self.write = Some((start_address, value)),
+            Some(previous) => assert_eq!(previous, (start_address, value)),
+        }
     }
 
     fn write_bytes(&mut self, start_address: u32, bytes: &[u8]) {
