@@ -141,6 +141,9 @@ impl EventSink for MockEventSink {
 struct MockStorageFrame {
     forward: Vec<zk_evm::aux_structures::LogQuery>,
     rollbacks: Vec<zk_evm::aux_structures::LogQuery>,
+    storage_changes_snapshot: BTreeMap<(H160, U256), U256>,
+    paid_storage_costs_snapshot: BTreeMap<(H160, U256), u32>,
+    transient_storage_snapshot: BTreeMap<(H160, U256), U256>,
 }
 
 #[derive(Debug)]
@@ -398,28 +401,46 @@ impl Storage for MockWorldWrapper {
     }
 
     fn start_frame(&mut self, _: zk_evm::aux_structures::Timestamp) {
-        self.storage_frames_stack.push(MockStorageFrame::default());
+        self.storage_frames_stack.push(MockStorageFrame {
+            storage_changes_snapshot: self.storage_changes.clone(),
+            paid_storage_costs_snapshot: self.paid_storage_costs.clone(),
+            transient_storage_snapshot: self.transient_storage.clone(),
+            ..MockStorageFrame::default()
+        });
     }
 
     fn finish_frame(&mut self, _: zk_evm::aux_structures::Timestamp, panicked: bool) {
-        let current = self
+        let MockStorageFrame {
+            forward,
+            rollbacks,
+            storage_changes_snapshot,
+            paid_storage_costs_snapshot,
+            transient_storage_snapshot,
+        } = self
             .storage_frames_stack
             .pop()
             .expect("storage frame must exist");
+        if panicked {
+            self.storage_changes = storage_changes_snapshot.clone();
+            self.paid_storage_costs = paid_storage_costs_snapshot.clone();
+            self.transient_storage = transient_storage_snapshot.clone();
+        }
         if let Some(parent) = self.storage_frames_stack.last_mut() {
             if panicked {
-                for query in current.rollbacks.iter().rev() {
-                    self.storage_changes
-                        .insert((query.address, query.key), query.read_value);
-                }
-                parent.forward.extend(current.forward);
-                parent.forward.extend(current.rollbacks.into_iter().rev());
+                parent.forward.extend(forward);
+                parent.forward.extend(rollbacks.into_iter().rev());
             } else {
-                parent.forward.extend(current.forward);
-                parent.rollbacks.extend(current.rollbacks);
+                parent.forward.extend(forward);
+                parent.rollbacks.extend(rollbacks);
             }
         } else {
-            self.storage_frames_stack.push(current);
+            self.storage_frames_stack.push(MockStorageFrame {
+                forward,
+                rollbacks,
+                storage_changes_snapshot,
+                paid_storage_costs_snapshot,
+                transient_storage_snapshot,
+            });
         }
     }
 
