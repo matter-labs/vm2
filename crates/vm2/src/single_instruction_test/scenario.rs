@@ -17,6 +17,7 @@ pub struct ScenarioVmConfig {
     pub stack: ScenarioStackConfig,
     pub memory: ScenarioMemoryConfig,
     pub storage_read: Option<U256>,
+    pub storage_write_cost: u32,
     pub transaction_number: u16,
     pub context_u128: u128,
     pub settings: Settings,
@@ -43,6 +44,7 @@ impl Default for ScenarioVmConfig {
             },
             frame,
             storage_read: Some(U256::zero()),
+            storage_write_cost: 50,
             transaction_number: 0,
             context_u128: 0,
             settings: Settings {
@@ -193,6 +195,7 @@ fn build_scenario_vm_with_tracer<T: Tracer>(
         stack_pool: Default::default(),
         snapshot: None,
     };
-    let world = MockWorld::with_storage_read(config.storage_read);
+    let world =
+        MockWorld::with_storage_read_and_write_cost(config.storage_read, config.storage_write_cost);
     (vm, world)
 }

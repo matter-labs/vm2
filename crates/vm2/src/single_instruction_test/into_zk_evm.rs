@@ -280,6 +280,10 @@ impl MockWorldWrapper {
         }
     }
 
+    // Excluded from `UniversalVmState`'s equivalence relation (Airbender
+    // verifier does not consume transient storage logs). Mock still records
+    // the queries so a future strict-mode validator can read them.
+    #[allow(dead_code)]
     pub(crate) fn transient_logs(&self) -> &[zk_evm::aux_structures::LogQuery] {
         &self.transient_logs
     }
@@ -302,8 +306,6 @@ impl MockWorldWrapper {
 const WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST - STORAGE_ACCESS_WARM_READ_COST;
 const WARM_WRITE_REFUND: u32 = STORAGE_ACCESS_COLD_WRITE_COST - STORAGE_ACCESS_WARM_WRITE_COST;
 const COLD_WRITE_AFTER_WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST;
-const MOCK_STORAGE_WRITE_COST: u32 = 50;
-
 impl Storage for MockWorldWrapper {
     fn get_access_refund(
         &mut self, // to avoid any hacks inside, like prefetch
@@ -367,13 +369,14 @@ impl Storage for MockWorldWrapper {
                     .expect("storage frame must exist");
                 frame.forward.push(query);
                 frame.rollbacks.push(rollback);
+                let storage_write_cost = self.world.storage_write_cost();
                 let prepaid = self
                     .paid_storage_costs
-                    .insert(key, MOCK_STORAGE_WRITE_COST)
+                    .insert(key, storage_write_cost)
                     .unwrap_or_default();
                 (
                     query,
-                    PubdataCost(MOCK_STORAGE_WRITE_COST as i32 - prepaid as i32),
+                    PubdataCost(storage_write_cost as i32 - prepaid as i32),
                 )
             }
         } else {
@@ -534,10 +537,18 @@ pub struct NoOracle {
 }
 
 impl NoOracle {
+    // Excluded from `UniversalVmState`'s equivalence relation (Airbender
+    // verifier does not consume precompile log queries). Mock still records
+    // the queries so a future strict-mode validator can read them.
+    #[allow(dead_code)]
     pub(crate) fn precompile_logs(&self) -> &[zk_evm::aux_structures::LogQuery] {
         &self.precompile_logs
     }
 
+    // Excluded from `UniversalVmState`'s equivalence relation (Airbender
+    // verifier does not consume prepared decommitment queries). Mock still
+    // records the queries so a future strict-mode validator can read them.
+    #[allow(dead_code)]
     pub(crate) fn decommit_queries(&self) -> &[zk_evm::aux_structures::DecommittmentQuery] {
         &self.decommit_queries
     }

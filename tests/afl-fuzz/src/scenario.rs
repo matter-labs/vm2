@@ -34,6 +34,8 @@ pub struct Scenario {
     #[serde(default)]
     pub storage_read: Option<Option<String>>,
     #[serde(default)]
+    pub storage_write_cost: Option<u32>,
+    #[serde(default)]
     pub transaction_number: Option<u16>,
     #[serde(default)]
     pub context_u128: Option<String>,
@@ -215,6 +217,9 @@ impl Scenario {
             Some(None) => None,
             None => Some(U256::zero()),
         };
+        if let Some(storage_write_cost) = self.storage_write_cost {
+            config.storage_write_cost = storage_write_cost;
+        }
         if let Some(transaction_number) = self.transaction_number {
             config.transaction_number = transaction_number;
         }

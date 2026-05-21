@@ -50,6 +50,7 @@ static MOCK_PRECOMPILES: MockPrecompiles = MockPrecompiles;
 #[derive(Debug, Arbitrary, Clone)]
 pub struct MockWorld {
     storage_slot: MockRead<(H160, U256), Option<U256>>,
+    storage_write_cost: u32,
 }
 
 impl<T: Tracer> World<T> for MockWorld {
@@ -68,9 +69,18 @@ impl<T: Tracer> World<T> for MockWorld {
 
 impl MockWorld {
     pub fn with_storage_read(value: Option<U256>) -> Self {
+        Self::with_storage_read_and_write_cost(value, 50)
+    }
+
+    pub fn with_storage_read_and_write_cost(value: Option<U256>, storage_write_cost: u32) -> Self {
         Self {
             storage_slot: MockRead::new(value),
+            storage_write_cost,
         }
+    }
+
+    pub(crate) fn storage_write_cost(&self) -> u32 {
+        self.storage_write_cost
     }
 }
 
@@ -84,7 +94,7 @@ impl StorageInterface for MockWorld {
     }
 
     fn cost_of_writing_storage(&mut self, _: StorageSlot, _: U256) -> u32 {
-        50
+        self.storage_write_cost
     }
 
     fn is_free_storage_slot(&self, _: &H160, _: &U256) -> bool {

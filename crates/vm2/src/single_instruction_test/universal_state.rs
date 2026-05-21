@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 
 use primitive_types::{H160, U256};
 use zk_evm::{
-    aux_structures::{DecommittmentQuery, LogQuery},
+    aux_structures::LogQuery,
     vm_state::{CallStackEntry, VmLocalState, VmState},
 };
 use zkevm_opcode_defs::{
     decoding::EncodingModeProduction,
-    system_params::{EVENT_AUX_BYTE, L1_MESSAGE_AUX_BYTE, PRECOMPILE_AUX_BYTE, STORAGE_AUX_BYTE},
+    system_params::{EVENT_AUX_BYTE, L1_MESSAGE_AUX_BYTE, STORAGE_AUX_BYTE},
     ADDRESS_EVENT_WRITER,
 };
 use zksync_vm2_interface::{Event, L2ToL1Log, Tracer};
@@ -18,6 +18,36 @@ use super::{
 };
 use crate::{VirtualMachine, World};
 
+/// Canonical observable state used by the vm2 / zk_evm divergence validator.
+///
+/// The derived `PartialEq` encodes the **Airbender-verifier-equivalent**
+/// relation: two states are equal iff they agree on every output that the
+/// Airbender verifier hashes into `proof_public_input`. See
+/// `audit-findings.md` §1 for the canonical binding chain.
+///
+/// zk_evm produces several artifacts purely to feed its own circuit witness
+/// that the Airbender verifier never observes. Those are intentionally
+/// **excluded** from the equivalence:
+///
+/// - `precompile_logs` — `PRECOMPILE_AUX_BYTE` log queries; the verifier
+///   consumes the resulting memory/storage state, not the queries themselves.
+/// - `decommit_queries` — prepared decommitment queries for both the
+///   `Decommit` opcode and `FarCall`'s implicit code decommit; the verifier
+///   consumes the resulting code page, not the prepared query record.
+/// - `transient_storage_logs` — transient storage log queries are filtered
+///   out by `sort_storage_access_queries` before they reach
+///   `deduplicated_storage_logs`, so they never enter `state_diffs_hash`.
+/// - `UniversalStorageLog.written_value` for read queries (`rw_flag == false`)
+///   — `StorageLog::from_log_query` uses `read_value` for reads and discards
+///   `written_value`, so the read-side `written_value` is normalized to zero
+///   on both sides.
+///
+/// Both `vm2_to_universal` and `impl From<VmState<…>>` produce empty Vecs for
+/// the three artifact fields above and zero-normalized read `written_value`,
+/// so the comparison treats those positions as equal by construction.
+///
+/// If a future change makes the Airbender verifier consume additional outputs
+/// (or stop consuming current ones), update the field set here accordingly.
 #[derive(PartialEq, Debug)]
 pub struct UniversalVmState {
     registers: [(U256, bool); 15],
@@ -28,8 +58,11 @@ pub struct UniversalVmState {
     events: Vec<UniversalEvent>,
     l2_to_l1_logs: Vec<UniversalEvent>,
     storage_logs: Vec<UniversalStorageLog>,
+    // Excluded from the equivalence relation; always empty. See struct docs.
     precompile_logs: Vec<UniversalPrecompileLog>,
+    // Excluded from the equivalence relation; always empty. See struct docs.
     decommit_queries: Vec<UniversalDecommitQuery>,
+    // Excluded from the equivalence relation; always empty. See struct docs.
     transient_storage_logs: Vec<UniversalTransientLog>,
     will_panic: bool,
 }
@@ -144,24 +177,10 @@ impl
             .iter()
             .filter_map(zk_evm_storage_log_to_universal)
             .collect();
-        state.precompile_logs = vm
-            .witness_tracer
-            .precompile_logs()
-            .iter()
-            .filter_map(zk_evm_precompile_log_to_universal)
-            .collect();
-        state.decommit_queries = vm
-            .witness_tracer
-            .decommit_queries()
-            .iter()
-            .map(zk_evm_decommit_query_to_universal)
-            .collect();
-        state.transient_storage_logs = vm
-            .storage
-            .transient_logs()
-            .iter()
-            .map(zk_evm_transient_log_to_universal)
-            .collect();
+        // `precompile_logs`, `decommit_queries`, and `transient_storage_logs`
+        // are zk_evm circuit-witness artifacts that the Airbender verifier
+        // never consumes. They are intentionally excluded from the
+        // equivalence relation. See `UniversalVmState` docs.
         state
     }
 }
@@ -341,62 +360,32 @@ fn zk_evm_log_query_to_universal(query: &LogQuery) -> Option<UniversalEvent> {
     })
 }
 
-fn zk_evm_transient_log_to_universal(query: &LogQuery) -> UniversalTransientLog {
-    UniversalTransientLog {
-        address: query.address,
-        key: query.key,
-        read_value: query.read_value,
-        written_value: query.written_value,
-        rw_flag: query.rw_flag,
-        rollback: query.rollback,
-        is_service: query.is_service,
-        shard_id: query.shard_id,
-        tx_number: query.tx_number_in_block,
-    }
-}
-
 fn zk_evm_storage_log_to_universal(query: &LogQuery) -> Option<UniversalStorageLog> {
     if query.aux_byte != STORAGE_AUX_BYTE {
         return None;
     }
 
+    // The Airbender verifier discards `written_value` for read queries
+    // (`StorageLog::from_log_query` uses `read_value` when `rw_flag == false`).
+    // vm2 records `written_value = read_value` while zk_evm leaves it zero on
+    // reads; both sides are normalized to zero here so the read-side
+    // `written_value` is excluded from the equivalence relation. See
+    // `UniversalVmState` docs.
+    let written_value = if query.rw_flag {
+        query.written_value
+    } else {
+        U256::zero()
+    };
+
     Some(UniversalStorageLog {
         address: query.address,
         key: query.key,
         read_value: query.read_value,
-        written_value: query.written_value,
+        written_value,
         rw_flag: query.rw_flag,
         rollback: query.rollback,
         is_service: query.is_service,
         shard_id: query.shard_id,
         tx_number: query.tx_number_in_block,
     })
-}
-
-fn zk_evm_precompile_log_to_universal(query: &LogQuery) -> Option<UniversalPrecompileLog> {
-    if query.aux_byte != PRECOMPILE_AUX_BYTE {
-        return None;
-    }
-
-    Some(UniversalPrecompileLog {
-        address: query.address,
-        key: query.key,
-        read_value: query.read_value,
-        written_value: query.written_value,
-        rw_flag: query.rw_flag,
-        rollback: query.rollback,
-        is_service: query.is_service,
-        shard_id: query.shard_id,
-        tx_number: query.tx_number_in_block,
-    })
-}
-
-fn zk_evm_decommit_query_to_universal(query: &DecommittmentQuery) -> UniversalDecommitQuery {
-    UniversalDecommitQuery {
-        header: query.header.0,
-        normalized_preimage: query.normalized_preimage.0,
-        memory_page: query.memory_page.0,
-        decommitted_length: query.decommitted_length,
-        is_fresh: query.is_fresh,
-    }
 }
