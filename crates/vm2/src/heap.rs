@@ -388,26 +388,16 @@ impl Heaps {
     pub(crate) fn write_u256(&mut self, page: HeapId, start_address: u32, value: U256) {
         self.record_bootloader_word_rollback(page, start_address);
         let decoded = DecodedPage::decode(page)
-            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
-        let (heap, pagepool) = self
-            .try_decoded_page_mut(decoded)
-            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
+            .unwrap_or_else(|| panic!("heap page {} is not decodable", page.as_u32()));
+        let (heap, pagepool) = self.decoded_page_mut_for_write(decoded);
         heap.write_u256(start_address, value, pagepool);
     }
 
     pub(crate) fn write_bytes(&mut self, page: HeapId, start_address: u32, bytes: &[u8]) {
         self.record_bootloader_range_rollback(page, start_address, bytes.len());
         let decoded = DecodedPage::decode(page)
-            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
-        if let DecodedPage::Dynamic { .. } = decoded {
-            let slot = decoded_dynamic_slot_mut(&mut self.dynamic, decoded);
-            if slot.is_none() {
-                *slot = Some(Heap::default());
-            }
-        }
-        let (heap, pagepool) = self
-            .try_decoded_page_mut(decoded)
-            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
+            .unwrap_or_else(|| panic!("heap page {} is not decodable", page.as_u32()));
+        let (heap, pagepool) = self.decoded_page_mut_for_write(decoded);
         heap.write_bytes(start_address, bytes, pagepool);
     }
 
@@ -481,7 +471,7 @@ impl Heaps {
         self.try_decoded_page(page).unwrap_or(&EMPTY_HEAP)
     }
 
-    fn try_decoded_page_mut(&mut self, page: DecodedPage) -> Option<(&mut Heap, &mut PagePool)> {
+    fn decoded_page_mut_for_write(&mut self, page: DecodedPage) -> (&mut Heap, &mut PagePool) {
         let Self {
             static_memory,
             bootloader_calldata,
@@ -492,16 +482,19 @@ impl Heaps {
             ..
         } = self;
 
+        // The reference memory model materializes a page before writing to it.
+        // vm2 keeps the stricter page-id classification, but decodable dynamic
+        // pages are valid write targets and should be allocated lazily.
         let heap = match page {
             DecodedPage::Static => static_memory,
             DecodedPage::BootloaderCalldata => bootloader_calldata,
             DecodedPage::BootloaderHeap => bootloader_heap,
             DecodedPage::BootloaderAuxHeap => bootloader_aux_heap,
-            DecodedPage::Dynamic { group, kind } => dynamic
-                .get_mut(group)
-                .and_then(|group| group.slot_mut(kind).as_mut())?,
+            DecodedPage::Dynamic { group, kind } => {
+                dynamic_slot_mut(dynamic, group, kind).get_or_insert_with(Heap::default)
+            }
         };
-        Some((heap, pagepool))
+        (heap, pagepool)
     }
 }
 
