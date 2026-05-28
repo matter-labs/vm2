@@ -38,6 +38,7 @@ fn ptr<T: Tracer, W: World<T>, Op: PtrOp, In1: Source, Out: Destination, const S
                 Register2::get_with_pointer_flag_and_erasing(args, &mut vm.state),
             )
         };
+        Register2::set(args, &mut vm.state, U256::zero());
 
         if !a_is_pointer || b_is_pointer {
             vm.state.current_frame.pc = spontaneous_panic();

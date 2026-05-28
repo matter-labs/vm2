@@ -77,6 +77,8 @@ fn precompile_call<T: Tracer, W: World<T>>(
             // The user gets to decide how much gas to burn
             // This is safe because system contracts are trusted
             let aux_data = PrecompileAuxData::from_u256(Register2::get(args, &mut vm.state));
+            let raw_abi = Register1::get(args, &mut vm.state);
+            Register2::set(args, &mut vm.state, U256::zero());
             let Ok(()) = vm.state.use_gas(aux_data.extra_ergs_cost) else {
                 Register1::set(args, &mut vm.state, U256::zero());
                 return;
@@ -87,7 +89,7 @@ fn precompile_call<T: Tracer, W: World<T>>(
                 vm.world_diff.pubdata.0 += aux_data.extra_pubdata_cost as i32;
             }
 
-            let mut abi = PrecompileCallAbi::from_u256(Register1::get(args, &mut vm.state));
+            let mut abi = PrecompileCallAbi::from_u256(raw_abi);
             // `zk_evm` uses `memory_page == 0` in precompile ABI as a sentinel meaning
             // "use the current heap", so remap it before heap lookup.
             if abi.memory_page_to_read.as_u32() == 0 {

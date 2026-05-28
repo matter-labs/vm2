@@ -1,3 +1,4 @@
+use primitive_types::U256;
 use zksync_vm2_interface::{opcodes, Tracer};
 
 use super::common::{boilerplate, boilerplate_ext};
@@ -17,6 +18,7 @@ fn sstore<T: Tracer, W: World<T>>(
     boilerplate_ext::<opcodes::StorageWrite, _, _>(vm, world, tracer, |vm, args, world, tracer| {
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
+        Register2::set(args, &mut vm.state, U256::zero());
 
         let refund = vm.world_diff.write_storage(
             world,
@@ -40,6 +42,7 @@ fn sstore_transient<T: Tracer, W: World<T>>(
     boilerplate::<opcodes::TransientStorageWrite, _, _>(vm, world, tracer, |vm, args| {
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
+        Register2::set(args, &mut vm.state, U256::zero());
 
         vm.world_diff
             .write_transient_storage(vm.state.current_frame.address, key, value);
@@ -53,6 +56,7 @@ fn sload<T: Tracer, W: World<T>>(
 ) -> ExecutionStatus {
     boilerplate_ext::<opcodes::StorageRead, _, _>(vm, world, tracer, |vm, args, world, tracer| {
         let key = Register1::get(args, &mut vm.state);
+        Register2::set(args, &mut vm.state, U256::zero());
 
         let (value, refund) = vm.world_diff.read_storage(
             world,
@@ -76,6 +80,7 @@ fn sload_transient<T: Tracer, W: World<T>>(
 ) -> ExecutionStatus {
     boilerplate::<opcodes::TransientStorageRead, _, _>(vm, world, tracer, |vm, args| {
         let key = Register1::get(args, &mut vm.state);
+        Register2::set(args, &mut vm.state, U256::zero());
         let value = vm
             .world_diff
             .read_transient_storage(vm.state.current_frame.address, key);

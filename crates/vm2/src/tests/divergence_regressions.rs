@@ -3,8 +3,8 @@ use zkevm_opcode_defs::{
     decoding::EncodingModeProduction,
     ethereum_types::Address,
     system_params::{NEW_EVM_FRAME_MEMORY_STIPEND, NEW_FRAME_MEMORY_STIPEND, VM_MAX_STACK_DEPTH},
-    Condition, DecodedOpcode, ImmMemHandlerFlags, Opcode, Operand, RegOrImmFlags, UMAOpcode,
-    OPCODES_TABLE, UMA_INCREMENT_FLAG_IDX,
+    AddOpcode, Condition, DecodedOpcode, ImmMemHandlerFlags, MulOpcode, Opcode, Operand,
+    RegOrImmFlags, UMAOpcode, OPCODES_TABLE, UMA_INCREMENT_FLAG_IDX,
 };
 use zksync_vm2_interface::{opcodes, HeapId, Tracer};
 
@@ -19,7 +19,7 @@ use crate::{
         aux_heap_page_from_base, first_dynamic_base_page, heap_page_from_base, next_page_group,
     },
     precompiles::{PrecompileMemoryReader, PrecompileOutput, Precompiles},
-    testonly::TestWorld,
+    testonly::{initial_decommit, TestWorld},
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, StorageInterface,
     StorageSlot, VirtualMachine, World,
 };
@@ -1379,6 +1379,325 @@ fn rollback_should_restore_bootloader_heap_after_fresh_decommit() {
 
     vm.rollback();
     assert_eq!(vm.state.heaps[bootloader_heap].read_u256(0), sentinel);
+}
+
+fn add_instruction_with_dst1(
+    src0_reg_idx: u8,
+    src1_reg_idx: u8,
+    dst0_reg_idx: u8,
+    dst1_reg_idx: u8,
+) -> Instruction<(), TestWorld<()>> {
+    let variant = OPCODES_TABLE
+        .iter()
+        .copied()
+        .find(|variant| {
+            variant.opcode == Opcode::Add(AddOpcode::Add)
+                && variant.src0_operand_type == Operand::Full(ImmMemHandlerFlags::UseRegOnly)
+                && variant.dst0_operand_type == Operand::Full(ImmMemHandlerFlags::UseRegOnly)
+                && !variant.flags.iter().any(|f| *f)
+        })
+        .expect("plain register-form Add variant must exist");
+
+    let encoded = DecodedOpcode::<8, EncodingModeProduction> {
+        variant,
+        condition: Condition::Always,
+        src0_reg_idx,
+        src1_reg_idx,
+        dst0_reg_idx,
+        dst1_reg_idx,
+        imm_0: 0,
+        imm_1: 0,
+    }
+    .serialize_as_integer();
+
+    decode(encoded, false)
+}
+
+fn mul_instruction_with_indices(
+    src0_reg_idx: u8,
+    src1_reg_idx: u8,
+    dst0_reg_idx: u8,
+    dst1_reg_idx: u8,
+) -> Instruction<(), TestWorld<()>> {
+    let variant = OPCODES_TABLE
+        .iter()
+        .copied()
+        .find(|variant| {
+            variant.opcode == Opcode::Mul(MulOpcode)
+                && variant.src0_operand_type == Operand::Full(ImmMemHandlerFlags::UseRegOnly)
+                && variant.dst0_operand_type == Operand::Full(ImmMemHandlerFlags::UseRegOnly)
+                && !variant.flags.iter().any(|f| *f)
+        })
+        .expect("plain register-form Mul variant must exist");
+
+    let encoded = DecodedOpcode::<8, EncodingModeProduction> {
+        variant,
+        condition: Condition::Always,
+        src0_reg_idx,
+        src1_reg_idx,
+        dst0_reg_idx,
+        dst1_reg_idx,
+        imm_0: 0,
+        imm_1: 0,
+    }
+    .serialize_as_integer();
+
+    decode(encoded, false)
+}
+
+#[test]
+fn dirty_dst1_encoding_should_be_pre_zeroed_for_single_output_opcodes() {
+    // `add r0, r0, r0` with the encoded `dst1_reg_idx` patched to `r1`.
+    let add_with_dirty_dst1 = add_instruction_with_dst1(
+        /* src0 */ 0, /* src1 */ 0, /* dst0 */ 0, /* dst1 */ 1,
+    );
+    let program = Program::from_raw(vec![add_with_dirty_dst1, ret_instruction()], vec![]);
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let sentinel = U256::from(0xdead_beef_u64);
+    vm.state.registers[1] = sentinel;
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+    assert_eq!(vm.state.registers[1], U256::zero());
+}
+
+#[test]
+fn mul_with_src1_equal_to_dst1_should_use_original_src1() {
+    // `mul r1, r2, r3, r2` — exercises src/dst1 register-index aliasing for `mul`.
+    let program = Program::from_raw(
+        vec![
+            mul_instruction_with_indices(
+                /* src0 */ 1, /* src1 */ 2, /* dst0 */ 3, /* dst1 */ 2,
+            ),
+            ret_instruction(),
+        ],
+        vec![],
+    );
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let r1_val = U256::MAX;
+    let r2_val = U256::from(3u64);
+    vm.state.registers[1] = r1_val;
+    vm.state.registers[2] = r2_val;
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+
+    let product = r1_val.full_mul(r2_val);
+    let mut expected_low_arr = [0u64; 4];
+    expected_low_arr.copy_from_slice(&product.0[0..4]);
+    let mut expected_high_arr = [0u64; 4];
+    expected_high_arr.copy_from_slice(&product.0[4..8]);
+    let expected_low = U256(expected_low_arr);
+    let expected_high = U256(expected_high_arr);
+
+    assert_eq!(vm.state.registers[3], expected_low);
+    assert_eq!(vm.state.registers[2], expected_high);
+}
+
+#[test]
+fn add_with_src0_equal_to_dst1_should_use_original_src0() {
+    // `add r1, r0, r2` with `dst1_reg_idx = r1` — exercises src/dst1 register-index
+    // aliasing for `add`.
+    let add_with_collision = add_instruction_with_dst1(
+        /* src0 */ 1, /* src1 */ 0, /* dst0 */ 2, /* dst1 */ 1,
+    );
+    let program = Program::from_raw(vec![add_with_collision, ret_instruction()], vec![]);
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let sentinel = U256::from(0x1234_5678_u64);
+    vm.state.registers[1] = sentinel;
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+
+    assert_eq!(vm.state.registers[2], sentinel);
+    assert_eq!(vm.state.registers[1], U256::zero());
+}
+
+fn ret_panic_callee_program(abi: U256) -> Program<(), TestWorld<()>> {
+    let r0 = Register::new(0);
+    let r1 = Register::new(1);
+    Program::from_raw(
+        vec![
+            Instruction::from_add(
+                crate::addressing_modes::CodePage(crate::addressing_modes::RegisterAndImmediate {
+                    immediate: 0,
+                    register: r0,
+                })
+                .into(),
+                Register2(r0),
+                Register1(r1).into(),
+                Arguments::new(Predicate::Always, 6, ModeRequirements::none()),
+                false,
+                false,
+            ),
+            Instruction::from_panic(
+                Register1(r1),
+                None,
+                Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+            ),
+        ],
+        vec![abi],
+    )
+}
+
+fn ret_panic_caller_program(
+    gas_to_pass: u32,
+    called_address_u256: U256,
+) -> Program<(), TestWorld<()>> {
+    let r0 = Register::new(0);
+    let r1 = Register::new(1);
+    let r2 = Register::new(2);
+    let r3 = Register::new(3);
+
+    let mut far_call_abi = U256::zero();
+    far_call_abi.0[3] = u64::from(gas_to_pass);
+
+    Program::from_raw(
+        vec![
+            Instruction::from_add(
+                crate::addressing_modes::CodePage(crate::addressing_modes::RegisterAndImmediate {
+                    immediate: 0,
+                    register: r0,
+                })
+                .into(),
+                Register2(r0),
+                Register1(r1).into(),
+                Arguments::new(Predicate::Always, 6, ModeRequirements::none()),
+                false,
+                false,
+            ),
+            Instruction::from_add(
+                crate::addressing_modes::CodePage(crate::addressing_modes::RegisterAndImmediate {
+                    immediate: 1,
+                    register: r0,
+                })
+                .into(),
+                Register2(r0),
+                Register1(r2).into(),
+                Arguments::new(Predicate::Always, 6, ModeRequirements::none()),
+                false,
+                false,
+            ),
+            Instruction::from_far_call::<opcodes::Normal>(
+                Register1(r1),
+                Register2(r2),
+                Immediate1(4),
+                false,
+                false,
+                Arguments::new(Predicate::Always, 200, ModeRequirements::none()),
+            ),
+            // 3: unreachable (callee always panics); revert to surface the bug if we get here.
+            Instruction::from_revert(
+                Register1(r0),
+                None,
+                Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+            ),
+            // 4: exception handler — capture ergs_left into r3, then ret.ok.
+            Instruction::from_ergs_left(
+                Register1(r3),
+                Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+            ),
+            Instruction::from_ret(
+                Register1(r0),
+                None,
+                Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+            ),
+        ],
+        vec![far_call_abi, called_address_u256],
+    )
+}
+
+#[allow(clippy::similar_names)] // `caller` / `callee` is standard notation
+fn run_ret_panic_capturing_caller_ergs(abi: U256, gas_to_pass: u32, initial_gas: u32) -> u32 {
+    let called_address: Address = Address::repeat_byte(0x42);
+    let called_address_u256 = U256::from_big_endian(&called_address.0);
+    let caller_address: Address = Address::repeat_byte(0x23);
+
+    let mut world = TestWorld::new(&[
+        (called_address, ret_panic_callee_program(abi)),
+        (
+            caller_address,
+            ret_panic_caller_program(gas_to_pass, called_address_u256),
+        ),
+    ]);
+    let entry_program = initial_decommit(&mut world, caller_address);
+
+    let mut vm = VirtualMachine::new(
+        caller_address,
+        entry_program,
+        Address::zero(),
+        &[],
+        initial_gas,
+        default_settings(),
+    );
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+    vm.state.registers[3].low_u32()
+}
+
+#[test]
+fn ret_panic_should_charge_heap_growth_only_when_abi_overflows() {
+    // Quasi-fat-pointer with:
+    //   start  = 0xFFFFFFFF (bits 64..96)
+    //   length = 0x00000001 (bits 96..128)
+    //   source byte (bits 224..232) = 0 -> MakeNewPointer(ToHeap)
+    let mut overflow_abi = U256::zero();
+    overflow_abi.0[1] = (1u64 << 32) | 0x0000_0000_ffff_ffffu64;
+
+    let gas_to_pass: u32 = 10_000;
+    let initial_gas: u32 = 1_000_000;
+    let ergs_with_zero_abi =
+        run_ret_panic_capturing_caller_ergs(U256::zero(), gas_to_pass, initial_gas);
+    let ergs_with_overflow_abi =
+        run_ret_panic_capturing_caller_ergs(overflow_abi, gas_to_pass, initial_gas);
+
+    // The zero-ABI run should leave most of the forwarded gas intact.
+    assert!(
+        ergs_with_zero_abi > initial_gas - gas_to_pass,
+        "zero-ABI run drained more than expected: {ergs_with_zero_abi}"
+    );
+
+    let diff = ergs_with_zero_abi.saturating_sub(ergs_with_overflow_abi);
+    assert!(
+        diff > gas_to_pass - 100,
+        "got diff = {diff}, gas_to_pass = {gas_to_pass}"
+    );
 }
 
 #[test]

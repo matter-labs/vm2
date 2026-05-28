@@ -1,10 +1,10 @@
-use primitive_types::H160;
+use primitive_types::{H160, U256};
 use zkevm_opcode_defs::ADDRESS_EVENT_WRITER;
 use zksync_vm2_interface::{opcodes, Event, L2ToL1Log, Tracer};
 
 use super::common::boilerplate_ext;
 use crate::{
-    addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
+    addressing_modes::{Arguments, Destination, Immediate1, Register1, Register2, Source},
     instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
@@ -28,6 +28,7 @@ fn event<T: Tracer, W: World<T>>(
                 tx_number: vm.state.transaction_number,
             });
         }
+        Register2::set(args, &mut vm.state, U256::zero());
     })
 }
 
@@ -40,6 +41,7 @@ fn l2_to_l1<T: Tracer, W: World<T>>(
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
         let is_service = Immediate1::get(args, &mut vm.state).low_u32() == 1;
+        Register2::set(args, &mut vm.state, U256::zero());
         vm.world_diff.record_l2_to_l1_log(L2ToL1Log {
             key,
             value,

@@ -12,7 +12,7 @@ use super::{
     AuxHeap, Heap,
 };
 use crate::{
-    addressing_modes::{Arguments, Immediate1, Register1, Register2, Source},
+    addressing_modes::{Arguments, Destination, Immediate1, Register1, Register2, Source},
     decommit::{is_kernel, materialize_decommit_page, u256_into_address},
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
@@ -47,6 +47,7 @@ where
         let address_mask: U256 = U256::MAX >> (256 - 160);
         let destination_address = Register2::get(args, &mut vm.state) & address_mask;
         let exception_handler = Immediate1::get_u16(args);
+        Register2::set(args, &mut vm.state, U256::zero());
 
         let mut abi = get_far_call_arguments(raw_abi);
         abi.is_constructor_call = abi.is_constructor_call && vm.state.current_frame.is_kernel;

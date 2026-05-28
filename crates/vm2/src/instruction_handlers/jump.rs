@@ -1,3 +1,4 @@
+use primitive_types::U256;
 use zksync_vm2_interface::{opcodes, Tracer};
 
 use super::{
@@ -7,7 +8,7 @@ use super::{
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnySource, Arguments, CodePage, Destination,
-        Immediate1, Register1, RelativeStack, Source,
+        Immediate1, Register1, Register2, RelativeStack, Source,
     },
     instruction::{ExecutionStatus, Instruction},
     VirtualMachine, World,
@@ -21,6 +22,7 @@ fn jump<T: Tracer, W: World<T>, In: Source>(
     boilerplate::<opcodes::Jump, _, _>(vm, world, tracer, |vm, args| {
         #[allow(clippy::cast_possible_truncation)] // intentional
         let target = In::get(args, &mut vm.state).low_u32() as u16;
+        Register2::set(args, &mut vm.state, U256::zero());
 
         let next_instruction = vm.state.current_frame.get_pc_as_u16();
         Register1::set(args, &mut vm.state, next_instruction.into());

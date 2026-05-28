@@ -10,7 +10,9 @@ use super::{
     monomorphization::{match_boolean, monomorphize, parameterize},
 };
 use crate::{
-    addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
+    addressing_modes::{
+        Arguments, Destination, Immediate1, Register1, Register2, Source, INVALID_INSTRUCTION_COST,
+    },
     callframe::FrameRemnant,
     instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
@@ -32,6 +34,7 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
         snapshot,
     }) = vm.state.current_frame.pop_near_call()
     {
+        Register2::set(args, &mut vm.state, U256::zero());
         if TO_LABEL {
             let pc = Immediate1::get_u16(args);
             vm.state.current_frame.set_pc_from_u16(pc);
@@ -41,26 +44,27 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
 
         (snapshot, near_call_leftover_gas)
     } else {
+        let (raw_abi, is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
+        Register2::set(args, &mut vm.state, U256::zero());
+        let parsed = get_calldata(raw_abi, is_pointer, vm, false).filter(|pointer| {
+            if vm.state.current_frame.is_kernel {
+                true
+            } else {
+                // Non-kernel returndata forwarding must be unidirectional: callers may pass
+                // pointers down the stack, but callees must not forward pointers to older pages.
+                // This mirrors zk_evm's restriction based on base memory page checks.
+                pointer.memory_page.as_u32() >= base_page_from_heap(vm.state.current_frame.heap)
+                    && pointer.memory_page != vm.state.current_frame.calldata_heap
+            }
+        });
+
         let return_value_or_panic = if return_type == ReturnType::Panic {
             None
+        } else if parsed.is_none() {
+            return_type = ReturnType::Panic;
+            None
         } else {
-            let (raw_abi, is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
-            let result = get_calldata(raw_abi, is_pointer, vm, false).filter(|pointer| {
-                if vm.state.current_frame.is_kernel {
-                    true
-                } else {
-                    // Non-kernel returndata forwarding must be unidirectional: callers may pass
-                    // pointers down the stack, but callees must not forward pointers to older pages.
-                    // This mirrors zk_evm's restriction based on base memory page checks.
-                    pointer.memory_page.as_u32() >= base_page_from_heap(vm.state.current_frame.heap)
-                        && pointer.memory_page != vm.state.current_frame.calldata_heap
-                }
-            });
-
-            if result.is_none() {
-                return_type = ReturnType::Panic;
-            }
-            result
+            parsed
         };
 
         let leftover_gas = vm.state.current_frame.gas;
@@ -213,11 +217,11 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
     }
 
     /// Creates a panic [`Ret`](opcodes::Ret) instruction with the provided params.
-    pub fn from_panic(label: Option<Immediate1>, arguments: Arguments) -> Self {
+    pub fn from_panic(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         Self {
             handler: monomorphize!(ret [T W Panic] match_boolean to_label),
-            arguments: arguments.write_source(&label),
+            arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
 

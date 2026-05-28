@@ -1,8 +1,11 @@
+use primitive_types::U256;
 use zksync_vm2_interface::{opcodes, Tracer};
 
 use super::common::boilerplate;
 use crate::{
-    addressing_modes::{destination_stack_address, AdvanceStackPointer, Arguments, Source},
+    addressing_modes::{
+        destination_stack_address, AdvanceStackPointer, Arguments, Destination, Register2, Source,
+    },
     instruction::ExecutionStatus,
     Instruction, VirtualMachine, World,
 };
@@ -15,6 +18,7 @@ fn nop<T: Tracer, W: World<T>>(
     boilerplate::<opcodes::Nop, _, _>(vm, world, tracer, |vm, args| {
         // nop's addressing modes can move the stack pointer!
         AdvanceStackPointer::get(args, &mut vm.state);
+        Register2::set(args, &mut vm.state, U256::zero());
         vm.state.current_frame.sp = vm
             .state
             .current_frame
