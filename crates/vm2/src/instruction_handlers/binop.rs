@@ -36,11 +36,22 @@ where
     boilerplate::<Op, _, _>(vm, world, tracer, |vm, args| {
         let a = In1::get(args, &mut vm.state);
         let b = Register2::get(args, &mut vm.state);
-        vm.state.clear_dst1(args);
         let (a, b) = if SWAP { (b, a) } else { (a, b) };
 
         let (result, out2, flags) = Op::perform(&a, &b);
-        Out::set(args, &mut vm.state, result);
+        // For stack destinations the dst0 address is computed from the register
+        // that may alias dst1; clear dst1 only after `Out::set` so the address
+        // read matches zk_evm's prestate-captured `dst0_mem_location`. For
+        // register destinations the write itself overrides dst1 when the
+        // indices alias, so clearing first then writing matches zk_evm's
+        // pre-zero → apply order.
+        if Out::IS_REGISTER {
+            vm.state.clear_dst1(args);
+            Out::set(args, &mut vm.state, result);
+        } else {
+            Out::set(args, &mut vm.state, result);
+            vm.state.clear_dst1(args);
+        }
         out2.write(args, &mut vm.state);
         if SET_FLAGS {
             vm.state.flags = flags;

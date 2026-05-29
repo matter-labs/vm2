@@ -1413,6 +1413,40 @@ fn add_instruction_with_dst1(
     decode(encoded, false)
 }
 
+fn add_instruction_stack_push_with_dst1(
+    src0_reg_idx: u8,
+    src1_reg_idx: u8,
+    push_base_reg_idx: u8,
+    push_offset_imm: u16,
+    dst1_reg_idx: u8,
+) -> Instruction<(), TestWorld<()>> {
+    let variant = OPCODES_TABLE
+        .iter()
+        .copied()
+        .find(|variant| {
+            variant.opcode == Opcode::Add(AddOpcode::Add)
+                && variant.src0_operand_type == Operand::Full(ImmMemHandlerFlags::UseRegOnly)
+                && variant.dst0_operand_type
+                    == Operand::Full(ImmMemHandlerFlags::UseStackWithPushPop)
+                && !variant.flags.iter().any(|f| *f)
+        })
+        .expect("Add variant with stack-push dst0 must exist");
+
+    let encoded = DecodedOpcode::<8, EncodingModeProduction> {
+        variant,
+        condition: Condition::Always,
+        src0_reg_idx,
+        src1_reg_idx,
+        dst0_reg_idx: push_base_reg_idx,
+        dst1_reg_idx,
+        imm_0: 0,
+        imm_1: push_offset_imm,
+    }
+    .serialize_as_integer();
+
+    decode(encoded, false)
+}
+
 fn mul_instruction_with_indices(
     src0_reg_idx: u8,
     src1_reg_idx: u8,
@@ -1544,6 +1578,43 @@ fn add_with_src0_equal_to_dst1_should_use_original_src0() {
 
     assert_eq!(vm.state.registers[2], sentinel);
     assert_eq!(vm.state.registers[1], U256::zero());
+}
+
+#[test]
+fn add_with_stack_push_dst0_aliasing_dst1_should_use_original_register_for_address() {
+    // `add r0, r0, stack[r5 + 100]` (push form) with `dst1_reg_idx = r5`. The
+    // SP advance pulls the base from r5, and the cycle prologue is expected to
+    // clear r5 only after the address has been resolved. zk_evm captures
+    // `dst0_mem_location` into prestate before the prologue zeroes the register;
+    // vm2 must order the dst0 write before the dst1 clear for stack destinations.
+    const OFFSET_IMM: u16 = 100;
+    let sentinel: u16 = 4242;
+
+    let add = add_instruction_stack_push_with_dst1(
+        /* src0 */ 0, /* src1 */ 0, /* push_base */ 5, OFFSET_IMM, /* dst1 */ 5,
+    );
+    let program = Program::from_raw(vec![add, ret_instruction()], vec![]);
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let sp_before = vm.state.current_frame.sp;
+    vm.state.registers[5] = U256::from(sentinel);
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+
+    let expected_sp = sp_before.wrapping_add(sentinel.wrapping_add(OFFSET_IMM));
+    assert_eq!(vm.state.current_frame.sp, expected_sp);
+    assert_eq!(vm.state.registers[5], U256::zero());
 }
 
 fn ret_panic_callee_program(abi: U256) -> Program<(), TestWorld<()>> {

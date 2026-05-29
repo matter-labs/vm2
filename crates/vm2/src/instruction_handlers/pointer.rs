@@ -38,19 +38,26 @@ fn ptr<T: Tracer, W: World<T>, Op: PtrOp, In1: Source, Out: Destination, const S
                 Register2::get_with_pointer_flag_and_erasing(args, &mut vm.state),
             )
         };
-        vm.state.clear_dst1(args);
 
-        if !a_is_pointer || b_is_pointer {
-            vm.state.current_frame.pc = spontaneous_panic();
-            return;
+        // For register destinations clear dst1 first so the dst0 write overrides
+        // when the indices alias. For stack destinations the dst0 address is
+        // computed from a register that may alias dst1, so the write (or panic)
+        // must run while the register still holds its original value.
+        if Out::IS_REGISTER {
+            vm.state.clear_dst1(args);
         }
 
-        let Some(result) = Op::perform(a, b) else {
-            vm.state.current_frame.pc = spontaneous_panic();
-            return;
-        };
+        let result = (a_is_pointer && !b_is_pointer)
+            .then(|| Op::perform(a, b))
+            .flatten();
+        match result {
+            Some(value) => Out::set_fat_ptr(args, &mut vm.state, value),
+            None => vm.state.current_frame.pc = spontaneous_panic(),
+        }
 
-        Out::set_fat_ptr(args, &mut vm.state, result);
+        if !Out::IS_REGISTER {
+            vm.state.clear_dst1(args);
+        }
     })
 }
 

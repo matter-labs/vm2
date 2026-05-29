@@ -15,12 +15,11 @@ fn nop<T: Tracer, W: World<T>>(
     boilerplate::<opcodes::Nop, _, _>(vm, world, tracer, |vm, args| {
         // nop's addressing modes can move the stack pointer!
         AdvanceStackPointer::get(args, &mut vm.state);
+        // The destination SP advance is derived from a register that may alias
+        // dst1; capture the offset before clearing.
+        let push_offset = destination_stack_address(args, &mut vm.state);
         vm.state.clear_dst1(args);
-        vm.state.current_frame.sp = vm
-            .state
-            .current_frame
-            .sp
-            .wrapping_add(destination_stack_address(args, &mut vm.state));
+        vm.state.current_frame.sp = vm.state.current_frame.sp.wrapping_add(push_offset);
     })
 }
 
