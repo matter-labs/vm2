@@ -270,6 +270,53 @@ fn masked_native_far_call_should_keep_regular_stipend() {
     );
 }
 
+#[test]
+fn pointer_read_after_failed_far_call_should_return_zero() {
+    let failed_call = Instruction::from_far_call::<opcodes::Normal>(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Immediate1(1),
+        false,
+        false,
+        Arguments::new(Predicate::Always, 200, ModeRequirements::none()),
+    );
+    let read_returned_pointer = Instruction::from_pointer_read(
+        Register1(Register::new(1)),
+        Register1(Register::new(3)),
+        None,
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let program = Program::from_raw(
+        vec![failed_call, read_returned_pointer, ret_instruction()],
+        vec![],
+    );
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        non_kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    // The missing callee makes `far_call` enter a panicking frame. The reference
+    // VM still returns an empty fat pointer in r1, so reading through it must
+    // behave like a zero-length read rather than crashing the host.
+    let mut far_call_abi = U256::zero();
+    far_call_abi.0[3] = 10_000;
+    vm.state.register_pointer_flags &= !(1 << 1);
+    vm.state.registers[1] = far_call_abi;
+    vm.state.registers[2] = U256::zero();
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+    assert_eq!(vm.state.registers[3], U256::zero());
+    assert_eq!(vm.state.register_pointer_flags & (1 << 1), 1 << 1);
+}
+
 fn static_uma_instruction<T: Tracer, W: World<T>>(opcode: UMAOpcode) -> Instruction<T, W> {
     let variant = OPCODES_TABLE
         .iter()
@@ -594,6 +641,61 @@ fn precompile_zero_memory_page_should_use_current_heap_instead_of_static_memory(
     assert_eq!(vm.state.registers[6], U256::one());
     assert_eq!(vm.state.registers[7], expected_heap_after_precompile);
     assert_eq!(vm.state.registers[8], static_value);
+}
+
+#[test]
+fn precompile_output_write_should_materialize_unallocated_dynamic_page() {
+    let heap_write = Instruction::from_heap_write(
+        Register1(Register::new(1)).into(),
+        Register2(Register::new(2)),
+        None,
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+        false,
+    );
+    let precompile_call = Instruction::from_precompile_call(
+        Register1(Register::new(4)),
+        Register2(Register::new(5)),
+        Register1(Register::new(6)),
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let program = Program::from_raw(vec![heap_write, precompile_call, ret_instruction()], vec![]);
+    let mut world = PrecompileSentinelWorld::default();
+
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let output_page = heap_page_from_base(next_page_group(first_dynamic_base_page()));
+    assert!(!vm.state.heaps.contains(output_page));
+
+    let input_value = U256::from(0x33_u64);
+    let expected_output = input_value + U256::one();
+
+    // ABI: read 32 bytes from the current heap via page-zero sentinel, then write
+    // one output word to a valid dynamic page that has not been allocated yet.
+    let mut precompile_abi = U256::zero();
+    precompile_abi.0[0] = 32_u64 << 32;
+    precompile_abi.0[1] = 1_u64 << 32;
+    precompile_abi.0[2] = u64::from(output_page.as_u32()) << 32;
+
+    vm.state.register_pointer_flags &= !(1 << 1);
+    vm.state.registers[1] = U256::zero();
+    vm.state.registers[2] = input_value;
+    vm.state.registers[4] = precompile_abi;
+    vm.state.registers[5] = U256::zero();
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+    assert_eq!(vm.state.registers[6], U256::one());
+    assert!(vm.state.heaps.contains(output_page));
+    assert_eq!(vm.state.heaps[output_page].read_u256(0), expected_output);
 }
 
 #[derive(Debug, Default)]

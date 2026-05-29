@@ -30,6 +30,11 @@ pub(crate) struct Heap {
     pages: Vec<Option<HeapPage>>,
 }
 
+// The reference VM treats reads from missing memory pages as reads from an
+// all-zero page. Keep write paths strict, but make read-only indexing total so
+// panic-produced or otherwise empty fat pointers cannot abort the host.
+static EMPTY_HEAP: Heap = Heap { pages: Vec::new() };
+
 // We never remove `HeapPage`s (even after rollbacks – although we do zero all added pages in this case),
 // we allow additional pages to be present if they are zeroed.
 impl PartialEq for Heap {
@@ -354,6 +359,10 @@ impl Heaps {
         );
 
         let slot = decoded_dynamic_slot_mut(&mut self.dynamic, decoded);
+        // `decoded_page_mut_for_write` populates dynamic slots lazily, so in principle a prior
+        // write could materialize this slot. In production, `allocate_at` is only called from
+        // far-call setup on the heap/aux slots of a freshly assigned base group, which no
+        // prior code path writes to. If this fires, that invariant has been broken.
         assert!(
             slot.is_none(),
             "heap page {} is already allocated",
@@ -370,6 +379,11 @@ impl Heaps {
         })
     }
 
+    // The three panics in this function flag VM-internal bookkeeping bugs, not
+    // reachable conditions: the VM only deallocates pages it previously allocated via
+    // `allocate_at` (frame pop in `pop_frame`, snapshot rollback in `State::rollback`). The
+    // reference `zk_evm` has no deallocation path of its own, so there is no behaviour to
+    // diverge from here — these panics remain as fail-fast diagnostics for our own bookkeeping.
     pub(crate) fn deallocate(&mut self, page: HeapId) {
         let decoded = DecodedPage::decode(page)
             .unwrap_or_else(|| panic!("heap page {} is not decodable", page.as_u32()));
@@ -392,27 +406,27 @@ impl Heaps {
 
     pub(crate) fn write_u256(&mut self, page: HeapId, start_address: u32, value: U256) {
         self.record_bootloader_word_rollback(page, start_address);
+        // Current callers pass `HeapId`s from VM-controlled sources: store opcodes (current
+        // frame heap/aux), static memory, and kernel-gated precompile output. The
+        // `StateInterface::write_heap_u256` tracer entry can in principle pass an arbitrary
+        // `HeapId`. The reference `zk_evm` would silently materialize any page number; we
+        // keep the panic as a tripwire against any new code path.
         let decoded = DecodedPage::decode(page)
-            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
-        let (heap, pagepool) = self
-            .try_decoded_page_mut(decoded)
-            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
+            .unwrap_or_else(|| panic!("heap page {} is not decodable", page.as_u32()));
+        let (heap, pagepool) = self.decoded_page_mut_for_write(decoded);
         heap.write_u256(start_address, value, pagepool);
     }
 
     pub(crate) fn write_bytes(&mut self, page: HeapId, start_address: u32, bytes: &[u8]) {
         self.record_bootloader_range_rollback(page, start_address, bytes.len());
+        // Same tripwire rationale as `write_u256`: the only production callers go through
+        // `materialize_decommit_page` (a fresh code page on far call, or the current frame
+        // heap from the `Decommit` opcode), both supplying decodable `HeapId`s. An
+        // undecodable page here indicates a new code path that should be reviewed before
+        // merging.
         let decoded = DecodedPage::decode(page)
-            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
-        if let DecodedPage::Dynamic { .. } = decoded {
-            let slot = decoded_dynamic_slot_mut(&mut self.dynamic, decoded);
-            if slot.is_none() {
-                *slot = Some(Heap::default());
-            }
-        }
-        let (heap, pagepool) = self
-            .try_decoded_page_mut(decoded)
-            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
+            .unwrap_or_else(|| panic!("heap page {} is not decodable", page.as_u32()));
+        let (heap, pagepool) = self.decoded_page_mut_for_write(decoded);
         heap.write_bytes(start_address, bytes, pagepool);
     }
 
@@ -496,11 +510,10 @@ impl Heaps {
     }
 
     fn decoded_page(&self, page: DecodedPage) -> &Heap {
-        self.try_decoded_page(page)
-            .unwrap_or_else(|| panic!("decoded page {page:?} is not allocated"))
+        self.try_decoded_page(page).unwrap_or(&EMPTY_HEAP)
     }
 
-    fn try_decoded_page_mut(&mut self, page: DecodedPage) -> Option<(&mut Heap, &mut PagePool)> {
+    fn decoded_page_mut_for_write(&mut self, page: DecodedPage) -> (&mut Heap, &mut PagePool) {
         let Self {
             static_memory,
             bootloader_calldata,
@@ -511,16 +524,19 @@ impl Heaps {
             ..
         } = self;
 
+        // The reference memory model materializes a page before writing to it.
+        // vm2 keeps the stricter page-id classification, but decodable dynamic
+        // pages are valid write targets and should be allocated lazily.
         let heap = match page {
             DecodedPage::Static => static_memory,
             DecodedPage::BootloaderCalldata => bootloader_calldata,
             DecodedPage::BootloaderHeap => bootloader_heap,
             DecodedPage::BootloaderAuxHeap => bootloader_aux_heap,
-            DecodedPage::Dynamic { group, kind } => dynamic
-                .get_mut(group)
-                .and_then(|group| group.slot_mut(kind).as_mut())?,
+            DecodedPage::Dynamic { group, kind } => {
+                dynamic_slot_mut(dynamic, group, kind).get_or_insert_with(Heap::default)
+            }
         };
-        Some((heap, pagepool))
+        (heap, pagepool)
     }
 }
 
@@ -528,9 +544,10 @@ impl Index<HeapId> for Heaps {
     type Output = Heap;
 
     fn index(&self, index: HeapId) -> &Self::Output {
-        let decoded = DecodedPage::decode(index)
-            .unwrap_or_else(|| panic!("heap page {} is not allocated", index.as_u32()));
-        self.decoded_page(decoded)
+        match DecodedPage::decode(index) {
+            Some(decoded) => self.decoded_page(decoded),
+            None => &EMPTY_HEAP,
+        }
     }
 }
 
