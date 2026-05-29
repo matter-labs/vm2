@@ -1673,6 +1673,11 @@ fn run_ret_panic_capturing_caller_ergs(abi: U256, gas_to_pass: u32, initial_gas:
 
 #[test]
 fn ret_panic_should_charge_heap_growth_only_when_abi_overflows() {
+    // Upper bound on per-instruction overhead the callee runs before its terminal
+    // opcode (a single `add` reading from the code page costs 6, the terminal opcode
+    // costs 5; round up generously to absorb framework accounting).
+    const CALLEE_OVERHEAD_BOUND: u32 = 100;
+
     // Quasi-fat-pointer with:
     //   start  = 0xFFFFFFFF (bits 64..96)
     //   length = 0x00000001 (bits 96..128)
@@ -1695,7 +1700,7 @@ fn ret_panic_should_charge_heap_growth_only_when_abi_overflows() {
 
     let diff = ergs_with_zero_abi.saturating_sub(ergs_with_overflow_abi);
     assert!(
-        diff > gas_to_pass - 100,
+        diff > gas_to_pass - CALLEE_OVERHEAD_BOUND,
         "got diff = {diff}, gas_to_pass = {gas_to_pass}"
     );
 }

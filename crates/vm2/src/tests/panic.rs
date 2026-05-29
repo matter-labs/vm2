@@ -17,7 +17,11 @@ proptest! {
                 Immediate2(0xFFFF),
                 Arguments::new(Predicate::Always, 25, ModeRequirements::none()),
             ),
-            Instruction::from_panic(Register1(Register::new(0)), Some(Immediate1(label)), Arguments::new(Predicate::Always, 5, ModeRequirements::none())),
+            Instruction::from_panic(
+                Register1(Register::new(0)),
+                Some(Immediate1(label)),
+                Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+            ),
         ];
         for _ in 0..98 {
             instructions.push(Instruction::from_ret(
