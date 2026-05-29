@@ -47,12 +47,12 @@ fn ptr<T: Tracer, W: World<T>, Op: PtrOp, In1: Source, Out: Destination, const S
             vm.state.clear_dst1(args);
         }
 
-        let result = (a_is_pointer && !b_is_pointer)
-            .then(|| Op::perform(a, b))
-            .flatten();
-        match result {
-            Some(value) => Out::set_fat_ptr(args, &mut vm.state, value),
-            None => vm.state.current_frame.pc = spontaneous_panic(),
+        if !a_is_pointer || b_is_pointer {
+            vm.state.current_frame.pc = spontaneous_panic();
+        } else if let Some(result) = Op::perform(a, b) {
+            Out::set_fat_ptr(args, &mut vm.state, result);
+        } else {
+            vm.state.current_frame.pc = spontaneous_panic();
         }
 
         if !Out::IS_REGISTER {

@@ -3,7 +3,7 @@ use zkevm_opcode_defs::{
     decoding::EncodingModeProduction,
     ethereum_types::Address,
     system_params::{NEW_EVM_FRAME_MEMORY_STIPEND, NEW_FRAME_MEMORY_STIPEND, VM_MAX_STACK_DEPTH},
-    AddOpcode, Condition, DecodedOpcode, ImmMemHandlerFlags, MulOpcode, Opcode, Operand,
+    AddOpcode, Condition, DecodedOpcode, ImmMemHandlerFlags, MulOpcode, Opcode, Operand, PtrOpcode,
     RegOrImmFlags, UMAOpcode, OPCODES_TABLE, UMA_INCREMENT_FLAG_IDX,
 };
 use zksync_vm2_interface::{opcodes, HeapId, Tracer};
@@ -1413,7 +1413,8 @@ fn add_instruction_with_dst1(
     decode(encoded, false)
 }
 
-fn add_instruction_stack_push_with_dst1(
+fn instruction_with_stack_push_dst0(
+    opcode: Opcode,
     src0_reg_idx: u8,
     src1_reg_idx: u8,
     push_base_reg_idx: u8,
@@ -1424,13 +1425,13 @@ fn add_instruction_stack_push_with_dst1(
         .iter()
         .copied()
         .find(|variant| {
-            variant.opcode == Opcode::Add(AddOpcode::Add)
+            variant.opcode == opcode
                 && variant.src0_operand_type == Operand::Full(ImmMemHandlerFlags::UseRegOnly)
                 && variant.dst0_operand_type
                     == Operand::Full(ImmMemHandlerFlags::UseStackWithPushPop)
                 && !variant.flags.iter().any(|f| *f)
         })
-        .expect("Add variant with stack-push dst0 must exist");
+        .expect("opcode variant with stack-push dst0 must exist");
 
     let encoded = DecodedOpcode::<8, EncodingModeProduction> {
         variant,
@@ -1581,17 +1582,21 @@ fn add_with_src0_equal_to_dst1_should_use_original_src0() {
 }
 
 #[test]
-fn add_with_stack_push_dst0_aliasing_dst1_should_use_original_register_for_address() {
+fn add_stack_dst0_aliased_with_dst1_uses_original_register() {
     // `add r0, r0, stack[r5 + 100]` (push form) with `dst1_reg_idx = r5`. The
-    // SP advance pulls the base from r5, and the cycle prologue is expected to
-    // clear r5 only after the address has been resolved. zk_evm captures
-    // `dst0_mem_location` into prestate before the prologue zeroes the register;
-    // vm2 must order the dst0 write before the dst1 clear for stack destinations.
+    // dst0 stack offset is derived from r5; the dst1 clear must run after the
+    // address has been resolved, otherwise the push lands at offset 0 + 100
+    // instead of r5_original + 100.
     const OFFSET_IMM: u16 = 100;
     let sentinel: u16 = 4242;
 
-    let add = add_instruction_stack_push_with_dst1(
-        /* src0 */ 0, /* src1 */ 0, /* push_base */ 5, OFFSET_IMM, /* dst1 */ 5,
+    let add = instruction_with_stack_push_dst0(
+        Opcode::Add(AddOpcode::Add),
+        /* src0 */ 0,
+        /* src1 */ 0,
+        /* push_base */ 5,
+        OFFSET_IMM,
+        /* dst1 */ 5,
     );
     let program = Program::from_raw(vec![add, ret_instruction()], vec![]);
     let mut world = TestWorld::new(&[]);
@@ -1605,6 +1610,55 @@ fn add_with_stack_push_dst0_aliasing_dst1_should_use_original_register_for_addre
     );
 
     let sp_before = vm.state.current_frame.sp;
+    vm.state.registers[5] = U256::from(sentinel);
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+
+    let expected_sp = sp_before.wrapping_add(sentinel.wrapping_add(OFFSET_IMM));
+    assert_eq!(vm.state.current_frame.sp, expected_sp);
+    assert_eq!(vm.state.registers[5], U256::zero());
+}
+
+#[test]
+fn ptr_add_stack_dst0_aliased_with_dst1_uses_original_register() {
+    // `ptr.add r1, r2, stack[r5 + 100]` (push form) with `dst1_reg_idx = r5`.
+    // Same alias hazard as the `add` test above, exercised through `ptr` which
+    // takes the same fix path (Out::IS_REGISTER branch).
+    const OFFSET_IMM: u16 = 100;
+    let sentinel: u16 = 4242;
+
+    let ptr_add = instruction_with_stack_push_dst0(
+        Opcode::Ptr(PtrOpcode::Add),
+        /* src0 */ 1,
+        /* src1 */ 2,
+        /* push_base */ 5,
+        OFFSET_IMM,
+        /* dst1 */ 5,
+    );
+    let program = Program::from_raw(vec![ptr_add, ret_instruction()], vec![]);
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let sp_before = vm.state.current_frame.sp;
+    let pointer = FatPointer {
+        offset: 0,
+        memory_page: HeapId::FIRST,
+        start: 0,
+        length: 32,
+    };
+    vm.state.registers[1] = pointer.into_u256();
+    vm.state.register_pointer_flags |= 1 << 1;
+    vm.state.registers[2] = U256::from(8_u64);
     vm.state.registers[5] = U256::from(sentinel);
 
     assert_eq!(
