@@ -1809,3 +1809,35 @@ fn rollback_should_deallocate_dynamic_decommit_page_from_nested_frame() {
     );
     assert!(vm.state.heaps.contains(decommitter_heap));
 }
+
+#[test]
+fn add_with_dst0_equal_to_dst1_should_yield_sum() {
+    // `add r1, r0, r3` with the encoded `dst1_reg_idx` patched to `r3` (= dst0).
+    // zk_evm cycle order: pre-zero r3, then `add_opcode_apply` calls
+    // `perform_dst0_update(result, ...)` which `update_register_value(dst0_reg_idx, result)`s
+    // r3 (zk_evm/src/vm_state/helpers.rs:422). The pre-zero is overwritten.
+    let add = add_instruction_with_dst1(
+        /* src0 */ 1, /* src1 */ 0, /* dst0 */ 3, /* dst1 */ 3,
+    );
+    let program = Program::from_raw(vec![add, ret_instruction()], vec![]);
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    vm.state.registers[1] = U256::from(42_u64);
+    vm.state.registers[3] = U256::from(0xdead_beef_u64);
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+
+    // Matches zk_evm: dst0 write wins because cycle prologue runs first.
+    assert_eq!(vm.state.registers[3], U256::from(42_u64));
+}
