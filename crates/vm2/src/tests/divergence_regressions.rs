@@ -1831,6 +1831,35 @@ fn ret_panic_should_charge_heap_growth_only_when_abi_overflows() {
 }
 
 #[test]
+fn ret_panic_with_valid_nonzero_abi_should_not_charge_heap_growth() {
+    // Same callee scaffold as the overflow test, but with a valid (non-overflowing)
+    // ABI: start=1_000_000, length=1, source=UseHeap. zk_evm zeroes the returndata
+    // pointer on panic before the upper-bound calculation, so a valid ABI charges
+    // no heap growth — only the overflow/OOB case bumps `upper_bound` to `u32::MAX`.
+    // This test guards against accidentally charging the bound diff on `ret.panic`.
+    const CALLEE_OVERHEAD_BOUND: u32 = 100;
+
+    let mut valid_abi = U256::zero();
+    // length=1 (bits 96..128), start=0x000F_4240 = 1_000_000 (bits 64..96),
+    // source byte = 0 (UseHeap).
+    valid_abi.0[1] = (1u64 << 32) | 0x0000_0000_000F_4240u64;
+
+    let gas_to_pass: u32 = 10_000;
+    let initial_gas: u32 = 1_000_000;
+    let ergs_with_zero_abi =
+        run_ret_panic_capturing_caller_ergs(U256::zero(), gas_to_pass, initial_gas);
+    let ergs_with_valid_nonzero_abi =
+        run_ret_panic_capturing_caller_ergs(valid_abi, gas_to_pass, initial_gas);
+
+    let diff = ergs_with_zero_abi.saturating_sub(ergs_with_valid_nonzero_abi);
+    assert!(
+        diff < CALLEE_OVERHEAD_BOUND,
+        "valid non-zero ABI should not charge heap growth on panic; \
+         diff = {diff}, zero_abi = {ergs_with_zero_abi}, valid_abi = {ergs_with_valid_nonzero_abi}"
+    );
+}
+
+#[test]
 fn rollback_should_deallocate_dynamic_decommit_page_from_nested_frame() {
     let validation_address = Address::from_low_u64_be(2);
     let decommitter_address = Address::from_low_u64_be(3);

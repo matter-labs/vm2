@@ -44,7 +44,14 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
     } else {
         let (raw_abi, is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
         vm.state.clear_dst1(args);
-        let parsed = get_calldata(raw_abi, is_pointer, vm, false).filter(|pointer| {
+        // On panic, zk_evm zeroes the returndata pointer before the heap-growth
+        // calculation, so a valid non-zero ABI charges 0 ergs; only the
+        // out-of-bounds case bumps the upper bound to `u32::MAX`. Threading
+        // `already_failed = panic` into `get_calldata` reproduces both halves:
+        // valid pointers short-circuit to `None` without growing, overflowing
+        // pointers still fall through to `grow(u32::MAX)`.
+        let already_failed = return_type == ReturnType::Panic;
+        let parsed = get_calldata(raw_abi, is_pointer, vm, already_failed).filter(|pointer| {
             if vm.state.current_frame.is_kernel {
                 true
             } else {
