@@ -202,7 +202,7 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
         gas: u32,
         exception_handler: u16,
         is_static: bool,
-        is_evm_interpreter: bool,
+        is_evm_blob_format: bool,
         calldata_heap: HeapId,
         world_before_this_frame: Snapshot,
     ) {
@@ -237,7 +237,7 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
                 self.state.context_u128
             },
             is_static,
-            is_evm_interpreter,
+            is_evm_blob_format,
             world_before_this_frame,
         );
         self.state.context_u128 = 0;
