@@ -100,7 +100,7 @@ where
                 return None;
             }
             let calldata = maybe_calldata?;
-            let (unpaid_decommit, is_evm) = decommit_result?;
+            let (unpaid_decommit, is_evm, is_evm_blob_format) = decommit_result?;
             let code_hash = unpaid_decommit.code_key();
             let should_materialize = unpaid_decommit.should_materialize();
             let program = vm.world_diff.pay_for_decommit(
@@ -119,7 +119,7 @@ where
                 materialize_decommit_page(vm, code_hash, &code, code_page_from_base(new_base_page));
             }
 
-            Some((calldata, program, is_evm))
+            Some((calldata, program, is_evm, is_evm_blob_format))
         })();
 
         let maximum_gas = vm.state.current_frame.gas / 64 * 63;
@@ -128,8 +128,8 @@ where
         let new_frame_gas = normally_passed_gas + mandated_gas;
 
         // A far call pushes a new frame and returns from it in the next instruction if it panics.
-        let (calldata, program, is_evm_interpreter) =
-            fallible_part.unwrap_or_else(|| (U256::zero().into(), Program::new_panicking(), false));
+        let (calldata, program, is_evm_interpreter, is_evm_blob_format) = fallible_part
+            .unwrap_or_else(|| (U256::zero().into(), Program::new_panicking(), false, false));
 
         let new_frame_is_static = IS_STATIC || vm.state.current_frame.is_static;
         vm.push_frame::<M>(
@@ -138,7 +138,7 @@ where
             new_frame_gas,
             exception_handler,
             new_frame_is_static && !is_evm_interpreter,
-            is_evm_interpreter,
+            is_evm_blob_format,
             calldata.memory_page,
             vm.world_diff.snapshot(),
         );
