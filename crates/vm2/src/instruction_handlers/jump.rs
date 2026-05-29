@@ -21,6 +21,7 @@ fn jump<T: Tracer, W: World<T>, In: Source>(
     boilerplate::<opcodes::Jump, _, _>(vm, world, tracer, |vm, args| {
         #[allow(clippy::cast_possible_truncation)] // intentional
         let target = In::get(args, &mut vm.state).low_u32() as u16;
+        vm.state.clear_dst1(args);
 
         let next_instruction = vm.state.current_frame.get_pc_as_u16();
         Register1::set(args, &mut vm.state, next_instruction.into());

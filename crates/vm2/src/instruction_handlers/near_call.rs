@@ -17,6 +17,7 @@ fn near_call<T: Tracer, W: World<T>>(
         let gas_to_pass = Register1::get(args, &mut vm.state).low_u32();
         let destination = Immediate1::get_u16(args);
         let error_handler = Immediate2::get_u16(args);
+        vm.state.clear_dst1(args);
 
         let new_frame_gas = if gas_to_pass == 0 {
             vm.state.current_frame.gas

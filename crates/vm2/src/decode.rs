@@ -17,8 +17,8 @@ use zksync_vm2_interface::{
 use crate::{
     addressing_modes::{
         AbsoluteStack, AdvanceStackPointer, AnyDestination, AnySource, Arguments, CodePage,
-        Immediate1, Immediate2, Register, Register1, Register2, RegisterAndImmediate,
-        RelativeStack,
+        DestinationWriter, Immediate1, Immediate2, Register, Register1, Register2,
+        RegisterAndImmediate, RelativeStack,
     },
     mode_requirements::ModeRequirements,
     Instruction, Predicate, World,
@@ -110,7 +110,7 @@ pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> I
         };
     }
 
-    match parsed.variant.opcode {
+    let mut instruction = match parsed.variant.opcode {
         Opcode::Add(_) => binop!(Add, ()),
         Opcode::Sub(_) => binop!(Sub, ()),
         Opcode::Mul(_) => binop!(Mul, out2),
@@ -206,7 +206,9 @@ pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> I
                 zkevm_opcode_defs::RetOpcode::Revert => {
                     Instruction::from_revert(src1.try_into().unwrap(), label, arguments)
                 }
-                zkevm_opcode_defs::RetOpcode::Panic => Instruction::from_panic(label, arguments),
+                zkevm_opcode_defs::RetOpcode::Panic => {
+                    Instruction::from_panic(src1.try_into().unwrap(), label, arguments)
+                }
             }
         }
         Opcode::Log(x) => match x {
@@ -328,5 +330,8 @@ pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> I
                 arguments,
             )
         }
-    }
+    };
+
+    out2.write_destination(&mut instruction.arguments);
+    instruction
 }

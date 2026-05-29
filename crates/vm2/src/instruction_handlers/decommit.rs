@@ -19,6 +19,7 @@ fn decommit<T: Tracer, W: World<T>>(
     boilerplate_ext::<opcodes::Decommit, _, _>(vm, world, tracer, |vm, args, world, tracer| {
         let code_hash = Register1::get(args, &mut vm.state);
         let extra_cost = Register2::get(args, &mut vm.state).low_u32();
+        vm.state.clear_dst1(args);
 
         let mut buffer = [0u8; 32];
         code_hash.to_big_endian(&mut buffer);

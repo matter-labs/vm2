@@ -30,6 +30,7 @@ where
 {
     boilerplate::<Op, _, _>(vm, world, tracer, |vm, args| {
         let result = Op::get(&vm.state);
+        vm.state.clear_dst1(args);
         Register1::set(args, &mut vm.state, result);
     })
 }
@@ -80,6 +81,7 @@ fn context_meta<T: Tracer, W: World<T>>(
     tracer: &mut T,
 ) -> ExecutionStatus {
     boilerplate::<opcodes::ContextMeta, _, _>(vm, world, tracer, |vm, args| {
+        vm.state.clear_dst1(args);
         let result = VmMetaParameters {
             heap_size: vm.state.current_frame.heap_size,
             aux_heap_size: vm.state.current_frame.aux_heap_size,
@@ -109,6 +111,7 @@ fn set_context_u128<T: Tracer, W: World<T>>(
 ) -> ExecutionStatus {
     boilerplate::<opcodes::SetContextU128, _, _>(vm, world, tracer, |vm, args| {
         let value = Register1::get(args, &mut vm.state).low_u128();
+        vm.state.clear_dst1(args);
         vm.state.set_context_u128(value);
     })
 }
@@ -118,7 +121,8 @@ fn increment_tx_number<T: Tracer, W: World<T>>(
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    boilerplate::<opcodes::IncrementTxNumber, _, _>(vm, world, tracer, |vm, _| {
+    boilerplate::<opcodes::IncrementTxNumber, _, _>(vm, world, tracer, |vm, args| {
+        vm.state.clear_dst1(args);
         vm.start_new_tx();
     })
 }
@@ -128,7 +132,8 @@ fn aux_mutating<T: Tracer, W: World<T>>(
     world: &mut W,
     tracer: &mut T,
 ) -> ExecutionStatus {
-    boilerplate::<opcodes::AuxMutating0, _, _>(vm, world, tracer, |_, _| {
+    boilerplate::<opcodes::AuxMutating0, _, _>(vm, world, tracer, |vm, args| {
+        vm.state.clear_dst1(args);
         // This instruction just crashes or nops
     })
 }

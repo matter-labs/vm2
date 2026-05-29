@@ -47,6 +47,7 @@ where
         let address_mask: U256 = U256::MAX >> (256 - 160);
         let destination_address = Register2::get(args, &mut vm.state) & address_mask;
         let exception_handler = Immediate1::get_u16(args);
+        vm.state.clear_dst1(args);
 
         let mut abi = get_far_call_arguments(raw_abi);
         abi.is_constructor_call = abi.is_constructor_call && vm.state.current_frame.is_kernel;

@@ -36,6 +36,11 @@ pub(crate) trait Source {
 }
 
 pub(crate) trait Destination {
+    /// True when `set`/`set_fat_ptr` write straight to a register identified by
+    /// `args.destination_registers.register1()`; false when they write to a stack
+    /// slot whose address is derived from that register's current value.
+    const IS_REGISTER: bool;
+
     /// Set this register/stack location to value and clear its pointer flag
     fn set(args: &Arguments, state: &mut impl Addressable, value: U256);
 
@@ -213,6 +218,8 @@ impl SourceWriter for Register2 {
 }
 
 impl Destination for Register1 {
+    const IS_REGISTER: bool = true;
+
     fn set(args: &Arguments, state: &mut impl Addressable, value: U256) {
         args.destination_registers.register1().set(state, value);
     }
@@ -229,6 +236,8 @@ impl DestinationWriter for Register1 {
 }
 
 impl Destination for Register2 {
+    const IS_REGISTER: bool = true;
+
     fn set(args: &Arguments, state: &mut impl Addressable, value: U256) {
         args.destination_registers.register2().set(state, value);
     }
@@ -338,6 +347,8 @@ impl<T: StackAddressing> Source for T {
 }
 
 impl<T: StackAddressing> Destination for T {
+    const IS_REGISTER: bool = false;
+
     fn set(args: &Arguments, state: &mut impl Addressable, value: U256) {
         let address = Self::address_for_set(args, state);
         state.write_stack(address, value);

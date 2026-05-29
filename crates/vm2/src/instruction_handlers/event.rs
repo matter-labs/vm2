@@ -28,6 +28,7 @@ fn event<T: Tracer, W: World<T>>(
                 tx_number: vm.state.transaction_number,
             });
         }
+        vm.state.clear_dst1(args);
     })
 }
 
@@ -40,6 +41,7 @@ fn l2_to_l1<T: Tracer, W: World<T>>(
         let key = Register1::get(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
         let is_service = Immediate1::get(args, &mut vm.state).low_u32() == 1;
+        vm.state.clear_dst1(args);
         vm.world_diff.record_l2_to_l1_log(L2ToL1Log {
             key,
             value,
