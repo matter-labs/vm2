@@ -2,7 +2,7 @@ use primitive_types::{H160, U256};
 use zksync_vm2_interface::{HeapId, Tracer};
 
 use crate::{
-    addressing_modes::Addressable,
+    addressing_modes::{Addressable, Arguments, Destination, Register2},
     callframe::{Callframe, CallframeSnapshot},
     fat_pointer::FatPointer,
     heap::Heaps,
@@ -92,6 +92,14 @@ impl<T, W> State<T, W> {
 
     pub(crate) fn set_context_u128(&mut self, value: u128) {
         self.context_u128 = value;
+    }
+
+    /// Zeroes the register identified by the encoded `dst1_reg_idx` in `args`.
+    /// Opcodes must invoke this between reading their source operands and
+    /// writing their outputs.
+    #[inline(always)]
+    pub(crate) fn clear_dst1(&mut self, args: &Arguments) {
+        Register2::set(args, self, U256::zero());
     }
 
     pub(crate) fn get_context_u128(&self) -> u128 {

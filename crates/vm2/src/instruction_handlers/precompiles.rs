@@ -78,7 +78,7 @@ fn precompile_call<T: Tracer, W: World<T>>(
             // This is safe because system contracts are trusted
             let aux_data = PrecompileAuxData::from_u256(Register2::get(args, &mut vm.state));
             let raw_abi = Register1::get(args, &mut vm.state);
-            Register2::set(args, &mut vm.state, U256::zero());
+            vm.state.clear_dst1(args);
             let Ok(()) = vm.state.use_gas(aux_data.extra_ergs_cost) else {
                 Register1::set(args, &mut vm.state, U256::zero());
                 return;

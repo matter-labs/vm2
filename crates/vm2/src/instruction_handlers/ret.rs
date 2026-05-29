@@ -10,9 +10,7 @@ use super::{
     monomorphization::{match_boolean, monomorphize, parameterize},
 };
 use crate::{
-    addressing_modes::{
-        Arguments, Destination, Immediate1, Register1, Register2, Source, INVALID_INSTRUCTION_COST,
-    },
+    addressing_modes::{Arguments, Immediate1, Register1, Source, INVALID_INSTRUCTION_COST},
     callframe::FrameRemnant,
     instruction::{ExecutionEnd, ExecutionStatus},
     mode_requirements::ModeRequirements,
@@ -34,7 +32,7 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
         snapshot,
     }) = vm.state.current_frame.pop_near_call()
     {
-        Register2::set(args, &mut vm.state, U256::zero());
+        vm.state.clear_dst1(args);
         if TO_LABEL {
             let pc = Immediate1::get_u16(args);
             vm.state.current_frame.set_pc_from_u16(pc);
@@ -45,7 +43,7 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
         (snapshot, near_call_leftover_gas)
     } else {
         let (raw_abi, is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
-        Register2::set(args, &mut vm.state, U256::zero());
+        vm.state.clear_dst1(args);
         let parsed = get_calldata(raw_abi, is_pointer, vm, false).filter(|pointer| {
             if vm.state.current_frame.is_kernel {
                 true

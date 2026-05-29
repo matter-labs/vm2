@@ -94,7 +94,7 @@ fn load<T: Tracer, W: World<T>, H: HeapFromState, In: Source, const INCREMENT: b
         // Pointers need not be masked here even though we do not care about them being pointers.
         // They will panic, though because they are larger than 2^32.
         let (pointer, input_is_pointer) = In::get_with_pointer_flag(args, &mut vm.state);
-        Register2::set(args, &mut vm.state, U256::zero());
+        vm.state.clear_dst1(args);
 
         if bigger_than_last_address(pointer) {
             let _ = vm.state.use_gas(u32::MAX);
@@ -134,7 +134,7 @@ where
         // They will panic, though because they are larger than 2^32.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
-        Register2::set(args, &mut vm.state, U256::zero());
+        vm.state.clear_dst1(args);
 
         if bigger_than_last_address(pointer) {
             let _ = vm.state.use_gas(u32::MAX);
@@ -186,7 +186,7 @@ fn load_pointer<T: Tracer, W: World<T>, const INCREMENT: bool>(
 ) -> ExecutionStatus {
     boilerplate::<opcodes::PointerRead, _, _>(vm, world, tracer, |vm, args| {
         let (input, input_is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
-        Register2::set(args, &mut vm.state, U256::zero());
+        vm.state.clear_dst1(args);
         if !input_is_pointer {
             vm.state.current_frame.pc = spontaneous_panic();
             return;
@@ -223,7 +223,7 @@ fn load_static<T: Tracer, W: World<T>, In: Source, const INCREMENT: bool>(
         // Static memory uses a plain 32-bit offset in src0, same as heap UMA ops.
         // Pointer-typed values are still accepted as raw words and then validated by range check.
         let (pointer, input_is_pointer) = In::get_with_pointer_flag(args, &mut vm.state);
-        Register2::set(args, &mut vm.state, U256::zero());
+        vm.state.clear_dst1(args);
 
         if bigger_than_last_address(pointer) {
             vm.state.current_frame.pc = spontaneous_panic();
@@ -254,7 +254,7 @@ where
         // Pointer-typed values are still accepted as raw words and then validated by range check.
         let (pointer, _) = In::get_with_pointer_flag(args, &mut vm.state);
         let value = Register2::get(args, &mut vm.state);
-        Register2::set(args, &mut vm.state, U256::zero());
+        vm.state.clear_dst1(args);
 
         if bigger_than_last_address(pointer) {
             vm.state.current_frame.pc = spontaneous_panic();

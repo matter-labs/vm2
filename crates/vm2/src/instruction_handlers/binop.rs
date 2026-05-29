@@ -36,7 +36,7 @@ where
     boilerplate::<Op, _, _>(vm, world, tracer, |vm, args| {
         let a = In1::get(args, &mut vm.state);
         let b = Register2::get(args, &mut vm.state);
-        Register2::set(args, &mut vm.state, U256::zero());
+        vm.state.clear_dst1(args);
         let (a, b) = if SWAP { (b, a) } else { (a, b) };
 
         let (result, out2, flags) = Op::perform(&a, &b);
