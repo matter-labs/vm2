@@ -353,6 +353,10 @@ impl Heaps {
         );
 
         let slot = decoded_dynamic_slot_mut(&mut self.dynamic, decoded);
+        // `decoded_page_mut_for_write` populates dynamic slots lazily, so in principle a prior
+        // write could materialize this slot. In production, `allocate_at` is only called from
+        // far-call setup on the heap/aux slots of a freshly assigned base group, which no
+        // prior code path writes to. If this fires, that invariant has been broken.
         assert!(
             slot.is_none(),
             "heap page {} is already allocated",
@@ -369,6 +373,11 @@ impl Heaps {
         })
     }
 
+    // The three panics in this function flag VM-internal bookkeeping bugs, not
+    // reachable conditions: the VM only deallocates pages it previously allocated via
+    // `allocate_at` (frame pop in `pop_frame`, snapshot rollback in `State::rollback`). The
+    // reference `zk_evm` has no deallocation path of its own, so there is no behaviour to
+    // diverge from here — these panics remain as fail-fast diagnostics for our own bookkeeping.
     pub(crate) fn deallocate(&mut self, page: HeapId) {
         let decoded = DecodedPage::decode(page)
             .unwrap_or_else(|| panic!("heap page {} is not decodable", page.as_u32()));
@@ -387,6 +396,11 @@ impl Heaps {
 
     pub(crate) fn write_u256(&mut self, page: HeapId, start_address: u32, value: U256) {
         self.record_bootloader_word_rollback(page, start_address);
+        // Current callers pass `HeapId`s from VM-controlled sources: store opcodes (current
+        // frame heap/aux), static memory, and kernel-gated precompile output. The
+        // `StateInterface::write_heap_u256` tracer entry can in principle pass an arbitrary
+        // `HeapId`. The reference `zk_evm` would silently materialize any page number; we
+        // keep the panic as a tripwire against any new code path.
         let decoded = DecodedPage::decode(page)
             .unwrap_or_else(|| panic!("heap page {} is not decodable", page.as_u32()));
         let (heap, pagepool) = self.decoded_page_mut_for_write(decoded);
@@ -395,6 +409,11 @@ impl Heaps {
 
     pub(crate) fn write_bytes(&mut self, page: HeapId, start_address: u32, bytes: &[u8]) {
         self.record_bootloader_range_rollback(page, start_address, bytes.len());
+        // Same tripwire rationale as `write_u256`: the only production callers go through
+        // `materialize_decommit_page` (a fresh code page on far call, or the current frame
+        // heap from the `Decommit` opcode), both supplying decodable `HeapId`s. An
+        // undecodable page here indicates a new code path that should be reviewed before
+        // merging.
         let decoded = DecodedPage::decode(page)
             .unwrap_or_else(|| panic!("heap page {} is not decodable", page.as_u32()));
         let (heap, pagepool) = self.decoded_page_mut_for_write(decoded);
