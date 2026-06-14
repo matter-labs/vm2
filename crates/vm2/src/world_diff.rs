@@ -32,7 +32,7 @@ pub struct WorldDiff {
     /// there was no pending write for that slot. This is the dedup's
     /// `did_read_at_depth_zero` predicate, materialized incrementally so the
     /// verifier can derive deduplicated storage logs without the full
-    /// storage_logs trace.
+    /// `storage_logs` trace.
     ///
     /// Why not just use `read_storage_slots`?
     ///   `read_storage_slots` also gets populated by `write_storage` (for
@@ -115,8 +115,8 @@ impl WorldDiff {
     /// an in-circuit storage argument from `storage_log_queries()` (e.g. Boojum
     /// witness generation via `sort_storage_access_queries`). A re-execution
     /// verifier with no in-circuit storage argument (e.g. Airbender), which
-    /// derives the deduplicated storage set from `committed_reads_at_depth_zero`
-    /// + `storage_changes` instead, can pass `false` to avoid the trace's
+    /// derives the deduplicated storage set from `committed_reads_at_depth_zero` +
+    /// `storage_changes` instead, can pass `false` to avoid the trace's
     /// memory cost (~270 MiB on large batches).
     ///
     /// Must be called before any storage access; toggling mid-execution would
@@ -125,8 +125,8 @@ impl WorldDiff {
         self.skip_storage_logs = !record;
     }
 
-    /// Reserve capacity for the auxiliary log Vecs (events, pubdata_costs,
-    /// storage_refunds). Each of these doubles during execution and the
+    /// Reserve capacity for the auxiliary log Vecs (events, `pubdata_costs`,
+    /// `storage_refunds`). Each of these doubles during execution and the
     /// transient peak is non-trivial inside the verifier guest.
     pub fn reserve_auxiliary_log_capacity(
         &mut self,
@@ -200,11 +200,7 @@ impl WorldDiff {
         // the slot still reads its initial. One backend call total (only on
         // the first read of a slot), versus the previous path which routed
         // through `just_read_storage` *and* `world.read_storage`.
-        let live_write = self
-            .storage_changes
-            .as_ref()
-            .get(&(contract, key))
-            .copied();
+        let live_write = self.storage_changes.as_ref().get(&(contract, key)).copied();
         let value = live_write.unwrap_or(initial_value);
         if live_write.is_none() {
             // No pending write for this slot at read time — mirrors the dedup
@@ -349,14 +345,14 @@ impl WorldDiff {
     /// Iterates over slots that were committed-read at depth zero (the
     /// dedup's `did_read_at_depth_zero` set). Combined with `storage_changes`
     /// this is the set of slots that appear in the deduplicated storage logs.
-    /// Sorted by (address, key) via the BTreeSet backing.
+    /// Sorted by (address, key) via the `BTreeSet` backing.
     pub fn committed_reads_at_depth_zero_iter(&self) -> impl Iterator<Item = (H160, U256)> + '_ {
         self.committed_reads_at_depth_zero.as_ref().iter().copied()
     }
 
     /// Returns the initial (pre-batch) value of a slot if it has been
     /// touched by a read or write during execution. Used by per-slot summary
-    /// derivation in place of walking the storage_logs trace.
+    /// derivation in place of walking the `storage_logs` trace.
     pub fn initial_storage_value(&self, contract: H160, key: U256) -> Option<crate::StorageSlot> {
         self.storage_initial_values.get(&(contract, key)).copied()
     }
@@ -916,7 +912,9 @@ mod tests {
             .committed_reads_at_depth_zero_iter()
             .any(|slot| slot == (contract, key)));
         assert_eq!(
-            world_diff.initial_storage_value(contract, key).map(|s| s.value),
+            world_diff
+                .initial_storage_value(contract, key)
+                .map(|s| s.value),
             Some(U256::zero())
         );
     }
