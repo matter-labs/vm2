@@ -65,6 +65,18 @@ pub struct WorldDiff {
 
     // This is never rolled back. It is just a cache to avoid asking these from DB every time.
     storage_initial_values: BTreeMap<(H160, U256), StorageSlot>,
+
+    /// When set, `read_storage_inner` / `write_storage` skip appending to the
+    /// per-access `storage_logs` / `rollback_storage_logs` trace. Configured
+    /// once before execution via [`Self::set_record_storage_logs`]; never
+    /// rolled back. Defaults to `false` (recording on), so consumers that
+    /// build an in-circuit storage argument from `storage_log_queries()`
+    /// (e.g. Boojum witness generation via `sort_storage_access_queries`) are
+    /// unaffected. Re-execution verifiers that derive the deduplicated set
+    /// from `committed_reads_at_depth_zero` + `storage_changes` and have no
+    /// in-circuit storage argument (e.g. Airbender) opt out to drop the
+    /// trace's memory cost.
+    skip_storage_logs: bool,
 }
 
 #[derive(Debug)]
@@ -96,6 +108,23 @@ pub(crate) enum DecommitState {
 }
 
 impl WorldDiff {
+    /// Controls whether the per-access storage log trace
+    /// (`storage_logs` / `rollback_storage_logs`) is accumulated.
+    ///
+    /// Recording is **on by default** — it is required by consumers that build
+    /// an in-circuit storage argument from `storage_log_queries()` (e.g. Boojum
+    /// witness generation via `sort_storage_access_queries`). A re-execution
+    /// verifier with no in-circuit storage argument (e.g. Airbender), which
+    /// derives the deduplicated storage set from `committed_reads_at_depth_zero`
+    /// + `storage_changes` instead, can pass `false` to avoid the trace's
+    /// memory cost (~270 MiB on large batches).
+    ///
+    /// Must be called before any storage access; toggling mid-execution would
+    /// leave a partial trace.
+    pub fn set_record_storage_logs(&mut self, record: bool) {
+        self.skip_storage_logs = !record;
+    }
+
     /// Reserve capacity for the auxiliary log Vecs (events, pubdata_costs,
     /// storage_refunds). Each of these doubles during execution and the
     /// transient peak is non-trivial inside the verifier guest.
@@ -182,7 +211,29 @@ impl WorldDiff {
             // function's `did_read_at_depth_zero` flag.
             self.committed_reads_at_depth_zero.add((contract, key));
         }
-        let _ = tx_number_in_block;
+        if !self.skip_storage_logs {
+            // Boojum mode: accumulate the per-access trace. `value` equals what
+            // `just_read_storage` would return, so the log matches the legacy
+            // shape (read_value == written_value for a read).
+            // Note: timestamp logic does not match `zk_evm`, we're only ensuring
+            // that the timestamps are unique. This is fine as long as the witness
+            // is not generated from these logs.
+            self.storage_logs.push(LogQuery {
+                timestamp: Timestamp(
+                    u32::try_from(self.storage_logs.len()).expect("Too many storage logs"),
+                ),
+                tx_number_in_block,
+                aux_byte: STORAGE_AUX_BYTE,
+                shard_id: 0,
+                address: contract,
+                key,
+                read_value: value,
+                written_value: value,
+                rw_flag: false,
+                rollback: false,
+                is_service: false,
+            });
+        }
         (value, newly_added)
     }
 
@@ -211,7 +262,30 @@ impl WorldDiff {
         value: U256,
         tx_number_in_block: u16,
     ) -> u32 {
-        let _ = tx_number_in_block;
+        if !self.skip_storage_logs {
+            // Boojum mode: record the write and its rollback twin before the
+            // change lands, so `read_value` is the pre-write value (matching
+            // the legacy trace shape).
+            let read_value = self.just_read_storage(world, contract, key);
+            let log_query = LogQuery {
+                timestamp: Timestamp(u32::try_from(self.storage_logs.len()).unwrap_or(u32::MAX)),
+                tx_number_in_block,
+                aux_byte: STORAGE_AUX_BYTE,
+                shard_id: 0,
+                address: contract,
+                key,
+                read_value,
+                written_value: value,
+                rw_flag: true,
+                rollback: false,
+                is_service: false,
+            };
+            self.storage_logs.push(log_query);
+            self.rollback_storage_logs.push(LogQuery {
+                rollback: true,
+                ..log_query
+            });
+        }
         self.storage_changes.insert((contract, key), value);
 
         let initial_value = self
@@ -812,6 +886,39 @@ mod tests {
         assert!(logs[3].rw_flag && logs[3].rollback);
         assert_eq!(logs[3].read_value, logs[2].read_value);
         assert_eq!(logs[3].written_value, logs[2].written_value);
+    }
+
+    #[test]
+    fn skip_storage_logs_drops_trace_but_keeps_dedup_inputs() {
+        let mut world_diff = WorldDiff::default();
+        world_diff.set_record_storage_logs(false);
+        let mut world = TestWorld::default();
+        let contract = H160::zero();
+        let key = U256::from(1);
+
+        // Same access pattern as `storage_logs_include_reads_writes_and_rollbacks`.
+        let (value, _) = world_diff.read_storage(&mut world, &mut (), contract, key, 0);
+        assert_eq!(value, U256::zero());
+        world_diff.write_storage(&mut world, &mut (), contract, key, U256::from(10), 0);
+        let snapshot = world_diff.snapshot();
+        world_diff.write_storage(&mut world, &mut (), contract, key, U256::from(20), 0);
+        world_diff.append_rollback_logs(&snapshot);
+        world_diff.rollback(snapshot);
+
+        // The per-access trace is empty — the whole point of opting out.
+        assert!(world_diff.storage_log_queries().is_empty());
+        assert!(world_diff.rollback_storage_logs.is_empty());
+
+        // ...but the maps a re-execution verifier derives the deduplicated set
+        // from are still populated: the slot was committed-read at depth zero
+        // and its initial value cached.
+        assert!(world_diff
+            .committed_reads_at_depth_zero_iter()
+            .any(|slot| slot == (contract, key)));
+        assert_eq!(
+            world_diff.initial_storage_value(contract, key).map(|s| s.value),
+            Some(U256::zero())
+        );
     }
 
     #[test]
