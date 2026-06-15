@@ -36,6 +36,35 @@ impl<K: Ord + Clone, V: Clone> RollbackableMap<K, V> {
     }
 }
 
+impl<K: Ord + Clone> RollbackableMap<K, u8> {
+    /// OR `flags` into the entry for `key` (an absent entry counts as `0`) in a
+    /// single map traversal, journaling the prior value so the change rolls
+    /// back. Returns `true` iff at least one previously-unset bit was set.
+    ///
+    /// Equivalent to a `get` followed by a conditional `insert`, but with one
+    /// traversal instead of two, and no journal entry when no bit changes.
+    pub(crate) fn add_flags(&mut self, key: K, flags: u8) -> bool {
+        use std::collections::btree_map::Entry;
+        match self.map.entry(key) {
+            Entry::Occupied(mut entry) => {
+                let old = *entry.get();
+                let new = old | flags;
+                if new == old {
+                    return false;
+                }
+                entry.insert(new);
+                self.old_entries.push((entry.key().clone(), Some(old)));
+                true
+            }
+            Entry::Vacant(entry) => {
+                self.old_entries.push((entry.key().clone(), None));
+                entry.insert(flags);
+                true
+            }
+        }
+    }
+}
+
 impl<K: Ord, V> Rollback for RollbackableMap<K, V> {
     type Snapshot = usize;
 

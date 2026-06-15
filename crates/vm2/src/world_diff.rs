@@ -155,15 +155,10 @@ impl WorldDiff {
 
     /// Set `flag` on a slot's access-flags entry, returning `true` iff the flag
     /// was newly set (mirrors the former per-set `RollbackableSet::add`). The
-    /// 52-byte `(address, key)` is stored once across all three flags.
+    /// 52-byte `(address, key)` is stored once across all three flags. Single
+    /// map traversal — see [`RollbackableMap::add_flags`].
     fn slot_add_flag(&mut self, key: (H160, U256), flag: u8) -> bool {
-        let cur = self.slot_flags.as_ref().get(&key).copied().unwrap_or(0);
-        if cur & flag == 0 {
-            self.slot_flags.insert(key, cur | flag);
-            true
-        } else {
-            false
-        }
+        self.slot_flags.add_flags(key, flag)
     }
 
     /// Returns the storage slot's value and a refund based on its hot/cold status.
