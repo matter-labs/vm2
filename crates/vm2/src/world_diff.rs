@@ -17,7 +17,9 @@ use crate::{
 /// (formerly the separate `storage_changes` + `paid_changes` maps).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct StorageWriteEntry {
+    /// Pending written value for the slot.
     pub value: U256,
+    /// Pubdata cost paid for writing this slot (0 for free-storage slots).
     pub paid: u32,
 }
 
@@ -65,7 +67,7 @@ pub struct WorldDiff {
     /// (whole-VM only), matching the original sets. See the `SLOT_*` consts.
     ///
     /// `SLOT_COMMITTED_READ_Z0` keeps the dedup's `did_read_at_depth_zero`
-    /// predicate: set only by `read_storage_inner`, only when `storage_changes`
+    /// predicate: set only by `read_storage_inner`, only when `storage_writes`
     /// has no pending write for the slot at read time.
     slot_flags: RollbackableMap<(H160, U256), u8>,
 
@@ -79,7 +81,7 @@ pub struct WorldDiff {
     /// build an in-circuit storage argument from `storage_log_queries()`
     /// (e.g. Boojum witness generation via `sort_storage_access_queries`) are
     /// unaffected. Re-execution verifiers that derive the deduplicated set
-    /// from `committed_reads_at_depth_zero` + `storage_changes` and have no
+    /// from the `SLOT_COMMITTED_READ_Z0` flag + `storage_writes` and have no
     /// in-circuit storage argument (e.g. Airbender) opt out to drop the
     /// trace's memory cost.
     skip_storage_logs: bool,
@@ -119,8 +121,8 @@ impl WorldDiff {
     /// an in-circuit storage argument from `storage_log_queries()` (e.g. Boojum
     /// witness generation via `sort_storage_access_queries`). A re-execution
     /// verifier with no in-circuit storage argument (e.g. Airbender), which
-    /// derives the deduplicated storage set from `committed_reads_at_depth_zero` +
-    /// `storage_changes` instead, can pass `false` to avoid the trace's
+    /// derives the deduplicated storage set from the `SLOT_COMMITTED_READ_Z0`
+    /// flag + `storage_writes` instead, can pass `false` to avoid the trace's
     /// memory cost (~270 MiB on large batches).
     ///
     /// Must be called before any storage access; toggling mid-execution would
@@ -307,13 +309,6 @@ impl WorldDiff {
             .as_ref()
             .get(&(contract, key))
             .map_or(0, |e| e.paid);
-        self.storage_writes.insert(
-            (contract, key),
-            StorageWriteEntry {
-                value,
-                paid: prior_paid,
-            },
-        );
 
         let initial_value = self
             .storage_initial_values
@@ -321,6 +316,15 @@ impl WorldDiff {
             .or_insert_with(|| world.read_storage(contract, key));
 
         if world.is_free_storage_slot(&contract, &key) {
+            // Free write: the value changes but no pubdata is paid, so the
+            // entry keeps its prior paid amount. Single insert.
+            self.storage_writes.insert(
+                (contract, key),
+                StorageWriteEntry {
+                    value,
+                    paid: prior_paid,
+                },
+            );
             if self.slot_add_flag((contract, key), SLOT_WRITTEN) {
                 tracer.on_extra_prover_cycles(CycleStats::StorageWrite);
             }
@@ -332,9 +336,8 @@ impl WorldDiff {
         }
 
         let update_cost = world.cost_of_writing_storage(*initial_value, value);
-        // `prior_paid` is still the entry's paid amount — nothing between here
-        // and the insert above touched it — so reuse it instead of re-querying.
         let prepaid = prior_paid;
+        // Single insert with the final paid amount (no intermediate write).
         self.storage_writes.insert(
             (contract, key),
             StorageWriteEntry {
@@ -380,7 +383,7 @@ impl WorldDiff {
     }
 
     /// Iterates over slots that were committed-read at depth zero (the
-    /// dedup's `did_read_at_depth_zero` set). Combined with `storage_changes`
+    /// dedup's `did_read_at_depth_zero` set). Combined with `storage_writes`
     /// this is the set of slots that appear in the deduplicated storage logs.
     /// Sorted by (address, key) via the `slot_flags` map's `BTreeMap` backing.
     pub fn committed_reads_at_depth_zero_iter(&self) -> impl Iterator<Item = (H160, U256)> + '_ {
@@ -413,7 +416,7 @@ impl WorldDiff {
         &self.storage_logs[snapshot.storage_logs_len..]
     }
 
-    #[doc(hidden)] // duplicates `StateInterface::get_storage_state()`, but we use random access in some places
+    #[doc(hidden)] // like `StateInterface::get_storage_state()` but exposes the full `StorageWriteEntry` (value + paid) for random access
     pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), StorageWriteEntry> {
         self.storage_writes.as_ref()
     }
@@ -857,6 +860,47 @@ mod tests {
         fn is_free_storage_slot(&self, _: &H160, _: &U256) -> bool {
             false
         }
+    }
+
+    /// A world with a fixed non-zero write cost, to exercise the merged `paid`
+    /// accounting (`prior_paid` / `prepaid`) that `NoWorld`/`TestWorld` (cost 0)
+    /// leave untested.
+    struct CostWorld;
+
+    impl StorageInterface for CostWorld {
+        fn read_storage(&mut self, _: H160, _: U256) -> StorageSlot {
+            StorageSlot::EMPTY
+        }
+
+        fn cost_of_writing_storage(&mut self, _: StorageSlot, _: U256) -> u32 {
+            100
+        }
+
+        fn is_free_storage_slot(&self, _: &H160, _: &U256) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn merged_storage_write_tracks_paid_and_rolls_back() {
+        let mut world_diff = WorldDiff::default();
+        let (contract, key) = (H160::zero(), U256::from(1));
+
+        // First write: prior_paid = 0, entry's paid set to the write cost.
+        world_diff.write_storage(&mut CostWorld, &mut (), contract, key, U256::from(5), 0);
+        let e = world_diff.storage_writes.as_ref()[&(contract, key)];
+        assert_eq!((e.value, e.paid), (U256::from(5), 100));
+
+        // Second write reuses prior_paid (=100) as `prepaid`; entry re-set.
+        let snapshot = world_diff.snapshot();
+        world_diff.write_storage(&mut CostWorld, &mut (), contract, key, U256::from(6), 0);
+        let e = world_diff.storage_writes.as_ref()[&(contract, key)];
+        assert_eq!((e.value, e.paid), (U256::from(6), 100));
+
+        // Rollback restores both the value and the paid amount of the merged entry.
+        world_diff.rollback(snapshot);
+        let e = world_diff.storage_writes.as_ref()[&(contract, key)];
+        assert_eq!((e.value, e.paid), (U256::from(5), 100));
     }
 
     #[derive(Default)]
