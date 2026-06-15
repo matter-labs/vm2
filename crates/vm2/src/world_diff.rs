@@ -13,6 +13,12 @@ use crate::{
     StorageInterface, StorageSlot,
 };
 
+/// Per-slot access flags packed into `WorldDiff::slot_flags` (one byte per
+/// `(address, key)`), replacing three separate `(address, key)` sets.
+const SLOT_READ: u8 = 1;
+const SLOT_WRITTEN: u8 = 1 << 1;
+const SLOT_COMMITTED_READ_Z0: u8 = 1 << 2;
+
 /// Pending modifications to the global state that are executed at the end of a block.
 /// In other words, side effects.
 #[derive(Debug, Default)]
@@ -28,22 +34,6 @@ pub struct WorldDiff {
     pubdata_costs: RollbackableLog<i32>,
     storage_logs: Vec<LogQuery>,
     rollback_storage_logs: Vec<LogQuery>,
-    /// Slots that were *committed-read at depth zero* — read at a moment when
-    /// there was no pending write for that slot. This is the dedup's
-    /// `did_read_at_depth_zero` predicate, materialized incrementally so the
-    /// verifier can derive deduplicated storage logs without the full
-    /// `storage_logs` trace.
-    ///
-    /// Why not just use `read_storage_slots`?
-    ///   `read_storage_slots` also gets populated by `write_storage` (for
-    ///   refund/cold-write tracking) and is *not* rolled back on internal
-    ///   frame revert. So a slot whose only operation was a write that
-    ///   reverted still ends up in `read_storage_slots`. The dedup correctly
-    ///   skips such a slot; `committed_reads_at_depth_zero` matches that
-    ///   semantic by only being added by `read_storage_inner` and only when
-    ///   `storage_changes` is empty for the slot at the time of read.
-    committed_reads_at_depth_zero: RollbackableSet<(H160, U256)>,
-
     // The fields below are only rolled back when the whole VM is rolled back.
     /// Tracks decommit visibility state for each bytecode hash.
     ///
@@ -60,8 +50,15 @@ pub struct WorldDiff {
     ///
     /// This follows external snapshot / rollback semantics together with `decommitted_hashes`.
     decommit_pinned_pages: RollbackableSet<u32>,
-    read_storage_slots: RollbackableSet<(H160, U256)>,
-    written_storage_slots: RollbackableSet<(H160, U256)>,
+    /// Per-slot access flags merged from three former `(address, key)` sets
+    /// (read / written / committed-read-at-depth-zero) so the 52-byte key is
+    /// stored once instead of three times. External-rollback semantics
+    /// (whole-VM only), matching the original sets. See the `SLOT_*` consts.
+    ///
+    /// `SLOT_COMMITTED_READ_Z0` keeps the dedup's `did_read_at_depth_zero`
+    /// predicate: set only by `read_storage_inner`, only when `storage_changes`
+    /// has no pending write for the slot at read time.
+    slot_flags: RollbackableMap<(H160, U256), u8>,
 
     // This is never rolled back. It is just a cache to avoid asking these from DB every time.
     storage_initial_values: BTreeMap<(H160, U256), StorageSlot>,
@@ -84,9 +81,7 @@ pub(crate) struct ExternalSnapshot {
     internal_snapshot: Snapshot,
     pub(crate) decommitted_hashes: <RollbackableMap<U256, DecommitState> as Rollback>::Snapshot,
     decommit_pinned_pages: <RollbackableSet<u32> as Rollback>::Snapshot,
-    read_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
-    written_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
-    committed_reads_at_depth_zero: <RollbackableSet<(H160, U256)> as Rollback>::Snapshot,
+    slot_flags: <RollbackableMap<(H160, U256), u8> as Rollback>::Snapshot,
     storage_refunds: <RollbackableLog<u32> as Rollback>::Snapshot,
     pubdata_costs: <RollbackableLog<i32> as Rollback>::Snapshot,
 }
@@ -139,6 +134,19 @@ impl WorldDiff {
         self.storage_refunds.reserve(storage_refunds);
     }
 
+    /// Set `flag` on a slot's access-flags entry, returning `true` iff the flag
+    /// was newly set (mirrors the former per-set `RollbackableSet::add`). The
+    /// 52-byte `(address, key)` is stored once across all three flags.
+    fn slot_add_flag(&mut self, key: (H160, U256), flag: u8) -> bool {
+        let cur = self.slot_flags.as_ref().get(&key).copied().unwrap_or(0);
+        if cur & flag == 0 {
+            self.slot_flags.insert(key, cur | flag);
+            true
+        } else {
+            false
+        }
+    }
+
     /// Returns the storage slot's value and a refund based on its hot/cold status.
     pub(crate) fn read_storage(
         &mut self,
@@ -182,7 +190,7 @@ impl WorldDiff {
         key: U256,
         tx_number_in_block: u16,
     ) -> (U256, bool) {
-        let newly_added = self.read_storage_slots.add((contract, key));
+        let newly_added = self.slot_add_flag((contract, key), SLOT_READ);
         if newly_added {
             tracer.on_extra_prover_cycles(CycleStats::StorageRead);
         }
@@ -205,7 +213,7 @@ impl WorldDiff {
         if live_write.is_none() {
             // No pending write for this slot at read time — mirrors the dedup
             // function's `did_read_at_depth_zero` flag.
-            self.committed_reads_at_depth_zero.add((contract, key));
+            self.slot_add_flag((contract, key), SLOT_COMMITTED_READ_Z0);
         }
         if !self.skip_storage_logs {
             // Boojum mode: accumulate the per-access trace. `value` equals what
@@ -290,10 +298,10 @@ impl WorldDiff {
             .or_insert_with(|| world.read_storage(contract, key));
 
         if world.is_free_storage_slot(&contract, &key) {
-            if self.written_storage_slots.add((contract, key)) {
+            if self.slot_add_flag((contract, key), SLOT_WRITTEN) {
                 tracer.on_extra_prover_cycles(CycleStats::StorageWrite);
             }
-            self.read_storage_slots.add((contract, key));
+            self.slot_add_flag((contract, key), SLOT_READ);
 
             self.storage_refunds.push(WARM_WRITE_REFUND);
             self.pubdata_costs.push(0);
@@ -306,10 +314,10 @@ impl WorldDiff {
             .insert((contract, key), update_cost)
             .unwrap_or(0);
 
-        let refund = if self.written_storage_slots.add((contract, key)) {
+        let refund = if self.slot_add_flag((contract, key), SLOT_WRITTEN) {
             tracer.on_extra_prover_cycles(CycleStats::StorageWrite);
 
-            if self.read_storage_slots.add((contract, key)) {
+            if self.slot_add_flag((contract, key), SLOT_READ) {
                 0
             } else {
                 COLD_WRITE_AFTER_WARM_READ_REFUND
@@ -345,9 +353,13 @@ impl WorldDiff {
     /// Iterates over slots that were committed-read at depth zero (the
     /// dedup's `did_read_at_depth_zero` set). Combined with `storage_changes`
     /// this is the set of slots that appear in the deduplicated storage logs.
-    /// Sorted by (address, key) via the `BTreeSet` backing.
+    /// Sorted by (address, key) via the `slot_flags` map's `BTreeMap` backing.
     pub fn committed_reads_at_depth_zero_iter(&self) -> impl Iterator<Item = (H160, U256)> + '_ {
-        self.committed_reads_at_depth_zero.as_ref().iter().copied()
+        self.slot_flags
+            .as_ref()
+            .iter()
+            .filter(|(_, f)| **f & SLOT_COMMITTED_READ_Z0 != 0)
+            .map(|(k, _)| *k)
     }
 
     /// Returns the initial (pre-batch) value of a slot if it has been
@@ -551,9 +563,7 @@ impl WorldDiff {
             },
             decommitted_hashes: self.decommitted_hashes.snapshot(),
             decommit_pinned_pages: self.decommit_pinned_pages.snapshot(),
-            read_storage_slots: self.read_storage_slots.snapshot(),
-            written_storage_slots: self.written_storage_slots.snapshot(),
-            committed_reads_at_depth_zero: self.committed_reads_at_depth_zero.snapshot(),
+            slot_flags: self.slot_flags.snapshot(),
             storage_refunds: self.storage_refunds.snapshot(),
             pubdata_costs: self.pubdata_costs.snapshot(),
         }
@@ -570,12 +580,7 @@ impl WorldDiff {
             .rollback(snapshot.decommitted_hashes);
         self.decommit_pinned_pages
             .rollback(snapshot.decommit_pinned_pages);
-        self.read_storage_slots
-            .rollback(snapshot.read_storage_slots);
-        self.written_storage_slots
-            .rollback(snapshot.written_storage_slots);
-        self.committed_reads_at_depth_zero
-            .rollback(snapshot.committed_reads_at_depth_zero);
+        self.slot_flags.rollback(snapshot.slot_flags);
         self.storage_logs.truncate(storage_logs_len);
         self.rollback_storage_logs
             .truncate(rollback_storage_logs_len);
@@ -592,9 +597,7 @@ impl WorldDiff {
         self.pubdata_costs.delete_history();
         self.decommitted_hashes.delete_history();
         self.decommit_pinned_pages.delete_history();
-        self.read_storage_slots.delete_history();
-        self.written_storage_slots.delete_history();
-        self.committed_reads_at_depth_zero.delete_history();
+        self.slot_flags.delete_history();
     }
 
     pub(crate) fn clear_transient_storage(&mut self) {
