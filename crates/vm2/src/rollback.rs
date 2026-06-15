@@ -21,6 +21,26 @@ impl<K: Ord + Clone, V: Clone> RollbackableMap<K, V> {
         old_value
     }
 
+    /// Inserts or updates the entry for `key` in a single map traversal,
+    /// journaling the prior value for rollback. `compute` receives the current
+    /// value (`None` if absent) and returns the new value. Saves the separate
+    /// `get` a read-modify-write would otherwise need.
+    pub(crate) fn update(&mut self, key: K, compute: impl FnOnce(Option<&V>) -> V) {
+        use std::collections::btree_map::Entry;
+        match self.map.entry(key) {
+            Entry::Occupied(mut entry) => {
+                let new = compute(Some(entry.get()));
+                let old = std::mem::replace(entry.get_mut(), new);
+                self.old_entries.push((entry.key().clone(), Some(old)));
+            }
+            Entry::Vacant(entry) => {
+                let new = compute(None);
+                self.old_entries.push((entry.key().clone(), None));
+                entry.insert(new);
+            }
+        }
+    }
+
     pub(crate) fn changes_after(
         &self,
         snapshot: <Self as Rollback>::Snapshot,

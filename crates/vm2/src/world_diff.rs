@@ -306,27 +306,20 @@ impl WorldDiff {
                 ..log_query
             });
         }
-        let prior_paid = self
-            .storage_writes
-            .as_ref()
-            .get(&(contract, key))
-            .map_or(0, |e| e.paid);
-
         let initial_value = self
             .storage_initial_values
             .entry((contract, key))
             .or_insert_with(|| world.read_storage(contract, key));
 
         if world.is_free_storage_slot(&contract, &key) {
-            // Free write: the value changes but no pubdata is paid, so the
-            // entry keeps its prior paid amount. Single insert.
-            self.storage_writes.insert(
-                (contract, key),
-                StorageWriteEntry {
+            // Free write: the value changes but no pubdata is paid, so the entry
+            // keeps its prior paid amount. One journaling traversal — no
+            // separate read-back of the prior entry.
+            self.storage_writes
+                .update((contract, key), |prev| StorageWriteEntry {
                     value,
-                    paid: prior_paid,
-                },
-            );
+                    paid: prev.map_or(0, |e| e.paid),
+                });
             if self.slot_add_flag((contract, key), SLOT_WRITTEN) {
                 tracer.on_extra_prover_cycles(CycleStats::StorageWrite);
             }
@@ -338,15 +331,18 @@ impl WorldDiff {
         }
 
         let update_cost = world.cost_of_writing_storage(*initial_value, value);
-        let prepaid = prior_paid;
-        // Single insert with the final paid amount (no intermediate write).
-        self.storage_writes.insert(
-            (contract, key),
-            StorageWriteEntry {
-                value,
-                paid: update_cost,
-            },
-        );
+        // Single insert with the final paid amount; `prepaid` (the prior paid)
+        // comes from the replaced entry, avoiding a separate lookup.
+        let prepaid = self
+            .storage_writes
+            .insert(
+                (contract, key),
+                StorageWriteEntry {
+                    value,
+                    paid: update_cost,
+                },
+            )
+            .map_or(0, |e| e.paid);
 
         let refund = if self.slot_add_flag((contract, key), SLOT_WRITTEN) {
             tracer.on_extra_prover_cycles(CycleStats::StorageWrite);
