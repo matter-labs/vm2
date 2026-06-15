@@ -13,13 +13,30 @@ use crate::{
     StorageInterface, StorageSlot,
 };
 
+/// Merged value for `storage_writes`: pending written value + pubdata paid
+/// (formerly the separate `storage_changes` + `paid_changes` maps).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct StorageWriteEntry {
+    /// Pending written value for the slot.
+    pub value: U256,
+    /// Pubdata cost paid for writing this slot (0 for free-storage slots).
+    pub paid: u32,
+}
+
+/// Per-slot access flags packed into `WorldDiff::slot_flags` (one byte per
+/// `(address, key)`), replacing three separate `(address, key)` sets.
+const SLOT_READ: u8 = 1;
+const SLOT_WRITTEN: u8 = 1 << 1;
+const SLOT_COMMITTED_READ_Z0: u8 = 1 << 2;
+
 /// Pending modifications to the global state that are executed at the end of a block.
 /// In other words, side effects.
 #[derive(Debug, Default)]
 pub struct WorldDiff {
     // These are rolled back on revert or panic (and when the whole VM is rolled back).
-    storage_changes: RollbackableMap<(H160, U256), U256>,
-    paid_changes: RollbackableMap<(H160, U256), u32>,
+    /// Pending storage writes (value + pubdata paid), merged from the former
+    /// `storage_changes` + `paid_changes` to store the (address, key) once.
+    storage_writes: RollbackableMap<(H160, U256), StorageWriteEntry>,
     transient_storage_changes: RollbackableMap<(H160, U256), U256>,
     events: RollbackableLog<Event>,
     l2_to_l1_logs: RollbackableLog<L2ToL1Log>,
@@ -28,22 +45,6 @@ pub struct WorldDiff {
     pubdata_costs: RollbackableLog<i32>,
     storage_logs: Vec<LogQuery>,
     rollback_storage_logs: Vec<LogQuery>,
-    /// Slots that were *committed-read at depth zero* — read at a moment when
-    /// there was no pending write for that slot. This is the dedup's
-    /// `did_read_at_depth_zero` predicate, materialized incrementally so the
-    /// verifier can derive deduplicated storage logs without the full
-    /// `storage_logs` trace.
-    ///
-    /// Why not just use `read_storage_slots`?
-    ///   `read_storage_slots` also gets populated by `write_storage` (for
-    ///   refund/cold-write tracking) and is *not* rolled back on internal
-    ///   frame revert. So a slot whose only operation was a write that
-    ///   reverted still ends up in `read_storage_slots`. The dedup correctly
-    ///   skips such a slot; `committed_reads_at_depth_zero` matches that
-    ///   semantic by only being added by `read_storage_inner` and only when
-    ///   `storage_changes` is empty for the slot at the time of read.
-    committed_reads_at_depth_zero: RollbackableSet<(H160, U256)>,
-
     // The fields below are only rolled back when the whole VM is rolled back.
     /// Tracks decommit visibility state for each bytecode hash.
     ///
@@ -60,8 +61,15 @@ pub struct WorldDiff {
     ///
     /// This follows external snapshot / rollback semantics together with `decommitted_hashes`.
     decommit_pinned_pages: RollbackableSet<u32>,
-    read_storage_slots: RollbackableSet<(H160, U256)>,
-    written_storage_slots: RollbackableSet<(H160, U256)>,
+    /// Per-slot access flags merged from three former `(address, key)` sets
+    /// (read / written / committed-read-at-depth-zero) so the 52-byte key is
+    /// stored once instead of three times. External-rollback semantics
+    /// (whole-VM only), matching the original sets. See the `SLOT_*` consts.
+    ///
+    /// `SLOT_COMMITTED_READ_Z0` keeps the dedup's `did_read_at_depth_zero`
+    /// predicate: set only by `read_storage_inner`, only when `storage_writes`
+    /// has no pending write for the slot at read time.
+    slot_flags: RollbackableMap<(H160, U256), u8>,
 
     // This is never rolled back. It is just a cache to avoid asking these from DB every time.
     storage_initial_values: BTreeMap<(H160, U256), StorageSlot>,
@@ -73,7 +81,7 @@ pub struct WorldDiff {
     /// build an in-circuit storage argument from `storage_log_queries()`
     /// (e.g. Boojum witness generation via `sort_storage_access_queries`) are
     /// unaffected. Re-execution verifiers that derive the deduplicated set
-    /// from `committed_reads_at_depth_zero` + `storage_changes` and have no
+    /// from the `SLOT_COMMITTED_READ_Z0` flag + `storage_writes` and have no
     /// in-circuit storage argument (e.g. Airbender) opt out to drop the
     /// trace's memory cost.
     skip_storage_logs: bool,
@@ -84,9 +92,7 @@ pub(crate) struct ExternalSnapshot {
     internal_snapshot: Snapshot,
     pub(crate) decommitted_hashes: <RollbackableMap<U256, DecommitState> as Rollback>::Snapshot,
     decommit_pinned_pages: <RollbackableSet<u32> as Rollback>::Snapshot,
-    read_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
-    written_storage_slots: <RollbackableMap<(H160, U256), ()> as Rollback>::Snapshot,
-    committed_reads_at_depth_zero: <RollbackableSet<(H160, U256)> as Rollback>::Snapshot,
+    slot_flags: <RollbackableMap<(H160, U256), u8> as Rollback>::Snapshot,
     storage_refunds: <RollbackableLog<u32> as Rollback>::Snapshot,
     pubdata_costs: <RollbackableLog<i32> as Rollback>::Snapshot,
 }
@@ -115,8 +121,8 @@ impl WorldDiff {
     /// an in-circuit storage argument from `storage_log_queries()` (e.g. Boojum
     /// witness generation via `sort_storage_access_queries`). A re-execution
     /// verifier with no in-circuit storage argument (e.g. Airbender), which
-    /// derives the deduplicated storage set from `committed_reads_at_depth_zero` +
-    /// `storage_changes` instead, can pass `false` to avoid the trace's
+    /// derives the deduplicated storage set from the `SLOT_COMMITTED_READ_Z0`
+    /// flag + `storage_writes` instead, can pass `false` to avoid the trace's
     /// memory cost (~270 MiB on large batches).
     ///
     /// Must be called before any storage access; toggling mid-execution would
@@ -137,6 +143,19 @@ impl WorldDiff {
         self.events.reserve(events);
         self.pubdata_costs.reserve(pubdata_costs);
         self.storage_refunds.reserve(storage_refunds);
+    }
+
+    /// Set `flag` on a slot's access-flags entry, returning `true` iff the flag
+    /// was newly set (mirrors the former per-set `RollbackableSet::add`). The
+    /// 52-byte `(address, key)` is stored once across all three flags.
+    fn slot_add_flag(&mut self, key: (H160, U256), flag: u8) -> bool {
+        let cur = self.slot_flags.as_ref().get(&key).copied().unwrap_or(0);
+        if cur & flag == 0 {
+            self.slot_flags.insert(key, cur | flag);
+            true
+        } else {
+            false
+        }
     }
 
     /// Returns the storage slot's value and a refund based on its hot/cold status.
@@ -182,7 +201,7 @@ impl WorldDiff {
         key: U256,
         tx_number_in_block: u16,
     ) -> (U256, bool) {
-        let newly_added = self.read_storage_slots.add((contract, key));
+        let newly_added = self.slot_add_flag((contract, key), SLOT_READ);
         if newly_added {
             tracer.on_extra_prover_cycles(CycleStats::StorageRead);
         }
@@ -200,12 +219,16 @@ impl WorldDiff {
         // the slot still reads its initial. One backend call total (only on
         // the first read of a slot), versus the previous path which routed
         // through `just_read_storage` *and* `world.read_storage`.
-        let live_write = self.storage_changes.as_ref().get(&(contract, key)).copied();
+        let live_write = self
+            .storage_writes
+            .as_ref()
+            .get(&(contract, key))
+            .map(|e| e.value);
         let value = live_write.unwrap_or(initial_value);
         if live_write.is_none() {
             // No pending write for this slot at read time — mirrors the dedup
             // function's `did_read_at_depth_zero` flag.
-            self.committed_reads_at_depth_zero.add((contract, key));
+            self.slot_add_flag((contract, key), SLOT_COMMITTED_READ_Z0);
         }
         if !self.skip_storage_logs {
             // Boojum mode: accumulate the per-access trace. `value` equals what
@@ -241,11 +264,10 @@ impl WorldDiff {
         contract: H160,
         key: U256,
     ) -> U256 {
-        self.storage_changes
+        self.storage_writes
             .as_ref()
             .get(&(contract, key))
-            .copied()
-            .unwrap_or_else(|| world.read_storage_value(contract, key))
+            .map_or_else(|| world.read_storage_value(contract, key), |e| e.value)
     }
 
     /// Returns the refund based the hot/cold status of the storage slot and the change in pubdata.
@@ -282,7 +304,11 @@ impl WorldDiff {
                 ..log_query
             });
         }
-        self.storage_changes.insert((contract, key), value);
+        let prior_paid = self
+            .storage_writes
+            .as_ref()
+            .get(&(contract, key))
+            .map_or(0, |e| e.paid);
 
         let initial_value = self
             .storage_initial_values
@@ -290,10 +316,19 @@ impl WorldDiff {
             .or_insert_with(|| world.read_storage(contract, key));
 
         if world.is_free_storage_slot(&contract, &key) {
-            if self.written_storage_slots.add((contract, key)) {
+            // Free write: the value changes but no pubdata is paid, so the
+            // entry keeps its prior paid amount. Single insert.
+            self.storage_writes.insert(
+                (contract, key),
+                StorageWriteEntry {
+                    value,
+                    paid: prior_paid,
+                },
+            );
+            if self.slot_add_flag((contract, key), SLOT_WRITTEN) {
                 tracer.on_extra_prover_cycles(CycleStats::StorageWrite);
             }
-            self.read_storage_slots.add((contract, key));
+            self.slot_add_flag((contract, key), SLOT_READ);
 
             self.storage_refunds.push(WARM_WRITE_REFUND);
             self.pubdata_costs.push(0);
@@ -301,15 +336,20 @@ impl WorldDiff {
         }
 
         let update_cost = world.cost_of_writing_storage(*initial_value, value);
-        let prepaid = self
-            .paid_changes
-            .insert((contract, key), update_cost)
-            .unwrap_or(0);
+        let prepaid = prior_paid;
+        // Single insert with the final paid amount (no intermediate write).
+        self.storage_writes.insert(
+            (contract, key),
+            StorageWriteEntry {
+                value,
+                paid: update_cost,
+            },
+        );
 
-        let refund = if self.written_storage_slots.add((contract, key)) {
+        let refund = if self.slot_add_flag((contract, key), SLOT_WRITTEN) {
             tracer.on_extra_prover_cycles(CycleStats::StorageWrite);
 
-            if self.read_storage_slots.add((contract, key)) {
+            if self.slot_add_flag((contract, key), SLOT_READ) {
                 0
             } else {
                 COLD_WRITE_AFTER_WARM_READ_REFUND
@@ -343,11 +383,15 @@ impl WorldDiff {
     }
 
     /// Iterates over slots that were committed-read at depth zero (the
-    /// dedup's `did_read_at_depth_zero` set). Combined with `storage_changes`
+    /// dedup's `did_read_at_depth_zero` set). Combined with `storage_writes`
     /// this is the set of slots that appear in the deduplicated storage logs.
-    /// Sorted by (address, key) via the `BTreeSet` backing.
+    /// Sorted by (address, key) via the `slot_flags` map's `BTreeMap` backing.
     pub fn committed_reads_at_depth_zero_iter(&self) -> impl Iterator<Item = (H160, U256)> + '_ {
-        self.committed_reads_at_depth_zero.as_ref().iter().copied()
+        self.slot_flags
+            .as_ref()
+            .iter()
+            .filter(|(_, f)| **f & SLOT_COMMITTED_READ_Z0 != 0)
+            .map(|(k, _)| *k)
     }
 
     /// Returns the initial (pre-batch) value of a slot if it has been
@@ -372,26 +416,26 @@ impl WorldDiff {
         &self.storage_logs[snapshot.storage_logs_len..]
     }
 
-    #[doc(hidden)] // duplicates `StateInterface::get_storage_state()`, but we use random access in some places
-    pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
-        self.storage_changes.as_ref()
+    #[doc(hidden)] // like `StateInterface::get_storage_state()` but exposes the full `StorageWriteEntry` (value + paid) for random access
+    pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), StorageWriteEntry> {
+        self.storage_writes.as_ref()
     }
 
     /// Gets changes for all touched storage slots.
     pub fn get_storage_changes(&self) -> impl Iterator<Item = ((H160, U256), StorageChange)> + '_ {
-        self.storage_changes
+        self.storage_writes
             .as_ref()
             .iter()
-            .filter_map(|(key, &value)| {
+            .filter_map(|(key, entry)| {
                 let initial_slot = &self.storage_initial_values[key];
-                if initial_slot.value == value {
+                if initial_slot.value == entry.value {
                     None
                 } else {
                     Some((
                         *key,
                         StorageChange {
                             before: initial_slot.value,
-                            after: value,
+                            after: entry.value,
                             is_initial: initial_slot.is_write_initial,
                         },
                     ))
@@ -404,16 +448,16 @@ impl WorldDiff {
         &self,
         snapshot: &Snapshot,
     ) -> impl Iterator<Item = ((H160, U256), StorageChange)> + '_ {
-        self.storage_changes
-            .changes_after(snapshot.storage_changes)
+        self.storage_writes
+            .changes_after(snapshot.storage_writes)
             .into_iter()
             .map(|(key, (before, after))| {
                 let initial = self.storage_initial_values[&key];
                 (
                     key,
                     StorageChange {
-                        before: before.unwrap_or(initial.value),
-                        after,
+                        before: before.map_or(initial.value, |e| e.value),
+                        after: after.value,
                         is_initial: initial.is_write_initial,
                     },
                 )
@@ -500,8 +544,7 @@ impl WorldDiff {
     /// Get a snapshot for selecting which logs & co. to output using [`Self::events_after()`] and other methods.
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
-            storage_changes: self.storage_changes.snapshot(),
-            paid_changes: self.paid_changes.snapshot(),
+            storage_writes: self.storage_writes.snapshot(),
             events: self.events.snapshot(),
             l2_to_l1_logs: self.l2_to_l1_logs.snapshot(),
             transient_storage_changes: self.transient_storage_changes.snapshot(),
@@ -528,8 +571,7 @@ impl WorldDiff {
 
     #[allow(clippy::needless_pass_by_value)] // intentional: we require a snapshot to be rolled back to no more than once
     pub(crate) fn rollback(&mut self, snapshot: Snapshot) {
-        self.storage_changes.rollback(snapshot.storage_changes);
-        self.paid_changes.rollback(snapshot.paid_changes);
+        self.storage_writes.rollback(snapshot.storage_writes);
         self.events.rollback(snapshot.events);
         self.l2_to_l1_logs.rollback(snapshot.l2_to_l1_logs);
         self.transient_storage_changes
@@ -551,9 +593,7 @@ impl WorldDiff {
             },
             decommitted_hashes: self.decommitted_hashes.snapshot(),
             decommit_pinned_pages: self.decommit_pinned_pages.snapshot(),
-            read_storage_slots: self.read_storage_slots.snapshot(),
-            written_storage_slots: self.written_storage_slots.snapshot(),
-            committed_reads_at_depth_zero: self.committed_reads_at_depth_zero.snapshot(),
+            slot_flags: self.slot_flags.snapshot(),
             storage_refunds: self.storage_refunds.snapshot(),
             pubdata_costs: self.pubdata_costs.snapshot(),
         }
@@ -570,20 +610,14 @@ impl WorldDiff {
             .rollback(snapshot.decommitted_hashes);
         self.decommit_pinned_pages
             .rollback(snapshot.decommit_pinned_pages);
-        self.read_storage_slots
-            .rollback(snapshot.read_storage_slots);
-        self.written_storage_slots
-            .rollback(snapshot.written_storage_slots);
-        self.committed_reads_at_depth_zero
-            .rollback(snapshot.committed_reads_at_depth_zero);
+        self.slot_flags.rollback(snapshot.slot_flags);
         self.storage_logs.truncate(storage_logs_len);
         self.rollback_storage_logs
             .truncate(rollback_storage_logs_len);
     }
 
     pub(crate) fn delete_history(&mut self) {
-        self.storage_changes.delete_history();
-        self.paid_changes.delete_history();
+        self.storage_writes.delete_history();
         self.transient_storage_changes.delete_history();
         self.events.delete_history();
         self.l2_to_l1_logs.delete_history();
@@ -592,9 +626,7 @@ impl WorldDiff {
         self.pubdata_costs.delete_history();
         self.decommitted_hashes.delete_history();
         self.decommit_pinned_pages.delete_history();
-        self.read_storage_slots.delete_history();
-        self.written_storage_slots.delete_history();
-        self.committed_reads_at_depth_zero.delete_history();
+        self.slot_flags.delete_history();
     }
 
     pub(crate) fn clear_transient_storage(&mut self) {
@@ -606,8 +638,7 @@ impl WorldDiff {
 /// Can be provided to [`WorldDiff::events_after()`] etc. to get data after the snapshot was created.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Snapshot {
-    storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
-    paid_changes: <RollbackableMap<(H160, U256), u32> as Rollback>::Snapshot,
+    storage_writes: <RollbackableMap<(H160, U256), StorageWriteEntry> as Rollback>::Snapshot,
     events: <RollbackableLog<Event> as Rollback>::Snapshot,
     l2_to_l1_logs: <RollbackableLog<L2ToL1Log> as Rollback>::Snapshot,
     transient_storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
@@ -829,6 +860,47 @@ mod tests {
         fn is_free_storage_slot(&self, _: &H160, _: &U256) -> bool {
             false
         }
+    }
+
+    /// A world with a fixed non-zero write cost, to exercise the merged `paid`
+    /// accounting (`prior_paid` / `prepaid`) that `NoWorld`/`TestWorld` (cost 0)
+    /// leave untested.
+    struct CostWorld;
+
+    impl StorageInterface for CostWorld {
+        fn read_storage(&mut self, _: H160, _: U256) -> StorageSlot {
+            StorageSlot::EMPTY
+        }
+
+        fn cost_of_writing_storage(&mut self, _: StorageSlot, _: U256) -> u32 {
+            100
+        }
+
+        fn is_free_storage_slot(&self, _: &H160, _: &U256) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn merged_storage_write_tracks_paid_and_rolls_back() {
+        let mut world_diff = WorldDiff::default();
+        let (contract, key) = (H160::zero(), U256::from(1));
+
+        // First write: prior_paid = 0, entry's paid set to the write cost.
+        world_diff.write_storage(&mut CostWorld, &mut (), contract, key, U256::from(5), 0);
+        let e = world_diff.storage_writes.as_ref()[&(contract, key)];
+        assert_eq!((e.value, e.paid), (U256::from(5), 100));
+
+        // Second write reuses prior_paid (=100) as `prepaid`; entry re-set.
+        let snapshot = world_diff.snapshot();
+        world_diff.write_storage(&mut CostWorld, &mut (), contract, key, U256::from(6), 0);
+        let e = world_diff.storage_writes.as_ref()[&(contract, key)];
+        assert_eq!((e.value, e.paid), (U256::from(6), 100));
+
+        // Rollback restores both the value and the paid amount of the merged entry.
+        world_diff.rollback(snapshot);
+        let e = world_diff.storage_writes.as_ref()[&(contract, key)];
+        assert_eq!((e.value, e.paid), (U256::from(5), 100));
     }
 
     #[derive(Default)]
