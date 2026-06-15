@@ -67,23 +67,29 @@ pub struct WorldDiff {
     /// (whole-VM only), matching the original sets. See the `SLOT_*` consts.
     ///
     /// `SLOT_COMMITTED_READ_Z0` keeps the dedup's `did_read_at_depth_zero`
-    /// predicate: set only by `read_storage_inner`, only when `storage_writes`
-    /// has no pending write for the slot at read time.
+    /// predicate: set only by `read_storage_inner`, only in opt-out mode, and
+    /// only when `storage_writes` has no pending write for the slot at read time.
     slot_flags: RollbackableMap<(H160, U256), u8>,
 
     // This is never rolled back. It is just a cache to avoid asking these from DB every time.
     storage_initial_values: BTreeMap<(H160, U256), StorageSlot>,
 
-    /// When set, `read_storage_inner` / `write_storage` skip appending to the
-    /// per-access `storage_logs` / `rollback_storage_logs` trace. Configured
-    /// once before execution via [`Self::set_record_storage_logs`]; never
-    /// rolled back. Defaults to `false` (recording on), so consumers that
-    /// build an in-circuit storage argument from `storage_log_queries()`
-    /// (e.g. Boojum witness generation via `sort_storage_access_queries`) are
-    /// unaffected. Re-execution verifiers that derive the deduplicated set
-    /// from the `SLOT_COMMITTED_READ_Z0` flag + `storage_writes` and have no
-    /// in-circuit storage argument (e.g. Airbender) opt out to drop the
-    /// trace's memory cost.
+    /// Selects between two mutually exclusive bookkeeping modes, configured once
+    /// before execution via [`Self::set_record_storage_logs`]; never rolled back.
+    ///
+    /// Defaults to `false` (recording on): `read_storage_inner` / `write_storage`
+    /// append the per-access `storage_logs` / `rollback_storage_logs` trace and
+    /// otherwise behave exactly like the pre-optimization base (read-only slots
+    /// are *not* cached in `storage_initial_values`). This is what consumers that
+    /// build an in-circuit storage argument from `storage_log_queries()` need
+    /// (e.g. Boojum witness generation via `sort_storage_access_queries`).
+    ///
+    /// When `true`, the trace is dropped and instead the inputs a re-execution
+    /// verifier needs are recorded: the `SLOT_COMMITTED_READ_Z0` flag and the
+    /// read-only `storage_initial_values` cache. A verifier with no in-circuit
+    /// storage argument (e.g. Airbender) derives the deduplicated set from the
+    /// flag + `storage_writes`, dropping the trace's memory cost (~270 MiB on
+    /// large batches) without adding any per-read map entries to Boojum's path.
     skip_storage_logs: bool,
 }
 
@@ -126,8 +132,19 @@ impl WorldDiff {
     /// memory cost (~270 MiB on large batches).
     ///
     /// Must be called before any storage access; toggling mid-execution would
-    /// leave a partial trace.
+    /// leave a partial trace (recording) or partial dedup state (opt-out).
+    /// Enforced by the assertion below rather than left to the caller.
+    ///
+    /// # Panics
+    /// Panics if any storage slot has already been read or written.
     pub fn set_record_storage_logs(&mut self, record: bool) {
+        assert!(
+            self.storage_logs.is_empty()
+                && self.storage_writes.as_ref().is_empty()
+                && self.slot_flags.as_ref().is_empty()
+                && self.storage_initial_values.is_empty(),
+            "set_record_storage_logs must be called before any storage access"
+        );
         self.skip_storage_logs = !record;
     }
 
@@ -207,29 +224,35 @@ impl WorldDiff {
         }
 
         self.pubdata_costs.push(0);
-        // Cache the initial value on first read so downstream summarizers can
-        // recover it without a separate backend call (write_storage already
-        // caches this for writes).
-        let initial_value = self
-            .storage_initial_values
-            .entry((contract, key))
-            .or_insert_with(|| world.read_storage(contract, key))
-            .value;
-        // Live write for this slot? If so, that's the current value; otherwise
-        // the slot still reads its initial. One backend call total (only on
-        // the first read of a slot), versus the previous path which routed
-        // through `just_read_storage` *and* `world.read_storage`.
-        let live_write = self
-            .storage_writes
-            .as_ref()
-            .get(&(contract, key))
-            .map(|e| e.value);
-        let value = live_write.unwrap_or(initial_value);
-        if live_write.is_none() {
-            // No pending write for this slot at read time — mirrors the dedup
-            // function's `did_read_at_depth_zero` flag.
-            self.slot_add_flag((contract, key), SLOT_COMMITTED_READ_Z0);
-        }
+        let value = if self.skip_storage_logs {
+            // Opt-out mode: no per-access trace is kept, so the deduplicated set
+            // is derived from the maps instead. Cache the initial value on first
+            // read (write_storage already caches for writes) so it can be
+            // recovered without a separate backend call, and record the
+            // depth-zero read predicate.
+            let initial_value = self
+                .storage_initial_values
+                .entry((contract, key))
+                .or_insert_with(|| world.read_storage(contract, key))
+                .value;
+            let live_write = self
+                .storage_writes
+                .as_ref()
+                .get(&(contract, key))
+                .map(|e| e.value);
+            if live_write.is_none() {
+                // No pending write for this slot at read time — mirrors the dedup
+                // function's `did_read_at_depth_zero` flag.
+                self.slot_add_flag((contract, key), SLOT_COMMITTED_READ_Z0);
+            }
+            live_write.unwrap_or(initial_value)
+        } else {
+            // Boojum mode: behave exactly like the pre-optimization base — read
+            // the value without populating `storage_initial_values` for
+            // read-only slots, so memory behavior is unchanged. The dedup-input
+            // bookkeeping above is the opt-out path's alternative to this trace.
+            self.just_read_storage(world, contract, key)
+        };
         if !self.skip_storage_logs {
             // Boojum mode: accumulate the per-access trace. `value` equals what
             // `just_read_storage` would return, so the log matches the legacy
@@ -989,6 +1012,37 @@ mod tests {
                 .map(|s| s.value),
             Some(U256::zero())
         );
+    }
+
+    #[test]
+    fn recording_mode_does_not_cache_read_only_slots() {
+        // P2 regression: in default (recording / Boojum) mode a read-only slot
+        // must not be added to `storage_initial_values`, so memory behavior
+        // matches the pre-optimization base. The trace still records the read.
+        let mut world_diff = WorldDiff::default();
+        let mut world = TestWorld::default();
+        let (contract, key) = (H160::zero(), U256::from(1));
+
+        let (value, _) = world_diff.read_storage(&mut world, &mut (), contract, key, 0);
+        assert_eq!(value, U256::zero());
+
+        assert_eq!(world_diff.storage_log_queries().len(), 1);
+        assert!(world_diff.initial_storage_value(contract, key).is_none());
+        assert!(world_diff
+            .committed_reads_at_depth_zero_iter()
+            .next()
+            .is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "before any storage access")]
+    fn set_record_storage_logs_after_access_panics() {
+        // P3 regression: the mode switch must reject being toggled once any
+        // storage access has happened, rather than silently corrupting state.
+        let mut world_diff = WorldDiff::default();
+        let mut world = TestWorld::default();
+        world_diff.read_storage(&mut world, &mut (), H160::zero(), U256::from(1), 0);
+        world_diff.set_record_storage_logs(false);
     }
 
     #[test]
