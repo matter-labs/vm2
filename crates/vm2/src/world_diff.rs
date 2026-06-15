@@ -13,6 +13,14 @@ use crate::{
     StorageInterface, StorageSlot,
 };
 
+/// Merged value for `storage_writes`: pending written value + pubdata paid
+/// (formerly the separate `storage_changes` + `paid_changes` maps).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct StorageWriteEntry {
+    pub value: U256,
+    pub paid: u32,
+}
+
 /// Per-slot access flags packed into `WorldDiff::slot_flags` (one byte per
 /// `(address, key)`), replacing three separate `(address, key)` sets.
 const SLOT_READ: u8 = 1;
@@ -24,8 +32,9 @@ const SLOT_COMMITTED_READ_Z0: u8 = 1 << 2;
 #[derive(Debug, Default)]
 pub struct WorldDiff {
     // These are rolled back on revert or panic (and when the whole VM is rolled back).
-    storage_changes: RollbackableMap<(H160, U256), U256>,
-    paid_changes: RollbackableMap<(H160, U256), u32>,
+    /// Pending storage writes (value + pubdata paid), merged from the former
+    /// `storage_changes` + `paid_changes` to store the (address, key) once.
+    storage_writes: RollbackableMap<(H160, U256), StorageWriteEntry>,
     transient_storage_changes: RollbackableMap<(H160, U256), U256>,
     events: RollbackableLog<Event>,
     l2_to_l1_logs: RollbackableLog<L2ToL1Log>,
@@ -208,7 +217,11 @@ impl WorldDiff {
         // the slot still reads its initial. One backend call total (only on
         // the first read of a slot), versus the previous path which routed
         // through `just_read_storage` *and* `world.read_storage`.
-        let live_write = self.storage_changes.as_ref().get(&(contract, key)).copied();
+        let live_write = self
+            .storage_writes
+            .as_ref()
+            .get(&(contract, key))
+            .map(|e| e.value);
         let value = live_write.unwrap_or(initial_value);
         if live_write.is_none() {
             // No pending write for this slot at read time — mirrors the dedup
@@ -249,11 +262,10 @@ impl WorldDiff {
         contract: H160,
         key: U256,
     ) -> U256 {
-        self.storage_changes
+        self.storage_writes
             .as_ref()
             .get(&(contract, key))
-            .copied()
-            .unwrap_or_else(|| world.read_storage_value(contract, key))
+            .map_or_else(|| world.read_storage_value(contract, key), |e| e.value)
     }
 
     /// Returns the refund based the hot/cold status of the storage slot and the change in pubdata.
@@ -290,7 +302,18 @@ impl WorldDiff {
                 ..log_query
             });
         }
-        self.storage_changes.insert((contract, key), value);
+        let prior_paid = self
+            .storage_writes
+            .as_ref()
+            .get(&(contract, key))
+            .map_or(0, |e| e.paid);
+        self.storage_writes.insert(
+            (contract, key),
+            StorageWriteEntry {
+                value,
+                paid: prior_paid,
+            },
+        );
 
         let initial_value = self
             .storage_initial_values
@@ -309,10 +332,16 @@ impl WorldDiff {
         }
 
         let update_cost = world.cost_of_writing_storage(*initial_value, value);
-        let prepaid = self
-            .paid_changes
-            .insert((contract, key), update_cost)
-            .unwrap_or(0);
+        // `prior_paid` is still the entry's paid amount — nothing between here
+        // and the insert above touched it — so reuse it instead of re-querying.
+        let prepaid = prior_paid;
+        self.storage_writes.insert(
+            (contract, key),
+            StorageWriteEntry {
+                value,
+                paid: update_cost,
+            },
+        );
 
         let refund = if self.slot_add_flag((contract, key), SLOT_WRITTEN) {
             tracer.on_extra_prover_cycles(CycleStats::StorageWrite);
@@ -385,25 +414,25 @@ impl WorldDiff {
     }
 
     #[doc(hidden)] // duplicates `StateInterface::get_storage_state()`, but we use random access in some places
-    pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), U256> {
-        self.storage_changes.as_ref()
+    pub fn get_storage_state(&self) -> &BTreeMap<(H160, U256), StorageWriteEntry> {
+        self.storage_writes.as_ref()
     }
 
     /// Gets changes for all touched storage slots.
     pub fn get_storage_changes(&self) -> impl Iterator<Item = ((H160, U256), StorageChange)> + '_ {
-        self.storage_changes
+        self.storage_writes
             .as_ref()
             .iter()
-            .filter_map(|(key, &value)| {
+            .filter_map(|(key, entry)| {
                 let initial_slot = &self.storage_initial_values[key];
-                if initial_slot.value == value {
+                if initial_slot.value == entry.value {
                     None
                 } else {
                     Some((
                         *key,
                         StorageChange {
                             before: initial_slot.value,
-                            after: value,
+                            after: entry.value,
                             is_initial: initial_slot.is_write_initial,
                         },
                     ))
@@ -416,16 +445,16 @@ impl WorldDiff {
         &self,
         snapshot: &Snapshot,
     ) -> impl Iterator<Item = ((H160, U256), StorageChange)> + '_ {
-        self.storage_changes
-            .changes_after(snapshot.storage_changes)
+        self.storage_writes
+            .changes_after(snapshot.storage_writes)
             .into_iter()
             .map(|(key, (before, after))| {
                 let initial = self.storage_initial_values[&key];
                 (
                     key,
                     StorageChange {
-                        before: before.unwrap_or(initial.value),
-                        after,
+                        before: before.map_or(initial.value, |e| e.value),
+                        after: after.value,
                         is_initial: initial.is_write_initial,
                     },
                 )
@@ -512,8 +541,7 @@ impl WorldDiff {
     /// Get a snapshot for selecting which logs & co. to output using [`Self::events_after()`] and other methods.
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
-            storage_changes: self.storage_changes.snapshot(),
-            paid_changes: self.paid_changes.snapshot(),
+            storage_writes: self.storage_writes.snapshot(),
             events: self.events.snapshot(),
             l2_to_l1_logs: self.l2_to_l1_logs.snapshot(),
             transient_storage_changes: self.transient_storage_changes.snapshot(),
@@ -540,8 +568,7 @@ impl WorldDiff {
 
     #[allow(clippy::needless_pass_by_value)] // intentional: we require a snapshot to be rolled back to no more than once
     pub(crate) fn rollback(&mut self, snapshot: Snapshot) {
-        self.storage_changes.rollback(snapshot.storage_changes);
-        self.paid_changes.rollback(snapshot.paid_changes);
+        self.storage_writes.rollback(snapshot.storage_writes);
         self.events.rollback(snapshot.events);
         self.l2_to_l1_logs.rollback(snapshot.l2_to_l1_logs);
         self.transient_storage_changes
@@ -587,8 +614,7 @@ impl WorldDiff {
     }
 
     pub(crate) fn delete_history(&mut self) {
-        self.storage_changes.delete_history();
-        self.paid_changes.delete_history();
+        self.storage_writes.delete_history();
         self.transient_storage_changes.delete_history();
         self.events.delete_history();
         self.l2_to_l1_logs.delete_history();
@@ -609,8 +635,7 @@ impl WorldDiff {
 /// Can be provided to [`WorldDiff::events_after()`] etc. to get data after the snapshot was created.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Snapshot {
-    storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
-    paid_changes: <RollbackableMap<(H160, U256), u32> as Rollback>::Snapshot,
+    storage_writes: <RollbackableMap<(H160, U256), StorageWriteEntry> as Rollback>::Snapshot,
     events: <RollbackableLog<Event> as Rollback>::Snapshot,
     l2_to_l1_logs: <RollbackableLog<L2ToL1Log> as Rollback>::Snapshot,
     transient_storage_changes: <RollbackableMap<(H160, U256), U256> as Rollback>::Snapshot,
