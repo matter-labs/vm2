@@ -17,6 +17,15 @@ pub struct FatPointer {
     pub length: u32,
 }
 
+// The `FatPointer <-> U256`/`u128` conversions below reinterpret memory, so they rely on the
+// exact layout of `FatPointer` (and, for the `&mut U256` cast, on `U256` being a little-endian
+// `[u64; 4]`). These assertions fail to compile if that layout ever drifts, turning silent UB
+// into a build error. `HeapId` is `#[repr(transparent)]` so `memory_page` is laid out as a `u32`.
+const _: () = assert!(std::mem::size_of::<FatPointer>() == 16);
+const _: () = assert!(std::mem::size_of::<FatPointer>() == std::mem::size_of::<u128>());
+const _: () = assert!(std::mem::size_of::<HeapId>() == std::mem::size_of::<u32>());
+const _: () = assert!(std::mem::align_of::<FatPointer>() <= std::mem::align_of::<U256>());
+
 #[cfg(target_endian = "little")]
 impl From<&mut U256> for &mut FatPointer {
     fn from(value: &mut U256) -> Self {
