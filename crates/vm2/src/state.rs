@@ -28,6 +28,10 @@ pub(crate) struct State<T, W> {
     pub(crate) transaction_number: u16,
     pub(crate) context_u128: u128,
     pub(crate) next_base_page: u32,
+    /// Whether the current instruction has written its second output (`dst1`) register.
+    /// Set by every `dst1` write; if still `false` after execution, `dst1` is cleared to zero,
+    /// matching `zk_evm`. Transient per-instruction bookkeeping; excluded from equality and snapshots.
+    pub(crate) dst1_was_updated: bool,
 }
 
 impl<T, W> State<T, W> {
@@ -76,6 +80,7 @@ impl<T, W> State<T, W> {
             transaction_number: 0,
             context_u128: 0,
             next_base_page: first_dynamic_base_page(),
+            dst1_was_updated: false,
         }
     }
 
@@ -193,6 +198,7 @@ impl<T, W> Clone for State<T, W> {
             transaction_number: self.transaction_number,
             context_u128: self.context_u128,
             next_base_page: self.next_base_page,
+            dst1_was_updated: self.dst1_was_updated,
         }
     }
 }
@@ -244,6 +250,10 @@ impl<T, W> Addressable for State<T, W> {
 
     fn clear_stack_pointer_flag(&mut self, slot: u16) {
         self.current_frame.stack.clear_pointer_flag(slot);
+    }
+
+    fn mark_dst1_written(&mut self) {
+        self.dst1_was_updated = true;
     }
 
     fn code_page(&self) -> &[U256] {

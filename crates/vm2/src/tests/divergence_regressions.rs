@@ -1485,3 +1485,138 @@ fn rollback_should_deallocate_dynamic_decommit_page_from_nested_frame() {
     );
     assert!(vm.state.heaps.contains(decommitter_heap));
 }
+
+/// Builds a register-only `add` with an arbitrary `dst1` register index by patching a raw
+/// encoding, the same way `zk_evm`'s `test_dst0_dst1_alias_on_add` patches bytecode. `add`
+/// produces no second output, so `dst1` is a "dirty" field that must be cleared after execution.
+fn dirty_add_instruction(
+    src0_reg: u8,
+    dst0_reg: u8,
+    dst1_reg: u8,
+) -> Instruction<(), TestWorld<()>> {
+    let variant = OPCODES_TABLE
+        .iter()
+        .copied()
+        .find(|variant| {
+            matches!(variant.opcode, Opcode::Add(_))
+                && matches!(
+                    variant.src0_operand_type,
+                    Operand::RegOnly
+                        | Operand::RegOrImm(RegOrImmFlags::UseRegOnly)
+                        | Operand::Full(ImmMemHandlerFlags::UseRegOnly)
+                )
+                && matches!(
+                    variant.dst0_operand_type,
+                    Operand::RegOnly | Operand::Full(ImmMemHandlerFlags::UseRegOnly)
+                )
+        })
+        .expect("register-only Add variant must exist");
+
+    let encoded = DecodedOpcode::<8, EncodingModeProduction> {
+        variant,
+        condition: Condition::Always,
+        src0_reg_idx: src0_reg,
+        src1_reg_idx: 0,
+        dst0_reg_idx: dst0_reg,
+        dst1_reg_idx: dst1_reg,
+        imm_0: 0,
+        imm_1: 0,
+    }
+    .serialize_as_integer();
+
+    decode(encoded, false)
+}
+
+#[test]
+fn dirty_dst1_on_add_is_cleared_to_zero() {
+    // `add` has no second output, so a non-`r0` `dst1` register must be zeroed after execution,
+    // matching zk_evm (see zksync-protocol#222). Here `dst0` and `dst1` both alias `r2`: the
+    // `dst0` write happens first, then the `dst1` clear wins, leaving `r2 == 0`.
+    let program = Program::from_raw(
+        vec![dirty_add_instruction(1, 2, 2), ret_instruction()],
+        vec![],
+    );
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    // r1 is the addend; r2 starts non-zero so we can tell "add ran then cleared" (=> 0) apart from
+    // "add wrote 7 but clear was skipped" (=> 7) and "instruction never touched r2" (=> 0xAA).
+    vm.state.registers[1] = U256::from(7);
+    vm.state.registers[2] = U256::from(0xAA);
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+    assert_eq!(vm.state.registers[2], U256::zero());
+}
+
+#[test]
+fn dirty_dst1_on_add_without_alias_is_cleared_to_zero() {
+    // Same as above but `dst0` (r3) and `dst1` (r2) are distinct: the add result lands in r3 and
+    // the untouched `dst1` register r2 is cleared, regardless of its previous contents.
+    let program = Program::from_raw(
+        vec![dirty_add_instruction(1, 3, 2), ret_instruction()],
+        vec![],
+    );
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    vm.state.registers[1] = U256::from(7);
+    vm.state.registers[2] = U256::from(0xAA);
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+    assert_eq!(vm.state.registers[3], U256::from(7));
+    assert_eq!(vm.state.registers[2], U256::zero());
+}
+
+#[test]
+fn uma_read_increment_panic_clears_dst1() {
+    // A heap read with increment writes its incremented pointer to `dst1`, but panics (here on an
+    // out-of-range offset) before it gets there. zk_evm still leaves `dst1` cleared to zero, so vm2
+    // must too. This is the near-call-observable divergence from the original report.
+    let heap_read = Instruction::from_heap_read(
+        Register1(Register::new(1)).into(),
+        Register1(Register::new(3)),
+        Some(Register2(Register::new(4))),
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let program = Program::from_raw(vec![heap_read], vec![]);
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    // r1 holds an offset past the last addressable byte, forcing a panic before the increment.
+    vm.state.registers[1] = U256::from(u32::MAX);
+    // r4 (the increment / dst1 register) starts non-zero and with its pointer flag set.
+    vm.state.registers[4] = U256::from(0xAA);
+    vm.state.register_pointer_flags |= 1 << 4;
+
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+
+    assert_eq!(vm.state.registers[4], U256::zero());
+    assert_eq!(vm.state.register_pointer_flags & (1 << 4), 0);
+}

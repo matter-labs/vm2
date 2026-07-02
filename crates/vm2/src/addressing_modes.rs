@@ -56,6 +56,10 @@ pub(crate) trait Addressable {
     fn set_stack_pointer_flag(&mut self, slot: u16);
     fn clear_stack_pointer_flag(&mut self, slot: u16);
 
+    /// Records that the current instruction wrote its second output (`dst1`) register, so that
+    /// `full_boilerplate` does not clear it afterwards. Called by every `dst1` write.
+    fn mark_dst1_written(&mut self);
+
     fn code_page(&self) -> &[U256];
 
     fn in_kernel_mode(&self) -> bool;
@@ -171,6 +175,12 @@ impl Arguments {
         sw.write_destination(&mut self);
         self
     }
+
+    /// Returns the register that receives the second output (`dst1`) of the instruction.
+    /// Stored for every opcode during decoding so `full_boilerplate` can clear it when unwritten.
+    pub(crate) fn dst1_register(&self) -> Register {
+        self.destination_registers.register2()
+    }
 }
 
 /// Register passed as a first instruction argument.
@@ -231,10 +241,12 @@ impl DestinationWriter for Register1 {
 impl Destination for Register2 {
     fn set(args: &Arguments, state: &mut impl Addressable, value: U256) {
         args.destination_registers.register2().set(state, value);
+        state.mark_dst1_written();
     }
 
     fn set_fat_ptr(args: &Arguments, state: &mut impl Addressable, value: U256) {
         args.destination_registers.register2().set_ptr(state, value);
+        state.mark_dst1_written();
     }
 }
 
@@ -502,6 +514,11 @@ impl Register {
             unsafe { *state.registers().get_unchecked_mut(self.0 as usize) = value };
             *state.register_pointer_flags() |= 1 << self.0;
         }
+    }
+
+    /// Zeroes the register and clears its pointer flag. Used to clear an unwritten `dst1`.
+    pub(crate) fn set_zero(self, state: &mut impl Addressable) {
+        self.set(state, U256::zero());
     }
 }
 
