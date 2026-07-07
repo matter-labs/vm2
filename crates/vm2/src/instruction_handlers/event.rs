@@ -15,6 +15,8 @@ fn event<T: Tracer, W: World<T>>(
     tracer: &mut T,
 ) -> ExecutionStatus {
     boilerplate_ext::<opcodes::Event, _, _>(vm, world, tracer, |vm, args, _, _| {
+        // Record only `EventWriter` events; `zk_evm` records all emitters and filters later. Since
+        // only the `EventWriter` runs this opcode in practice, both agree. See the `Event` docs.
         if vm.state.current_frame.address == H160::from_low_u64_be(ADDRESS_EVENT_WRITER.into()) {
             let key = Register1::get(args, &mut vm.state);
             let value = Register2::get(args, &mut vm.state);

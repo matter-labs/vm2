@@ -156,6 +156,7 @@ pub trait CallframeInterface {
 ///
 /// EraVM docs sometimes refer to heaps as *heap pages*; docs in these crate don't to avoid confusion with internal heap structure.
 #[derive(Copy, Clone, PartialEq, Debug)]
+#[repr(transparent)] // Guarantees `HeapId` has the same layout as `u32`; relied on by `FatPointer` transmutes.
 pub struct HeapId(u32);
 
 impl HeapId {
@@ -180,8 +181,11 @@ impl HeapId {
 
 /// Event emitted by EraVM.
 ///
-/// There is no address field because nobody is interested in events that don't come
-/// from the event writer, so we simply do not record events coming from anywhere else.
+/// vm2 records events only from the `EventWriter` system contract (`0x800d`), the sole contract
+/// that runs the `Event` opcode in practice. `zk_evm` instead records events from any emitter
+/// (keeping the emitter address) and filters down to the `EventWriter` later. Both yield the same
+/// event set, so there is no `address` field here — the originating contract is encoded in the
+/// event payload, as in `zk_evm`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Event {
     /// Event key.
