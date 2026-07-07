@@ -24,6 +24,9 @@ pub struct FatPointer {
 const _: () = assert!(std::mem::size_of::<FatPointer>() == 16);
 const _: () = assert!(std::mem::size_of::<FatPointer>() == std::mem::size_of::<u128>());
 const _: () = assert!(std::mem::size_of::<HeapId>() == std::mem::size_of::<u32>());
+// The `&mut U256 -> &mut FatPointer` cast reinterprets `U256` storage in place, so `FatPointer`
+// must fit within a `U256` (size) and be no more aligned than it (alignment) to stay in bounds.
+const _: () = assert!(std::mem::size_of::<FatPointer>() <= std::mem::size_of::<U256>());
 const _: () = assert!(std::mem::align_of::<FatPointer>() <= std::mem::align_of::<U256>());
 
 #[cfg(target_endian = "little")]
