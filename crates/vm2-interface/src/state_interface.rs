@@ -156,6 +156,7 @@ pub trait CallframeInterface {
 ///
 /// EraVM docs sometimes refer to heaps as *heap pages*; docs in these crate don't to avoid confusion with internal heap structure.
 #[derive(Copy, Clone, PartialEq, Debug)]
+#[repr(transparent)] // Guarantees `HeapId` has the same layout as `u32`; relied on by `FatPointer` transmutes.
 pub struct HeapId(u32);
 
 impl HeapId {
