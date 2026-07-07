@@ -42,6 +42,13 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
         (snapshot, near_call_leftover_gas)
     } else {
         let return_value_or_panic = if return_type == ReturnType::Panic {
+            // A panic forwards no returndata, but the return-ABI pointer must still be resolved for
+            // its heap-growth cost: a fresh-heap pointer whose `start + length` overflows `u32`
+            // grows the heap to `u32::MAX`, draining the frame's gas. Passing `already_failed = true`
+            // charges exactly that penalty while discarding the (unused) returndata pointer. This
+            // mirrors the proving circuit and post-#217 zk_evm; see `get_calldata`.
+            let (raw_abi, is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
+            get_calldata(raw_abi, is_pointer, vm, true);
             None
         } else {
             let (raw_abi, is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
@@ -213,11 +220,14 @@ impl<T: Tracer, W: World<T>> Instruction<T, W> {
     }
 
     /// Creates a panic [`Ret`](opcodes::Ret) instruction with the provided params.
-    pub fn from_panic(label: Option<Immediate1>, arguments: Arguments) -> Self {
+    ///
+    /// `src1` carries the return-ABI register. Even though a panic forwards no returndata, the
+    /// register is still resolved for its heap-growth cost (see `naked_ret`).
+    pub fn from_panic(src1: Register1, label: Option<Immediate1>, arguments: Arguments) -> Self {
         let to_label = label.is_some();
         Self {
             handler: monomorphize!(ret [T W Panic] match_boolean to_label),
-            arguments: arguments.write_source(&label),
+            arguments: arguments.write_source(&src1).write_source(&label),
         }
     }
 

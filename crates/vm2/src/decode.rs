@@ -211,7 +211,9 @@ pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> I
                 zkevm_opcode_defs::RetOpcode::Revert => {
                     Instruction::from_revert(src1.try_into().unwrap(), label, arguments)
                 }
-                zkevm_opcode_defs::RetOpcode::Panic => Instruction::from_panic(label, arguments),
+                zkevm_opcode_defs::RetOpcode::Panic => {
+                    Instruction::from_panic(src1.try_into().unwrap(), label, arguments)
+                }
             }
         }
         Opcode::Log(x) => match x {
