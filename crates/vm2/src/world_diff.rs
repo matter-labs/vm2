@@ -27,7 +27,11 @@ pub struct StorageWriteEntry {
 /// `(address, key)`), replacing three separate `(address, key)` sets.
 const SLOT_READ: u8 = 1;
 const SLOT_WRITTEN: u8 = 1 << 1;
-const SLOT_COMMITTED_READ_Z0: u8 = 1 << 2;
+/// Set on a read at rollback-depth zero (`did_read_at_depth_zero` in
+/// `circuit_sequencer_api::sort_storage_access`). Downstream this forces a
+/// *protective read* into the deduplicated storage set — unless the slot is
+/// also written, in which case the write entry subsumes it.
+const SLOT_PROTECTIVE_READ: u8 = 1 << 2;
 
 /// Pending modifications to the global state that are executed at the end of a block.
 /// In other words, side effects.
@@ -62,11 +66,11 @@ pub struct WorldDiff {
     /// This follows external snapshot / rollback semantics together with `decommitted_hashes`.
     decommit_pinned_pages: RollbackableSet<u32>,
     /// Per-slot access flags merged from three former `(address, key)` sets
-    /// (read / written / committed-read-at-depth-zero) so the 52-byte key is
-    /// stored once instead of three times. External-rollback semantics
-    /// (whole-VM only), matching the original sets. See the `SLOT_*` consts.
+    /// (read / written / protective-read) so the 52-byte key is stored once
+    /// instead of three times. External-rollback semantics (whole-VM only),
+    /// matching the original sets. See the `SLOT_*` consts.
     ///
-    /// `SLOT_COMMITTED_READ_Z0` keeps the dedup's `did_read_at_depth_zero`
+    /// `SLOT_PROTECTIVE_READ` keeps the dedup's `did_read_at_depth_zero`
     /// predicate: set only by `read_storage_inner`, only in opt-out mode, and
     /// only when `storage_writes` has no pending write for the slot at read time.
     slot_flags: RollbackableMap<(H160, U256), u8>,
@@ -81,7 +85,7 @@ pub struct WorldDiff {
     /// - `false` (default): append the `storage_logs` / `rollback_storage_logs`
     ///   trace; otherwise behave like the pre-optimization base — read-only slots
     ///   are *not* cached in `storage_initial_values`.
-    /// - `true`: drop the trace; instead record the `SLOT_COMMITTED_READ_Z0` flag
+    /// - `true`: drop the trace; instead record the `SLOT_PROTECTIVE_READ` flag
     ///   and the read-only `storage_initial_values` cache, the inputs a
     ///   re-execution verifier derives the deduplicated set from.
     skip_storage_logs: bool,
@@ -121,7 +125,7 @@ impl WorldDiff {
     /// an in-circuit storage argument from `storage_log_queries()` (e.g. Boojum
     /// witness generation via `sort_storage_access_queries`). A re-execution
     /// verifier with no in-circuit storage argument (e.g. Airbender), which
-    /// derives the deduplicated storage set from the `SLOT_COMMITTED_READ_Z0`
+    /// derives the deduplicated storage set from the `SLOT_PROTECTIVE_READ`
     /// flag + `storage_writes` instead, can pass `false` to avoid the trace's
     /// memory cost (~270 MiB on large batches).
     ///
@@ -228,7 +232,7 @@ impl WorldDiff {
                 Some(value) => value,
                 None => {
                     // No pending write at read time: `did_read_at_depth_zero`.
-                    self.slot_add_flag((contract, key), SLOT_COMMITTED_READ_Z0);
+                    self.slot_add_flag((contract, key), SLOT_PROTECTIVE_READ);
                     initial_value
                 }
             }
@@ -382,15 +386,16 @@ impl WorldDiff {
         self.pubdata_costs.as_ref()
     }
 
-    /// Iterates over slots that were committed-read at depth zero (the
-    /// dedup's `did_read_at_depth_zero` set). Combined with `storage_writes`
-    /// this is the set of slots that appear in the deduplicated storage logs.
-    /// Sorted by (address, key) via the `slot_flags` map's `BTreeMap` backing.
-    pub fn committed_reads_at_depth_zero_iter(&self) -> impl Iterator<Item = (H160, U256)> + '_ {
+    /// Iterates over slots that need a *protective read* — read at rollback-depth
+    /// zero (the dedup's `did_read_at_depth_zero` set). Combined with
+    /// `storage_writes` this is the set of slots that appear in the deduplicated
+    /// storage logs. Sorted by (address, key) via the `slot_flags` map's
+    /// `BTreeMap` backing.
+    pub fn protective_reads_iter(&self) -> impl Iterator<Item = (H160, U256)> + '_ {
         self.slot_flags
             .as_ref()
             .iter()
-            .filter(|(_, f)| **f & SLOT_COMMITTED_READ_Z0 != 0)
+            .filter(|(_, f)| **f & SLOT_PROTECTIVE_READ != 0)
             .map(|(k, _)| *k)
     }
 
@@ -978,10 +983,10 @@ mod tests {
         assert!(world_diff.rollback_storage_logs.is_empty());
 
         // ...but the maps a re-execution verifier derives the deduplicated set
-        // from are still populated: the slot was committed-read at depth zero
-        // and its initial value cached.
+        // from are still populated: the slot needs a protective read (read at
+        // depth zero) and its initial value cached.
         assert!(world_diff
-            .committed_reads_at_depth_zero_iter()
+            .protective_reads_iter()
             .any(|slot| slot == (contract, key)));
         assert_eq!(
             world_diff
@@ -1006,7 +1011,7 @@ mod tests {
         assert_eq!(world_diff.storage_log_queries().len(), 1);
         assert!(world_diff.initial_storage_value(contract, key).is_none());
         assert!(world_diff
-            .committed_reads_at_depth_zero_iter()
+            .protective_reads_iter()
             .next()
             .is_none());
     }
