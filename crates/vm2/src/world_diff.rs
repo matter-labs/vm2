@@ -1011,10 +1011,7 @@ mod tests {
 
         assert_eq!(world_diff.storage_log_queries().len(), 1);
         assert!(world_diff.initial_storage_value(contract, key).is_none());
-        assert!(world_diff
-            .protective_reads_iter()
-            .next()
-            .is_none());
+        assert!(world_diff.protective_reads_iter().next().is_none());
     }
 
     /// The set of slots a re-execution verifier surfaces in the deduplicated
@@ -1075,7 +1072,9 @@ mod tests {
                 clean.storage_writes.as_ref().get(&slot).map(|e| e.value),
             );
             assert_eq!(
-                retried.initial_storage_value(slot.0, slot.1).map(|s| s.value),
+                retried
+                    .initial_storage_value(slot.0, slot.1)
+                    .map(|s| s.value),
                 clean.initial_storage_value(slot.0, slot.1).map(|s| s.value),
             );
         }
@@ -1134,7 +1133,10 @@ mod tests {
             !wd.protective_reads_iter().any(|s| s == a),
             "a read with a pending write must not be a protective read",
         );
-        assert!(dedup_input_set(&wd).contains(&a), "slot is still in the dedup set as a write");
+        assert!(
+            dedup_input_set(&wd).contains(&a),
+            "slot is still in the dedup set as a write"
+        );
     }
 
     #[test]
