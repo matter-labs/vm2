@@ -228,13 +228,12 @@ impl WorldDiff {
                 .as_ref()
                 .get(&(contract, key))
                 .map(|e| e.value);
-            match live_write {
-                Some(value) => value,
-                None => {
-                    // No pending write at read time: `did_read_at_depth_zero`.
-                    self.slot_add_flag((contract, key), SLOT_PROTECTIVE_READ);
-                    initial_value
-                }
+            if let Some(value) = live_write {
+                value
+            } else {
+                // No pending write at read time: `did_read_at_depth_zero`.
+                self.slot_add_flag((contract, key), SLOT_PROTECTIVE_READ);
+                initial_value
             }
         } else {
             // Recording mode: read like the pre-optimization base, without
