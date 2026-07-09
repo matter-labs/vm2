@@ -41,17 +41,16 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
 
         (snapshot, near_call_leftover_gas)
     } else {
+        let (raw_abi, is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
         let return_value_or_panic = if return_type == ReturnType::Panic {
             // A panic forwards no returndata, but the return-ABI pointer must still be resolved for
             // its heap-growth cost: a fresh-heap pointer whose `start + length` overflows `u32`
             // grows the heap to `u32::MAX`, draining the frame's gas. Passing `already_failed = true`
             // charges exactly that penalty while discarding the (unused) returndata pointer. This
             // mirrors the proving circuit and post-#217 zk_evm; see `get_calldata`.
-            let (raw_abi, is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
             get_calldata(raw_abi, is_pointer, vm, true);
             None
         } else {
-            let (raw_abi, is_pointer) = Register1::get_with_pointer_flag(args, &mut vm.state);
             let result = get_calldata(raw_abi, is_pointer, vm, false).filter(|pointer| {
                 if vm.state.current_frame.is_kernel {
                     true
@@ -157,7 +156,9 @@ pub(crate) fn free_panic<T: Tracer, W: World<T>>(
     tracer: &mut T,
 ) -> ExecutionStatus {
     tracer.before_instruction::<opcodes::Ret<Panic>, _>(&mut VmAndWorld { vm, world });
-    // args aren't used for panics unless TO_LABEL
+    // A spontaneous panic has no return ABI: these empty args encode source register r0, so
+    // naked_ret's return-ABI resolution reads zero and charges no heap growth. (args are otherwise
+    // only consulted for the jump label when TO_LABEL is set, which it isn't here.)
     naked_ret::<T, W, Panic, false>(
         vm,
         &Arguments::new(Predicate::Always, 0, ModeRequirements::none()),
