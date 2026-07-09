@@ -181,6 +181,38 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
         );
         self.snapshot = None;
         self.delete_history();
+        self.reclaim_bootloader_returndata_heaps();
+    }
+
+    /// Frees the returndata heaps that accumulated on the bootloader frame while
+    /// the just-committed transaction(s) executed.
+    ///
+    /// Every far-call keeps the heap holding its returndata alive and bubbles it
+    /// up to the caller (see [`Self::pop_frame`]); heaps forwarded all the way to
+    /// the bootloader frame — which never pops during a batch — otherwise live
+    /// until the VM is dropped, so they accumulate across every transaction (the
+    /// dominant heap-memory consumer on large batches).
+    ///
+    /// This is the safe point to release them: the callstack is unwound to the
+    /// bootloader (`previous_frames` is empty), the external snapshot has just
+    /// been discarded (`self.snapshot` is `None`) and history deleted, so no
+    /// rollback can reference these heaps; and a committed transaction's
+    /// returndata is dead once the bootloader moves on. Decommit-pinned code
+    /// pages (shared across transactions by hash) are kept — the same predicate
+    /// [`Self::pop_frame`] uses. Freed pages return to the `PagePool` and are
+    /// reused by the next transaction, so peak page usage stays at roughly one
+    /// transaction's worth instead of growing with the transaction count.
+    fn reclaim_bootloader_returndata_heaps(&mut self) {
+        let kept = std::mem::take(&mut self.state.current_frame.heaps_i_am_keeping_alive);
+        let mut still_pinned = Vec::new();
+        for heap in kept {
+            if self.world_diff.is_decommit_page_pinned(heap) {
+                still_pinned.push(heap);
+            } else {
+                self.state.heaps.deallocate(heap);
+            }
+        }
+        self.state.current_frame.heaps_i_am_keeping_alive = still_pinned;
     }
 
     /// This must only be called when it is known that the VM cannot be rolled back,
