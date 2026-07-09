@@ -224,11 +224,14 @@ impl WorldDiff {
                 .as_ref()
                 .get(&(contract, key))
                 .map(|e| e.value);
-            if live_write.is_none() {
-                // No pending write at read time: `did_read_at_depth_zero`.
-                self.slot_add_flag((contract, key), SLOT_COMMITTED_READ_Z0);
+            match live_write {
+                Some(value) => value,
+                None => {
+                    // No pending write at read time: `did_read_at_depth_zero`.
+                    self.slot_add_flag((contract, key), SLOT_COMMITTED_READ_Z0);
+                    initial_value
+                }
             }
-            live_write.unwrap_or(initial_value)
         } else {
             // Recording mode: read like the pre-optimization base, without
             // caching read-only slots (keeps Boojum's memory unchanged).
