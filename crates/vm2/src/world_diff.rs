@@ -232,9 +232,7 @@ impl WorldDiff {
         } else {
             // Recording mode: read like the pre-optimization base, without
             // caching read-only slots (keeps Boojum's memory unchanged).
-            self.just_read_storage(world, contract, key)
-        };
-        if !self.skip_storage_logs {
+            let value = self.just_read_storage(world, contract, key);
             // Record the per-access trace; read_value == written_value for a read.
             // Note: timestamp logic does not match `zk_evm`; we only ensure
             // timestamps are unique, which is fine as the witness is not
@@ -254,7 +252,8 @@ impl WorldDiff {
                 rollback: false,
                 is_service: false,
             });
-        }
+            value
+        };
         (value, newly_added)
     }
 
