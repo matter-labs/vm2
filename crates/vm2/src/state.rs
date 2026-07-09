@@ -179,6 +179,11 @@ impl<T: Tracer, W: World<T>> State<T, W> {
         self.transaction_number = transaction_number;
         self.context_u128 = context_u128;
         self.next_base_page = next_base_page;
+
+        // Transient per-instruction bookkeeping, not part of the snapshot. It is always reset at the
+        // start of the next instruction before being read, so this is a functional no-op; we clear
+        // it here to keep the invariant "never survives an instruction boundary" self-evident.
+        self.dst1_was_updated = false;
     }
 
     pub(crate) fn delete_history(&mut self) {
