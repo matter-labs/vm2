@@ -1620,3 +1620,84 @@ fn uma_read_increment_panic_clears_dst1() {
     assert_eq!(vm.state.registers[4], U256::zero());
     assert_eq!(vm.state.register_pointer_flags & (1 << 4), 0);
 }
+
+#[test]
+fn mul_second_output_is_preserved_not_cleared() {
+    // The mirror of the "dirty dst1 is cleared" tests: `mul` genuinely produces a second output
+    // (the high 256 bits go to `dst1`), so the post-execution clear must NOT fire and overwrite it.
+    // `U256::MAX * 2 == 2^257 - 2`, giving low = `U256::MAX - 1` in `dst0` and high = 1 in `dst1`.
+    let mul = Instruction::from_mul(
+        Register1(Register::new(1)).into(), // src0 (low operand)
+        Register2(Register::new(2)),        // src1
+        Register1(Register::new(3)).into(), // dst0 (low word)
+        Register2(Register::new(4)),        // dst1 (high word)
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+        false,
+        false,
+    );
+    let program = Program::from_raw(vec![mul, ret_instruction()], vec![]);
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    vm.state.register_pointer_flags &= !(1 << 1);
+    vm.state.registers[1] = U256::MAX;
+    vm.state.registers[2] = U256::from(2);
+    // Sentinel: if the clear wrongly fired, `dst1` (r4) would be 0 instead of the real high word.
+    vm.state.registers[4] = U256::from(0xAA);
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+    assert_eq!(vm.state.registers[3], U256::MAX - 1);
+    assert_eq!(vm.state.registers[4], U256::one());
+}
+
+#[test]
+fn unsatisfied_predicate_does_not_clear_dst1() {
+    // A condition-skipped instruction must leave `dst1` untouched, matching zk_evm: there a failed
+    // predicate masks the opcode into `Nop` with `dst1_reg_idx = 0`, so its unconditional post-apply
+    // clear only ever zeroes `r0` (the discard register). vm2 reaches the same result by skipping the
+    // clear entirely on the not-satisfied path. `mul` carries a real `dst1`; `IfGT` is unset here.
+    let skipped_mul = Instruction::from_mul(
+        Register1(Register::new(1)).into(),
+        Register2(Register::new(2)),
+        Register1(Register::new(3)).into(),
+        Register2(Register::new(4)),
+        Arguments::new(Predicate::IfGT, 5, ModeRequirements::none()),
+        false,
+        false,
+    );
+    let program = Program::from_raw(vec![skipped_mul, ret_instruction()], vec![]);
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    // Flags start cleared, so `IfGT` is not satisfied and the mul does not execute.
+    vm.state.register_pointer_flags &= !(1 << 1);
+    vm.state.registers[1] = U256::MAX;
+    vm.state.registers[2] = U256::from(2);
+    // `dst1` (r4) keeps its pre-existing value: the skip path must not zero it.
+    vm.state.registers[4] = U256::from(0xAA);
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+    assert_eq!(vm.state.registers[4], U256::from(0xAA));
+    // dst0 (r3) is likewise untouched by the skipped instruction.
+    assert_eq!(vm.state.registers[3], U256::zero());
+}
