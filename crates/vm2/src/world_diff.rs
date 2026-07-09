@@ -670,6 +670,8 @@ const COLD_WRITE_AFTER_WARM_READ_REFUND: u32 = STORAGE_ACCESS_COLD_READ_COST;
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use proptest::{bits, collection::btree_map, prelude::*};
 
     use super::*;
@@ -1014,6 +1016,126 @@ mod tests {
             .protective_reads_iter()
             .next()
             .is_none());
+    }
+
+    /// The set of slots a re-execution verifier surfaces in the deduplicated
+    /// storage log when the trace is dropped: protective reads plus writes.
+    fn dedup_input_set(world_diff: &WorldDiff) -> BTreeSet<(H160, U256)> {
+        let mut set: BTreeSet<(H160, U256)> = world_diff.protective_reads_iter().collect();
+        set.extend(world_diff.storage_writes.as_ref().keys().copied());
+        set
+    }
+
+    #[test]
+    fn external_rollback_restores_opt_out_dedup_inputs_for_retry() {
+        // Models the airbender verifier's bytecode-compression retry in
+        // `execute_tx`: make_snapshot -> run tx -> external_rollback -> re-run
+        // the same tx. In opt-out mode the deduplicated-set inputs (protective
+        // reads + writes) reconstructed after the retry must match a clean run
+        // that never did the discarded first attempt -- i.e. external rollback
+        // fully erases the first attempt's effect on `slot_flags`.
+        let a = (H160::zero(), U256::from(1));
+        let b = (H160::zero(), U256::from(2));
+        let c = (H160::zero(), U256::from(3));
+
+        let mut world = TestWorld::default();
+        world.values.insert(b, U256::from(200));
+        world.values.insert(c, U256::from(300));
+
+        // The kept (second) attempt: read b at depth zero (protective), write c.
+        let run_kept_attempt = |wd: &mut WorldDiff, world: &mut TestWorld| {
+            wd.read_storage(world, &mut (), b.0, b.1, 0);
+            wd.write_storage(world, &mut (), c.0, c.1, U256::from(777), 0);
+        };
+
+        // Retried: snapshot, discarded first attempt (read a, write b), roll the
+        // whole tx back, then run the kept attempt.
+        let mut retried = WorldDiff::default();
+        retried.set_record_storage_logs(false);
+        let snapshot = retried.external_snapshot();
+        retried.read_storage(&mut world, &mut (), a.0, a.1, 0);
+        retried.write_storage(&mut world, &mut (), b.0, b.1, U256::from(999), 0);
+        retried.external_rollback(snapshot);
+        run_kept_attempt(&mut retried, &mut world);
+
+        // Clean: only the kept attempt, no discarded first attempt at all.
+        let mut clean = WorldDiff::default();
+        clean.set_record_storage_logs(false);
+        run_kept_attempt(&mut clean, &mut world);
+
+        // The reconstructed dedup input set matches, and slot `a` (touched only
+        // in the discarded attempt) is absent -- external rollback erased it.
+        assert_eq!(dedup_input_set(&retried), dedup_input_set(&clean));
+        assert_eq!(dedup_input_set(&clean), BTreeSet::from([b, c]));
+        assert!(!dedup_input_set(&retried).contains(&a));
+
+        // Written values and cached initial values agree for every slot in the set.
+        for slot in dedup_input_set(&clean) {
+            assert_eq!(
+                retried.storage_writes.as_ref().get(&slot).map(|e| e.value),
+                clean.storage_writes.as_ref().get(&slot).map(|e| e.value),
+            );
+            assert_eq!(
+                retried.initial_storage_value(slot.0, slot.1).map(|s| s.value),
+                clean.initial_storage_value(slot.0, slot.1).map(|s| s.value),
+            );
+        }
+    }
+
+    #[test]
+    fn protective_read_survives_internal_rollback_but_not_external() {
+        // The protective-read (`did_read_at_depth_zero`) bit is global within a
+        // run: a frame revert (internal rollback) must NOT clear it, but a
+        // whole-tx discard (external rollback) must.
+        let a = (H160::zero(), U256::from(1));
+        let mut world = TestWorld::default();
+        world.values.insert(a, U256::from(100));
+
+        let mut wd = WorldDiff::default();
+        wd.set_record_storage_logs(false);
+
+        let external = wd.external_snapshot();
+        wd.read_storage(&mut world, &mut (), a.0, a.1, 0); // protective read at depth zero
+
+        // A nested write that reverts (internal rollback) must leave the bit set.
+        let internal = wd.snapshot();
+        wd.write_storage(&mut world, &mut (), a.0, a.1, U256::from(999), 0);
+        wd.rollback(internal);
+        assert!(
+            wd.protective_reads_iter().any(|s| s == a),
+            "protective read must survive an internal frame rollback",
+        );
+
+        // A whole-tx external rollback must erase it.
+        wd.external_rollback(external);
+        assert!(
+            !wd.protective_reads_iter().any(|s| s == a),
+            "external rollback must clear the protective read",
+        );
+    }
+
+    #[test]
+    fn protective_read_not_set_when_write_is_pending() {
+        // A read is a protective read only at rollback-depth zero: if a write to
+        // the slot is already pending, the read observes that write rather than
+        // the committed value, so the bit must not be set. The slot still enters
+        // the dedup set -- via `storage_writes`, not as a protective read.
+        let a = (H160::zero(), U256::from(1));
+        let mut world = TestWorld::default();
+        world.values.insert(a, U256::from(100));
+
+        let mut wd = WorldDiff::default();
+        wd.set_record_storage_logs(false);
+
+        wd.write_storage(&mut world, &mut (), a.0, a.1, U256::from(5), 0);
+        let (value, _) = wd.read_storage(&mut world, &mut (), a.0, a.1, 0);
+
+        assert_eq!(value, U256::from(5), "read must observe the pending write");
+        assert!(
+            !wd.protective_reads_iter().any(|s| s == a),
+            "a read with a pending write must not be a protective read",
+        );
+        assert!(dedup_input_set(&wd).contains(&a), "slot is still in the dedup set as a write");
     }
 
     #[test]
