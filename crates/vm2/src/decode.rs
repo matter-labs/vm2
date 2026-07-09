@@ -84,6 +84,11 @@ pub(crate) fn decode<T: Tracer, W: World<T>>(raw: u64, is_bootloader: bool) -> I
     let src2 = Register2(Register::new(parsed.src1_reg_idx));
     let out2 = Register2(Register::new(parsed.dst1_reg_idx));
 
+    // Store the `dst1` register for every opcode so `full_boilerplate` can clear it when the
+    // instruction writes no second output. Opcodes that do write `dst1` (mul/div and UMA reads
+    // with increment) re-write the same register below, so this is a no-op for them.
+    let arguments = arguments.write_destination(&out2);
+
     macro_rules! binop {
         ($op: ident, $snd: tt) => {
             Instruction::from_binop::<$op>(
