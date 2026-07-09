@@ -1701,3 +1701,75 @@ fn unsatisfied_predicate_does_not_clear_dst1() {
     // dst0 (r3) is likewise untouched by the skipped instruction.
     assert_eq!(vm.state.registers[3], U256::zero());
 }
+
+/// A far `ret.panic` must still resolve its return-ABI pointer for *cost*: a fresh-heap pointer
+/// whose `start + length` overflows `u32` grows the heap to `u32::MAX`, draining the frame's gas
+/// to zero, matching the proving circuit / post-#217 `zk_evm` (see zksync-protocol#217). Before the
+/// fix, vm2 short-circuited on panic and never parsed the return ABI, so the callee kept its gas
+/// and returned it to the caller.
+#[test]
+fn far_ret_panic_charges_heap_growth_for_overflowing_pointer() {
+    let callee_address = Address::from_low_u64_be(0x00C0_FFEE);
+    // `ret.panic r3` — r3 carries the crafted return-ABI pointer (set once inside the callee frame).
+    let panicking_program = Program::from_raw(
+        vec![Instruction::from_panic(
+            Register1(Register::new(3)),
+            None,
+            Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+        )],
+        vec![],
+    );
+    let mut world = TestWorld::new(&[(callee_address, panicking_program)]);
+
+    let gas_to_pass = 50_000;
+    let mut far_call_abi = U256::zero();
+    far_call_abi.0[3] = u64::from(gas_to_pass);
+    let far_call = Instruction::from_far_call::<opcodes::Normal>(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Immediate1(1), // exception handler -> caller instruction #1 (the trailing `ret`)
+        false,
+        false,
+        Arguments::new(Predicate::Always, 200, ModeRequirements::none()),
+    );
+    let caller_program = Program::from_raw(vec![far_call, ret_instruction()], vec![]);
+
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        caller_program,
+        Address::zero(),
+        &[],
+        70_000,
+        default_settings(),
+    );
+
+    vm.state.registers[1] = far_call_abi;
+    vm.state.registers[2] = U256::from(callee_address.to_low_u64_be());
+    vm.state.register_pointer_flags &= !(1 << 1);
+
+    // Step 1: the far call pushes the callee frame (registers are cleared on entry).
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+    assert_eq!(
+        vm.state.current_frame.gas, gas_to_pass,
+        "callee should receive the passed gas"
+    );
+
+    // Craft the return-ABI pointer in r3: start = u32::MAX, length = 1 (so start + length overflows
+    // u32), MakeNewPointer / UseHeap (raw source byte 0), integer (no pointer flag).
+    let mut ret_abi = U256::zero();
+    ret_abi.0[1] = (1u64 << 32) | u64::from(u32::MAX); // length = 1 (bits 96..128), start = u32::MAX (bits 64..96)
+    vm.state.registers[3] = ret_abi;
+    vm.state.register_pointer_flags &= !(1 << 3);
+
+    // Step 2: the callee's `ret.panic r3` returns to the caller's exception handler.
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+
+    // Back in the caller frame: with the fix the callee drained all its gas on heap growth and
+    // returned nothing, so the caller's remaining gas is well below the gas it passed in.
+    assert!(
+        vm.state.current_frame.gas < gas_to_pass,
+        "caller gas {} should be below the {gas_to_pass} passed in — the callee's gas must have \
+         been drained by u32::MAX heap growth",
+        vm.state.current_frame.gas,
+    );
+}
