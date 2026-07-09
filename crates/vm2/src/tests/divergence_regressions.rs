@@ -1485,3 +1485,291 @@ fn rollback_should_deallocate_dynamic_decommit_page_from_nested_frame() {
     );
     assert!(vm.state.heaps.contains(decommitter_heap));
 }
+
+/// Builds a register-only `add` with an arbitrary `dst1` register index by patching a raw
+/// encoding, the same way `zk_evm`'s `test_dst0_dst1_alias_on_add` patches bytecode. `add`
+/// produces no second output, so `dst1` is a "dirty" field that must be cleared after execution.
+fn dirty_add_instruction(
+    src0_reg: u8,
+    dst0_reg: u8,
+    dst1_reg: u8,
+) -> Instruction<(), TestWorld<()>> {
+    let variant = OPCODES_TABLE
+        .iter()
+        .copied()
+        .find(|variant| {
+            matches!(variant.opcode, Opcode::Add(_))
+                && matches!(
+                    variant.src0_operand_type,
+                    Operand::RegOnly
+                        | Operand::RegOrImm(RegOrImmFlags::UseRegOnly)
+                        | Operand::Full(ImmMemHandlerFlags::UseRegOnly)
+                )
+                && matches!(
+                    variant.dst0_operand_type,
+                    Operand::RegOnly | Operand::Full(ImmMemHandlerFlags::UseRegOnly)
+                )
+        })
+        .expect("register-only Add variant must exist");
+
+    let encoded = DecodedOpcode::<8, EncodingModeProduction> {
+        variant,
+        condition: Condition::Always,
+        src0_reg_idx: src0_reg,
+        src1_reg_idx: 0,
+        dst0_reg_idx: dst0_reg,
+        dst1_reg_idx: dst1_reg,
+        imm_0: 0,
+        imm_1: 0,
+    }
+    .serialize_as_integer();
+
+    decode(encoded, false)
+}
+
+#[test]
+fn dirty_dst1_on_add_is_cleared_to_zero() {
+    // `add` has no second output, so a non-`r0` `dst1` register must be zeroed after execution,
+    // matching zk_evm (see zksync-protocol#222). Here `dst0` and `dst1` both alias `r2`: the
+    // `dst0` write happens first, then the `dst1` clear wins, leaving `r2 == 0`.
+    let program = Program::from_raw(
+        vec![dirty_add_instruction(1, 2, 2), ret_instruction()],
+        vec![],
+    );
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    // r1 is the addend; r2 starts non-zero so we can tell "add ran then cleared" (=> 0) apart from
+    // "add wrote 7 but clear was skipped" (=> 7) and "instruction never touched r2" (=> 0xAA).
+    vm.state.registers[1] = U256::from(7);
+    vm.state.registers[2] = U256::from(0xAA);
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+    assert_eq!(vm.state.registers[2], U256::zero());
+}
+
+#[test]
+fn dirty_dst1_on_add_without_alias_is_cleared_to_zero() {
+    // Same as above but `dst0` (r3) and `dst1` (r2) are distinct: the add result lands in r3 and
+    // the untouched `dst1` register r2 is cleared, regardless of its previous contents.
+    let program = Program::from_raw(
+        vec![dirty_add_instruction(1, 3, 2), ret_instruction()],
+        vec![],
+    );
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    vm.state.registers[1] = U256::from(7);
+    vm.state.registers[2] = U256::from(0xAA);
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+    assert_eq!(vm.state.registers[3], U256::from(7));
+    assert_eq!(vm.state.registers[2], U256::zero());
+}
+
+#[test]
+fn uma_read_increment_panic_clears_dst1() {
+    // A heap read with increment writes its incremented pointer to `dst1`, but panics (here on an
+    // out-of-range offset) before it gets there. zk_evm still leaves `dst1` cleared to zero, so vm2
+    // must too. This is the near-call-observable divergence from the original report.
+    let heap_read = Instruction::from_heap_read(
+        Register1(Register::new(1)).into(),
+        Register1(Register::new(3)),
+        Some(Register2(Register::new(4))),
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let program = Program::from_raw(vec![heap_read], vec![]);
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    // r1 holds an offset past the last addressable byte, forcing a panic before the increment.
+    vm.state.registers[1] = U256::from(u32::MAX);
+    // r4 (the increment / dst1 register) starts non-zero and with its pointer flag set.
+    vm.state.registers[4] = U256::from(0xAA);
+    vm.state.register_pointer_flags |= 1 << 4;
+
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+
+    assert_eq!(vm.state.registers[4], U256::zero());
+    assert_eq!(vm.state.register_pointer_flags & (1 << 4), 0);
+}
+
+#[test]
+fn mul_second_output_is_preserved_not_cleared() {
+    // The mirror of the "dirty dst1 is cleared" tests: `mul` genuinely produces a second output
+    // (the high 256 bits go to `dst1`), so the post-execution clear must NOT fire and overwrite it.
+    // `U256::MAX * 2 == 2^257 - 2`, giving low = `U256::MAX - 1` in `dst0` and high = 1 in `dst1`.
+    let mul = Instruction::from_mul(
+        Register1(Register::new(1)).into(), // src0 (low operand)
+        Register2(Register::new(2)),        // src1
+        Register1(Register::new(3)).into(), // dst0 (low word)
+        Register2(Register::new(4)),        // dst1 (high word)
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+        false,
+        false,
+    );
+    let program = Program::from_raw(vec![mul, ret_instruction()], vec![]);
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    vm.state.register_pointer_flags &= !(1 << 1);
+    vm.state.registers[1] = U256::MAX;
+    vm.state.registers[2] = U256::from(2);
+    // Sentinel: if the clear wrongly fired, `dst1` (r4) would be 0 instead of the real high word.
+    vm.state.registers[4] = U256::from(0xAA);
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+    assert_eq!(vm.state.registers[3], U256::MAX - 1);
+    assert_eq!(vm.state.registers[4], U256::one());
+}
+
+#[test]
+fn unsatisfied_predicate_does_not_clear_dst1() {
+    // A condition-skipped instruction must leave `dst1` untouched, matching zk_evm: there a failed
+    // predicate masks the opcode into `Nop` with `dst1_reg_idx = 0`, so its unconditional post-apply
+    // clear only ever zeroes `r0` (the discard register). vm2 reaches the same result by skipping the
+    // clear entirely on the not-satisfied path. `mul` carries a real `dst1`; `IfGT` is unset here.
+    let skipped_mul = Instruction::from_mul(
+        Register1(Register::new(1)).into(),
+        Register2(Register::new(2)),
+        Register1(Register::new(3)).into(),
+        Register2(Register::new(4)),
+        Arguments::new(Predicate::IfGT, 5, ModeRequirements::none()),
+        false,
+        false,
+    );
+    let program = Program::from_raw(vec![skipped_mul, ret_instruction()], vec![]);
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    // Flags start cleared, so `IfGT` is not satisfied and the mul does not execute.
+    vm.state.register_pointer_flags &= !(1 << 1);
+    vm.state.registers[1] = U256::MAX;
+    vm.state.registers[2] = U256::from(2);
+    // `dst1` (r4) keeps its pre-existing value: the skip path must not zero it.
+    vm.state.registers[4] = U256::from(0xAA);
+
+    assert_eq!(
+        vm.run(&mut world, &mut ()),
+        ExecutionEnd::ProgramFinished(vec![])
+    );
+    assert_eq!(vm.state.registers[4], U256::from(0xAA));
+    // dst0 (r3) is likewise untouched by the skipped instruction.
+    assert_eq!(vm.state.registers[3], U256::zero());
+}
+
+/// A far `ret.panic` must still resolve its return-ABI pointer for *cost*: a fresh-heap pointer
+/// whose `start + length` overflows `u32` grows the heap to `u32::MAX`, draining the frame's gas
+/// to zero, matching the proving circuit / post-#217 `zk_evm` (see zksync-protocol#217). Before the
+/// fix, vm2 short-circuited on panic and never parsed the return ABI, so the callee kept its gas
+/// and returned it to the caller.
+#[test]
+fn far_ret_panic_charges_heap_growth_for_overflowing_pointer() {
+    let callee_address = Address::from_low_u64_be(0x00C0_FFEE);
+    // `ret.panic r3` — r3 carries the crafted return-ABI pointer (set once inside the callee frame).
+    let panicking_program = Program::from_raw(
+        vec![Instruction::from_panic(
+            Register1(Register::new(3)),
+            None,
+            Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+        )],
+        vec![],
+    );
+    let mut world = TestWorld::new(&[(callee_address, panicking_program)]);
+
+    let gas_to_pass = 50_000;
+    let mut far_call_abi = U256::zero();
+    far_call_abi.0[3] = u64::from(gas_to_pass);
+    let far_call = Instruction::from_far_call::<opcodes::Normal>(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Immediate1(1), // exception handler -> caller instruction #1 (the trailing `ret`)
+        false,
+        false,
+        Arguments::new(Predicate::Always, 200, ModeRequirements::none()),
+    );
+    let caller_program = Program::from_raw(vec![far_call, ret_instruction()], vec![]);
+
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        caller_program,
+        Address::zero(),
+        &[],
+        70_000,
+        default_settings(),
+    );
+
+    vm.state.registers[1] = far_call_abi;
+    vm.state.registers[2] = U256::from(callee_address.to_low_u64_be());
+    vm.state.register_pointer_flags &= !(1 << 1);
+
+    // Step 1: the far call pushes the callee frame (registers are cleared on entry).
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+    assert_eq!(
+        vm.state.current_frame.gas, gas_to_pass,
+        "callee should receive the passed gas"
+    );
+
+    // Craft the return-ABI pointer in r3: start = u32::MAX, length = 1 (so start + length overflows
+    // u32), MakeNewPointer / UseHeap (raw source byte 0), integer (no pointer flag).
+    let mut ret_abi = U256::zero();
+    ret_abi.0[1] = (1u64 << 32) | u64::from(u32::MAX); // length = 1 (bits 96..128), start = u32::MAX (bits 64..96)
+    vm.state.registers[3] = ret_abi;
+    vm.state.register_pointer_flags &= !(1 << 3);
+
+    // Step 2: the callee's `ret.panic r3` returns to the caller's exception handler.
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+
+    // Back in the caller frame: with the fix the callee drained all its gas on heap growth and
+    // returned nothing, so the caller's remaining gas is well below the gas it passed in.
+    assert!(
+        vm.state.current_frame.gas < gas_to_pass,
+        "caller gas {} should be below the {gas_to_pass} passed in — the callee's gas must have \
+         been drained by u32::MAX heap growth",
+        vm.state.current_frame.gas,
+    );
+}

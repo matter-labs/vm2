@@ -67,10 +67,23 @@ pub(crate) fn full_boilerplate<Opcode: OpcodeType, T: Tracer, W: World<T>>(
     }
 
     if args.predicate().satisfied(&vm.state.flags) {
+        // Capture the second-output register before running the instruction: business logic may pop
+        // the current frame (e.g. `ret`/`far_call`) and free the code page `args` points into, so it
+        // must not be dereferenced afterwards. `Register` is a plain index and stays valid.
+        let dst1 = args.dst1_register();
+        vm.state.dst1_was_updated = false;
+
         tracer.before_instruction::<Opcode, _>(&mut VmAndWorld { vm, world });
         vm.state.current_frame.pc = unsafe { vm.state.current_frame.pc.add(1) };
-        business_logic(vm, args, world, tracer)
-            .merge_tracer(tracer.after_instruction::<Opcode, _>(&mut VmAndWorld { vm, world }))
+        let result = business_logic(vm, args, world, tracer);
+
+        // Unless the instruction wrote its second output, `zk_evm` leaves `dst1` cleared to zero.
+        // Do the same here, after the primary output so that a `dst0`/`dst1` alias resolves to zero.
+        if !vm.state.dst1_was_updated {
+            dst1.set_zero(&mut vm.state);
+        }
+
+        result.merge_tracer(tracer.after_instruction::<Opcode, _>(&mut VmAndWorld { vm, world }))
     } else {
         tracer.before_instruction::<opcodes::Nop, _>(&mut VmAndWorld { vm, world });
         vm.state.current_frame.pc = unsafe { vm.state.current_frame.pc.add(1) };

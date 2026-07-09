@@ -76,6 +76,7 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for VirtualMachine<T, W> {
                 transaction_number: u.arbitrary()?,
                 context_u128: u.arbitrary()?,
                 next_base_page: first_dynamic_base_page(),
+                dst1_was_updated: false,
             },
             settings: u.arbitrary()?,
             world_diff: WorldDiff::default(),

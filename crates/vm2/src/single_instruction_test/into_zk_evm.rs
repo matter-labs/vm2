@@ -54,6 +54,7 @@ pub fn vm2_to_zk_evm<T: Tracer, W: World<T>>(
         decommittment_processor: MockDecommitter,
         witness_tracer: NoOracle,
         version: Version::Version27,
+        dst1_was_updated_this_cycle: false,
     }
 }
 
