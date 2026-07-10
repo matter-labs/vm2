@@ -203,16 +203,21 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
     /// reused by the next transaction, so peak page usage stays at roughly one
     /// transaction's worth instead of growing with the transaction count.
     fn reclaim_bootloader_returndata_heaps(&mut self) {
-        let kept = std::mem::take(&mut self.state.current_frame.heaps_i_am_keeping_alive);
-        let mut still_pinned = Vec::new();
-        for heap in kept {
-            if self.world_diff.is_decommit_page_pinned(heap) {
-                still_pinned.push(heap);
-            } else {
+        // `kept` is owned after the take, so the `retain` closure can borrow
+        // `self.world_diff`/`self.state.heaps` without conflicting with the
+        // borrow of the field it compacts. Retain drops the deallocated heaps
+        // in place, avoiding a second allocation. Reordering is irrelevant here:
+        // there is no live snapshot to consume the tail ordering (see the len()
+        // snapshot / tail-drain rollback path in `Callframe`).
+        let mut kept = std::mem::take(&mut self.state.current_frame.heaps_i_am_keeping_alive);
+        kept.retain(|&heap| {
+            let pinned = self.world_diff.is_decommit_page_pinned(heap);
+            if !pinned {
                 self.state.heaps.deallocate(heap);
             }
-        }
-        self.state.current_frame.heaps_i_am_keeping_alive = still_pinned;
+            pinned
+        });
+        self.state.current_frame.heaps_i_am_keeping_alive = kept;
     }
 
     /// This must only be called when it is known that the VM cannot be rolled back,
