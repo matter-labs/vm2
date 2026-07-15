@@ -14,14 +14,97 @@ use crate::page_ids::{
 /// Heap page size in bytes.
 const HEAP_PAGE_SIZE: usize = 1 << 12;
 
-/// Heap page.
-#[derive(Debug, Clone, PartialEq)]
-struct HeapPage(Box<[u8; HEAP_PAGE_SIZE]>);
+/// Sub-page allocation granularity in bytes. A [`HeapPage`] only allocates the
+/// chunks that are actually written; untouched chunks read as zero, exactly as
+/// a dense zero page would. This bounds the memory of the "write one byte per
+/// page and keep the page alive" growth pattern: a boundary write now costs one
+/// 256-byte chunk instead of a full 4 KiB page (~16x less), while the fixed
+/// per-page index stays small (16 * 8 = 128 bytes).
+const HEAP_CHUNK_SIZE: usize = 256;
+const CHUNKS_PER_PAGE: usize = HEAP_PAGE_SIZE / HEAP_CHUNK_SIZE;
 
-impl Default for HeapPage {
-    fn default() -> Self {
-        let boxed_slice: Box<[u8]> = vec![0_u8; HEAP_PAGE_SIZE].into();
-        Self(boxed_slice.try_into().unwrap())
+/// Heap page stored as lazily-allocated fixed-size chunks. An absent chunk is
+/// semantically an all-zero chunk; reads and equality treat it as such, so the
+/// observable behavior is identical to a dense zero-initialized page.
+#[derive(Debug, Clone)]
+struct HeapPage {
+    chunks: [Option<Box<[u8; HEAP_CHUNK_SIZE]>>; CHUNKS_PER_PAGE],
+}
+
+impl HeapPage {
+    fn new() -> Self {
+        Self {
+            chunks: std::array::from_fn(|_| None),
+        }
+    }
+
+    /// Drop every chunk, returning the page to the all-zero state. Cheap: frees
+    /// the chunk allocations rather than zeroing 4 KiB in place.
+    fn clear(&mut self) {
+        for chunk in &mut self.chunks {
+            *chunk = None;
+        }
+    }
+
+    fn is_all_zero(&self) -> bool {
+        self.chunks
+            .iter()
+            .flatten()
+            .all(|chunk| chunk.iter().all(|&byte| byte == 0))
+    }
+
+    fn byte(&self, offset: usize) -> u8 {
+        match &self.chunks[offset / HEAP_CHUNK_SIZE] {
+            Some(chunk) => chunk[offset % HEAP_CHUNK_SIZE],
+            None => 0,
+        }
+    }
+
+    /// Copy `dst.len()` bytes starting at `offset` (which must satisfy
+    /// `offset + dst.len() <= HEAP_PAGE_SIZE`) into `dst`, filling regions
+    /// backed by absent chunks with zero. Spans crossing chunk boundaries are
+    /// handled internally.
+    fn read_into(&self, offset: usize, dst: &mut [u8]) {
+        let mut pos = 0;
+        while pos < dst.len() {
+            let abs = offset + pos;
+            let chunk_idx = abs / HEAP_CHUNK_SIZE;
+            let in_chunk = abs % HEAP_CHUNK_SIZE;
+            let n = (HEAP_CHUNK_SIZE - in_chunk).min(dst.len() - pos);
+            match &self.chunks[chunk_idx] {
+                Some(chunk) => dst[pos..pos + n].copy_from_slice(&chunk[in_chunk..in_chunk + n]),
+                None => dst[pos..pos + n].fill(0),
+            }
+            pos += n;
+        }
+    }
+
+    /// Write `src` starting at `offset` (which must satisfy
+    /// `offset + src.len() <= HEAP_PAGE_SIZE`), allocating any touched chunks.
+    fn write_from(&mut self, offset: usize, src: &[u8]) {
+        let mut pos = 0;
+        while pos < src.len() {
+            let abs = offset + pos;
+            let chunk_idx = abs / HEAP_CHUNK_SIZE;
+            let in_chunk = abs % HEAP_CHUNK_SIZE;
+            let n = (HEAP_CHUNK_SIZE - in_chunk).min(src.len() - pos);
+            let chunk =
+                self.chunks[chunk_idx].get_or_insert_with(|| Box::new([0u8; HEAP_CHUNK_SIZE]));
+            chunk[in_chunk..in_chunk + n].copy_from_slice(&src[pos..pos + n]);
+            pos += n;
+        }
+    }
+}
+
+// Absent and present-but-zero chunks are equivalent, so equality compares the
+// effective bytes rather than the chunk-presence structure.
+impl PartialEq for HeapPage {
+    fn eq(&self, other: &Self) -> bool {
+        (0..CHUNKS_PER_PAGE).all(|idx| match (&self.chunks[idx], &other.chunks[idx]) {
+            (Some(a), Some(b)) => a == b,
+            (Some(chunk), None) | (None, Some(chunk)) => chunk.iter().all(|&byte| byte == 0),
+            (None, None) => true,
+        })
     }
 }
 
@@ -49,7 +132,7 @@ impl PartialEq for Heap {
                     }
                 }
                 (Some(page), None) | (None, Some(page)) => {
-                    if page.0.iter().any(|&byte| byte != 0) {
+                    if !page.is_all_zero() {
                         return false;
                     }
                 }
@@ -65,15 +148,9 @@ impl Heap {
         let pages = bytes
             .chunks(HEAP_PAGE_SIZE)
             .map(|bytes| {
-                Some(if let Some(mut page) = pagepool.get_dirty_page() {
-                    page.0[..bytes.len()].copy_from_slice(bytes);
-                    page.0[bytes.len()..].fill(0);
-                    page
-                } else {
-                    let mut page = HeapPage::default();
-                    page.0[..bytes.len()].copy_from_slice(bytes);
-                    page
-                })
+                let mut page = pagepool.allocate_page();
+                page.write_from(0, bytes);
+                Some(page)
             })
             .collect();
         Self { pages }
@@ -89,26 +166,20 @@ impl Heap {
         let (page_idx, offset_in_page) = address_to_page_offset(start_address);
         let bytes_in_page = HEAP_PAGE_SIZE - offset_in_page;
 
+        let mut result = [0u8; 32];
         if bytes_in_page >= 32 {
             if let Some(page) = self.page(page_idx) {
-                U256::from_big_endian(&page.0[offset_in_page..offset_in_page + 32])
-            } else {
-                U256::zero()
+                page.read_into(offset_in_page, &mut result);
             }
         } else {
-            let mut result = [0u8; 32];
             if let Some(page) = self.page(page_idx) {
-                for (res, src) in result.iter_mut().zip(&page.0[offset_in_page..]) {
-                    *res = *src;
-                }
+                page.read_into(offset_in_page, &mut result[..bytes_in_page]);
             }
             if let Some(page) = self.page(page_idx + 1) {
-                for (res, src) in result[bytes_in_page..].iter_mut().zip(&*page.0) {
-                    *res = *src;
-                }
+                page.read_into(0, &mut result[bytes_in_page..]);
             }
-            U256::from_big_endian(&result)
         }
+        U256::from_big_endian(&result)
     }
 
     pub(crate) fn read_u256_partially(&self, range: Range<u32>) -> U256 {
@@ -118,17 +189,10 @@ impl Heap {
 
         let mut result = [0u8; 32];
         if let Some(page) = self.page(page_idx) {
-            for (res, src) in result[..bytes_in_page]
-                .iter_mut()
-                .zip(&page.0[offset_in_page..])
-            {
-                *res = *src;
-            }
+            page.read_into(offset_in_page, &mut result[..bytes_in_page]);
         }
         if let Some(page) = self.page(page_idx + 1) {
-            for (res, src) in result[bytes_in_page..length].iter_mut().zip(&*page.0) {
-                *res = *src;
-            }
+            page.read_into(0, &mut result[bytes_in_page..length]);
         }
         U256::from_big_endian(&result)
     }
@@ -140,10 +204,10 @@ impl Heap {
         let mut result = Vec::with_capacity(length);
         while result.len() < length {
             let len_in_page = (length - result.len()).min(HEAP_PAGE_SIZE - offset_in_page);
+            let start = result.len();
+            result.resize(start + len_in_page, 0);
             if let Some(page) = self.page(page_idx) {
-                result.extend_from_slice(&page.0[offset_in_page..(offset_in_page + len_in_page)]);
-            } else {
-                result.resize(result.len() + len_in_page, 0);
+                page.read_into(offset_in_page, &mut result[start..start + len_in_page]);
             }
             page_idx += 1;
             offset_in_page = 0;
@@ -154,7 +218,7 @@ impl Heap {
     /// Needed only by tracers
     pub(crate) fn read_byte(&self, address: u32) -> u8 {
         let (page, offset) = address_to_page_offset(address);
-        self.page(page).map_or(0, |page| page.0[offset])
+        self.page(page).map_or(0, |page| page.byte(offset))
     }
 
     fn page(&self, idx: usize) -> Option<&HeapPage> {
@@ -171,23 +235,18 @@ impl Heap {
     fn write_u256(&mut self, start_address: u32, value: U256, pagepool: &mut PagePool) {
         let (page_idx, offset_in_page) = address_to_page_offset(start_address);
         let bytes_in_page = HEAP_PAGE_SIZE - offset_in_page;
-        let page = self.get_or_insert_page(page_idx, pagepool);
+
+        let mut bytes = [0u8; 32];
+        value.to_big_endian(&mut bytes);
 
         if bytes_in_page >= 32 {
-            value.to_big_endian(&mut page.0[offset_in_page..offset_in_page + 32]);
+            self.get_or_insert_page(page_idx, pagepool)
+                .write_from(offset_in_page, &bytes);
         } else {
-            let mut bytes = [0; 32];
-            value.to_big_endian(&mut bytes);
-            let mut bytes_iter = bytes.into_iter();
-
-            for (dst, src) in page.0[offset_in_page..].iter_mut().zip(bytes_iter.by_ref()) {
-                *dst = src;
-            }
-
-            let page = self.get_or_insert_page(page_idx + 1, pagepool);
-            for (dst, src) in page.0.iter_mut().zip(bytes_iter) {
-                *dst = src;
-            }
+            self.get_or_insert_page(page_idx, pagepool)
+                .write_from(offset_in_page, &bytes[..bytes_in_page]);
+            self.get_or_insert_page(page_idx + 1, pagepool)
+                .write_from(0, &bytes[bytes_in_page..]);
         }
     }
 
@@ -196,9 +255,8 @@ impl Heap {
         let mut remaining = bytes;
         while !remaining.is_empty() {
             let bytes_in_page = (HEAP_PAGE_SIZE - offset_in_page).min(remaining.len());
-            let page = self.get_or_insert_page(page_idx, pagepool);
-            page.0[offset_in_page..offset_in_page + bytes_in_page]
-                .copy_from_slice(&remaining[..bytes_in_page]);
+            self.get_or_insert_page(page_idx, pagepool)
+                .write_from(offset_in_page, &remaining[..bytes_in_page]);
             remaining = &remaining[bytes_in_page..];
             page_idx += 1;
             offset_in_page = 0;
@@ -615,20 +673,17 @@ impl fmt::Debug for PagePool {
 }
 
 impl PagePool {
+    /// Returns a cleared page. Pages are cleared on recycle (see
+    /// [`Self::recycle_page`]), so a pooled page is already all-zero.
     fn allocate_page(&mut self) -> HeapPage {
-        self.get_dirty_page()
-            .map(|mut page| {
-                page.0.fill(0);
-                page
-            })
-            .unwrap_or_default()
+        self.0.pop().unwrap_or_else(HeapPage::new)
     }
 
-    fn get_dirty_page(&mut self) -> Option<HeapPage> {
-        self.0.pop()
-    }
-
-    fn recycle_page(&mut self, page: HeapPage) {
+    /// Recycle a page for reuse. The page's chunks are dropped immediately so
+    /// that pooled pages never retain freed heap memory, and so that the next
+    /// `allocate_page` hands back an all-zero page.
+    fn recycle_page(&mut self, mut page: HeapPage) {
+        page.clear();
         self.0.push(page);
     }
 }
@@ -697,9 +752,9 @@ mod tests {
     fn populated_pagepool() -> PagePool {
         let mut pagepool = PagePool::default();
         for _ in 0..10 {
-            let mut page = HeapPage::default();
+            let mut page = HeapPage::new();
             // Fill pages with 0xff bytes to detect not clearing pages
-            page.0.fill(0xff);
+            page.write_from(0, &[0xff; HEAP_PAGE_SIZE]);
             pagepool.recycle_page(page);
         }
         pagepool
