@@ -245,4 +245,149 @@ mod tests {
         let stack = Stack::new();
         let _ = stack.clone();
     }
+
+    // --- Differential fuzz vs a dense oracle -------------------------------
+    // The chunked stack is not exercised by the `single_instruction_test`
+    // divergence harness (that feature substitutes a mock stack), so these
+    // tests fuzz the real implementation against a dense `[U256; 1 << 16]`
+    // oracle to guarantee the sparse layout is observably identical.
+
+    struct XorShift(u64);
+    impl XorShift {
+        fn next(&mut self) -> u64 {
+            let mut x = self.0;
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            self.0 = x;
+            x
+        }
+        fn slot(&mut self) -> u16 {
+            (self.next() & 0xffff) as u16
+        }
+        fn value(&mut self) -> U256 {
+            U256([self.next(), self.next(), self.next(), self.next()])
+        }
+    }
+
+    const DENSE: usize = 1 << 16;
+
+    #[test]
+    fn differential_random_set_get_matches_dense_oracle() {
+        let mut rng = XorShift(0x1234_5678_9abc_def1);
+        let mut stack = Stack::new();
+        let mut oracle = vec![U256::zero(); DENSE];
+
+        for _ in 0..20_000 {
+            let slot = rng.slot();
+            // Mix in zero writes: they must allocate/dirty exactly like nonzero.
+            let value = if rng.next() % 8 == 0 {
+                U256::zero()
+            } else {
+                rng.value()
+            };
+            stack.set(slot, value);
+            oracle[slot as usize] = value;
+        }
+        for slot in 0..DENSE {
+            assert_eq!(
+                stack.get(slot as u16),
+                oracle[slot],
+                "mismatch at slot {slot}"
+            );
+        }
+    }
+
+    #[test]
+    fn zero_returns_to_fresh_state() {
+        let mut rng = XorShift(0xdead_beef_cafe_0001);
+        let mut stack = Stack::new();
+        for _ in 0..5_000 {
+            stack.set(rng.slot(), rng.value());
+        }
+        stack.zero();
+        let fresh = Stack::new();
+        assert_eq!(&stack, &fresh, "zero() must equal a fresh stack");
+        for slot in 0..DENSE {
+            assert_eq!(stack.get(slot as u16), U256::zero());
+        }
+    }
+
+    #[test]
+    fn snapshot_rollback_restores_exact_state() {
+        let mut rng = XorShift(0x0abc_1234_5678_9def);
+        let mut stack = Stack::new();
+
+        for _ in 0..8_000 {
+            stack.set(rng.slot(), rng.value());
+        }
+        // Capture the exact slot state at snapshot time.
+        let mut expected = vec![U256::zero(); DENSE];
+        for slot in 0..DENSE {
+            expected[slot] = stack.get(slot as u16);
+        }
+        let snap = stack.snapshot();
+
+        // Diverge: overwrite, zero-write, and touch new areas.
+        for _ in 0..8_000 {
+            stack.set(rng.slot(), rng.value());
+        }
+        stack.set(0xffff, rng.value());
+        stack.set(0, U256::zero());
+
+        stack.rollback(snap);
+        for slot in 0..DENSE {
+            assert_eq!(
+                stack.get(slot as u16),
+                expected[slot],
+                "rollback mismatch at slot {slot}"
+            );
+        }
+    }
+
+    #[test]
+    fn eq_independent_of_write_path() {
+        // Two stacks reaching the same logical values by different paths — one
+        // that writes then zeroes a slot (present-but-zero chunk) and one that
+        // never touches it (absent chunk) — must compare equal, because both
+        // touch the same *areas* (dirty_areas must match for eq).
+        let mut a = Stack::new();
+        let mut b = Stack::new();
+
+        // Same dirty areas: both write area 0 (slot 5) and area 3 (slot 3100).
+        a.set(5, U256::from(42u64));
+        a.set(3100, U256::from(7u64));
+        a.set(6, U256::from(99u64));
+        a.set(6, U256::zero()); // present-but-zero in a
+
+        b.set(5, U256::from(42u64));
+        b.set(3100, U256::from(7u64));
+        b.set(6, U256::zero()); // dirties area 0 without a prior nonzero
+
+        assert_eq!(&a, &b, "present-zero vs freshly-zeroed slot must be equal");
+
+        // Differing value must be unequal.
+        let mut c = b.clone();
+        c.set(5, U256::from(43u64));
+        assert_ne!(&b, &c);
+    }
+
+    #[test]
+    fn clone_is_a_deep_independent_copy() {
+        let mut rng = XorShift(0x5555_aaaa_5555_aaaa);
+        let mut original = Stack::new();
+        for _ in 0..3_000 {
+            original.set(rng.slot(), rng.value());
+        }
+        let cloned = original.clone();
+        assert_eq!(&original, &cloned);
+
+        // Mutating the original must not affect the clone.
+        original.set(1234, U256::from(0xffff_ffffu64));
+        assert_eq!(cloned.get(1234), U256::zero());
+        // And the clone still matches its snapshot of the original.
+        for slot in [0u16, 5, 1024, 3100, 60000, 65535] {
+            let _ = cloned.get(slot); // no panic; values already checked via eq
+        }
+    }
 }
