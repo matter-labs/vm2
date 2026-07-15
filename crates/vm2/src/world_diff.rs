@@ -215,14 +215,7 @@ impl WorldDiff {
 
         self.pubdata_costs.push(0);
         let value = if self.skip_storage_logs {
-            // Opt-out mode: no trace is kept, so record what the deduplicated set
-            // is derived from instead — cache the initial value on first read
-            // (writes already cache it) and flag a depth-zero read.
-            let initial_value = self
-                .storage_initial_values
-                .entry((contract, key))
-                .or_insert_with(|| world.read_storage(contract, key))
-                .value;
+            // Opt-out mode: no trace kept; record the dedup inputs instead.
             let live_write = self
                 .storage_writes
                 .as_ref()
@@ -231,7 +224,13 @@ impl WorldDiff {
             if let Some(value) = live_write {
                 value
             } else {
-                // No pending write at read time: `did_read_at_depth_zero`.
+                // No pending write: cache the initial value (writes already
+                // cache it) and flag the depth-zero read.
+                let initial_value = self
+                    .storage_initial_values
+                    .entry((contract, key))
+                    .or_insert_with(|| world.read_storage(contract, key))
+                    .value;
                 self.slot_add_flag((contract, key), SLOT_PROTECTIVE_READ);
                 initial_value
             }
@@ -401,6 +400,11 @@ impl WorldDiff {
     /// Returns the initial (pre-batch) value of a slot if it has been
     /// touched by a read or write during execution. Used by per-slot summary
     /// derivation in place of walking the `storage_logs` trace.
+    ///
+    /// The set of slots returning `Some` depends on the recording mode (see
+    /// [`Self::set_record_storage_logs`]): with the trace disabled, read-only
+    /// slots are cached and reported here; in the default mode only written
+    /// slots are.
     pub fn initial_storage_value(&self, contract: H160, key: U256) -> Option<crate::StorageSlot> {
         self.storage_initial_values.get(&(contract, key)).copied()
     }
