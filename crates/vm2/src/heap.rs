@@ -393,7 +393,8 @@ impl Heaps {
 
     // The three panics in this function flag VM-internal bookkeeping bugs, not
     // reachable conditions: the VM only deallocates pages it previously allocated via
-    // `allocate_at` (frame pop in `pop_frame`, snapshot rollback in `State::rollback`). The
+    // `allocate_at` (frame pop in `pop_frame`, snapshot rollback in `State::rollback`, and
+    // returndata-heap reclaim at tx commit in `reclaim_bootloader_returndata_heaps`). The
     // reference `zk_evm` has no deallocation path of its own, so there is no behaviour to
     // diverge from here — these panics remain as fail-fast diagnostics for our own bookkeeping.
     pub(crate) fn deallocate(&mut self, page: HeapId) {
