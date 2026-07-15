@@ -760,6 +760,168 @@ mod tests {
         pagepool
     }
 
+    // --- Differential fuzz vs a dense oracle -------------------------------
+    // The chunked HeapPage is not covered by the `single_instruction_test`
+    // divergence harness (that feature substitutes a mock heap), so these
+    // tests fuzz the real implementation against a dense byte-vector oracle,
+    // biased toward page/chunk boundaries where the split logic lives.
+
+    struct XorShift(u64);
+    impl XorShift {
+        fn next(&mut self) -> u64 {
+            let mut x = self.0;
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            self.0 = x;
+            x
+        }
+        fn value(&mut self) -> U256 {
+            U256([self.next(), self.next(), self.next(), self.next()])
+        }
+    }
+
+    // Heap span covering many pages and chunks; U256 writes stay in-bounds.
+    const SPAN: usize = 8 * HEAP_PAGE_SIZE; // 8 pages
+    const MAX_ADDR: usize = SPAN - 32;
+
+    // Addresses biased to land on and around page (4096) and chunk (256)
+    // boundaries, which is exactly where read_into / write_from split.
+    fn boundary_biased_addr(rng: &mut XorShift) -> u32 {
+        let base = match rng.next() % 5 {
+            0 => {
+                usize::try_from(rng.next() % (SPAN / HEAP_PAGE_SIZE) as u64).unwrap()
+                    * HEAP_PAGE_SIZE
+            } // page start
+            1 => {
+                usize::try_from(rng.next() % (SPAN / HEAP_CHUNK_SIZE) as u64).unwrap()
+                    * HEAP_CHUNK_SIZE
+            } // chunk start
+            _ => usize::try_from(rng.next() % SPAN as u64).unwrap(),
+        };
+        // Nudge by -16..=+16 to straddle the boundary (saturating, no signed casts).
+        let delta = usize::try_from(rng.next() % 33).unwrap();
+        let addr = (base + delta).saturating_sub(16).min(MAX_ADDR);
+        u32::try_from(addr).unwrap()
+    }
+
+    #[test]
+    fn differential_random_write_read_matches_dense_oracle() {
+        let mut rng = XorShift(0x9e37_79b9_7f4a_7c15);
+        let mut heap = Heap::default();
+        let mut pool = populated_pagepool();
+        let mut oracle = vec![0u8; SPAN];
+
+        for _ in 0..20_000 {
+            let addr = boundary_biased_addr(&mut rng);
+            let value = if rng.next().is_multiple_of(8) {
+                U256::zero() // zero writes must behave like the dense page
+            } else {
+                rng.value()
+            };
+            heap.write_u256(addr, value, &mut pool);
+            let mut be = [0u8; 32];
+            value.to_big_endian(&mut be);
+            oracle[addr as usize..addr as usize + 32].copy_from_slice(&be);
+        }
+
+        // read_u256 at every boundary-adjacent address.
+        for _ in 0..20_000 {
+            let addr = boundary_biased_addr(&mut rng);
+            let expected = U256::from_big_endian(&oracle[addr as usize..addr as usize + 32]);
+            assert_eq!(heap.read_u256(addr), expected, "read_u256 @ {addr}");
+        }
+
+        // read_byte across the whole span, incl. never-written (absent) bytes.
+        for (addr, expected) in oracle.iter().enumerate() {
+            assert_eq!(
+                heap.read_byte(u32::try_from(addr).unwrap()),
+                *expected,
+                "read_byte @ {addr}"
+            );
+        }
+
+        // read_range_big_endian across random cross-page/cross-chunk ranges.
+        for _ in 0..2_000 {
+            let start = usize::try_from(rng.next() % SPAN as u64).unwrap();
+            let len = usize::try_from(rng.next() % 1024)
+                .unwrap()
+                .min(SPAN - start);
+            let range = u32::try_from(start).unwrap()..u32::try_from(start + len).unwrap();
+            let got = heap.read_range_big_endian(range);
+            assert_eq!(
+                got,
+                &oracle[start..start + len],
+                "read_range @ {start}+{len}"
+            );
+        }
+    }
+
+    #[test]
+    fn from_bytes_matches_dense_oracle() {
+        let mut rng = XorShift(0x0123_4567_89ab_cdef);
+        // Non-page-multiple length exercises a partial final page/chunk.
+        let len = 5 * HEAP_PAGE_SIZE + 137;
+        let mut bytes = vec![0u8; len];
+        for b in &mut bytes {
+            *b = u8::try_from(rng.next() & 0xff).unwrap();
+        }
+        let mut pool = populated_pagepool();
+        let heap = Heap::from_bytes(&bytes, &mut pool);
+
+        for addr in (0..len.saturating_sub(32)).step_by(97) {
+            let expected = U256::from_big_endian(&bytes[addr..addr + 32]);
+            assert_eq!(
+                heap.read_u256(u32::try_from(addr).unwrap()),
+                expected,
+                "from_bytes @ {addr}"
+            );
+        }
+        // Reading past the initialized content returns zero.
+        assert_eq!(heap.read_byte(u32::try_from(len + 500).unwrap()), 0);
+    }
+
+    #[test]
+    fn pagepool_recycle_hands_back_zeroed_pages() {
+        // Dirty a heap, drop it back into the pool, then confirm a new heap
+        // built from that pool reads all-zero (no leaked bytes).
+        let mut pool = PagePool::default();
+        let mut dirty = Heap::default();
+        for i in 0..4 {
+            dirty.write_u256(i * HEAP_PAGE_SIZE as u32 + 64, repeat_byte(0xcd), &mut pool);
+        }
+        dirty.recycle(&mut pool);
+
+        let mut fresh = Heap::default();
+        // Force allocation of pages that will be drawn from the pool.
+        fresh.write_u256(64, 0.into(), &mut pool);
+        for addr in 0..HEAP_PAGE_SIZE {
+            assert_eq!(fresh.read_byte(addr as u32), 0, "recycled leak @ {addr}");
+        }
+    }
+
+    #[test]
+    fn eq_independent_of_chunk_presence() {
+        let mut pool = PagePool::default();
+        let mut a = Heap::default();
+        let mut b = Heap::default();
+
+        a.write_u256(100, repeat_byte(0x11), &mut pool);
+        a.write_u256(5000, repeat_byte(0x22), &mut pool);
+        // `a` allocates a chunk at offset 800 then zeroes it (present-but-zero).
+        a.write_u256(800, repeat_byte(0x33), &mut pool);
+        a.write_u256(800, 0.into(), &mut pool);
+
+        b.write_u256(100, repeat_byte(0x11), &mut pool);
+        b.write_u256(5000, repeat_byte(0x22), &mut pool);
+        // `b` never touches offset 800 (absent chunk) — must still equal `a`.
+
+        assert_eq!(a, b, "present-zero chunk must equal absent chunk");
+
+        b.write_u256(100, repeat_byte(0x99), &mut pool);
+        assert_ne!(a, b, "differing content must be unequal");
+    }
+
     #[test]
     fn reading_heap_range() {
         let mut heap = Heap::default();
