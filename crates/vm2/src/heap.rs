@@ -1101,6 +1101,65 @@ mod tests {
         assert_eq!(heaps[page].read_u256(9000), U256::zero());
     }
 
+    impl Heaps {
+        fn page_live_chunks(&self, page: HeapId) -> usize {
+            DecodedPage::decode(page)
+                .and_then(|decoded| self.try_decoded_page(decoded))
+                .map_or(0, Heap::live_chunks)
+        }
+    }
+
+    // --- Adversarial worst-case characterization --------------------------
+    // These pin down where A (window compaction) does and does not reduce the
+    // memory an 80M-gas transaction can pin. The binding attack fills the free
+    // per-frame page (NEW_FRAME_MEMORY_STIPEND = 4096 B = 16 chunks) and returns
+    // all of it; the compaction has nothing to drop there. A only helps when the
+    // callee grows scratch beyond what it returns.
+
+    #[test]
+    fn free_page_fill_is_not_reduced_by_compaction() {
+        // Worst case: touch all 16 chunks of the free first page (each 1-word
+        // write allocates a full 256 B chunk), then return the whole [0, 4096).
+        let mut heaps = Heaps::new(&[]);
+        let page = crate::page_ids::heap_page_from_base(crate::page_ids::first_dynamic_base_page());
+        heaps.allocate_at(page);
+        let chunks_per_page = HEAP_PAGE_SIZE / HEAP_CHUNK_SIZE;
+        for chunk in 0..chunks_per_page {
+            heaps.write_u256(page, (chunk * HEAP_CHUNK_SIZE) as u32, U256::one());
+        }
+        assert_eq!(heaps.page_live_chunks(page), chunks_per_page);
+
+        // Returndata window = the entire free page: compaction frees nothing.
+        heaps.compact_to_window(page, 0, HEAP_PAGE_SIZE as u32);
+        assert_eq!(
+            heaps.page_live_chunks(page),
+            chunks_per_page,
+            "returning the whole filled free page leaves nothing to compact"
+        );
+    }
+
+    #[test]
+    fn compaction_reclaims_scratch_beyond_returned_window() {
+        // A callee grows 64 KiB of scratch but returns only 32 bytes. Compaction
+        // frees the scratch, so retained memory tracks the returned window — this
+        // is where A pays off (and where a naive attacker does *not* operate).
+        let mut heaps = Heaps::new(&[]);
+        let page = crate::page_ids::heap_page_from_base(crate::page_ids::first_dynamic_base_page());
+        heaps.allocate_at(page);
+        let scratch_chunks = 256; // 64 KiB
+        for chunk in 0..scratch_chunks {
+            heaps.write_u256(page, (chunk * HEAP_CHUNK_SIZE) as u32, U256::one());
+        }
+        assert_eq!(heaps.page_live_chunks(page), scratch_chunks);
+
+        heaps.compact_to_window(page, 0, 32);
+        assert_eq!(
+            heaps.page_live_chunks(page),
+            1,
+            "only the single returned chunk survives compaction"
+        );
+    }
+
     #[test]
     fn compact_to_window_ignores_always_allocated_and_absent_pages() {
         let mut heaps = Heaps::new(b"calldata-should-be-untouched");
