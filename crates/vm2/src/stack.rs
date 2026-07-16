@@ -10,32 +10,45 @@ use crate::{bitset::Bitset, fat_pointer::FatPointer, hash_for_debugging};
 const NUMBER_OF_DIRTY_AREAS: usize = 64;
 const DIRTY_AREA_SIZE: usize = (1 << 16) / NUMBER_OF_DIRTY_AREAS;
 
-/// A contiguous block of `DIRTY_AREA_SIZE` stack slots, allocated on demand.
-type SlotChunk = Box<[U256; DIRTY_AREA_SIZE]>;
+// Storage is allocated at a finer granularity than the dirty-area granularity:
+// each sub-chunk holds `SUBCHUNK_SLOTS` slots, so a frame that scatters writes
+// allocates only the sub-chunks it actually touches, not a full 32 KiB area.
+// This bounds the "scatter one write into every area to force 2 MiB/frame"
+// pattern (deep nested calls) and, because far-call frames no longer pay a
+// large per-frame zeroing, it also *reduces* cycles vs. both the dense stack
+// and the coarser chunking. Dirty tracking stays at the coarse area level (the
+// `dirty_areas` u64), so snapshot/rollback/equality semantics are unchanged.
+const SUBCHUNK_SLOTS: usize = 16;
+const NUM_SUBCHUNKS: usize = (1 << 16) / SUBCHUNK_SLOTS;
+const SUBCHUNKS_PER_AREA: usize = DIRTY_AREA_SIZE / SUBCHUNK_SLOTS;
+
+/// A contiguous block of `SUBCHUNK_SLOTS` stack slots, allocated on demand.
+type SlotChunk = Box<[U256; SUBCHUNK_SLOTS]>;
 
 /// Allocate a zeroed slot chunk without materializing it on the caller's stack
-/// frame first (a `[U256; DIRTY_AREA_SIZE]` temporary is 32 KiB). `U256`'s
-/// all-zero bit pattern is the integer zero, so `alloc_zeroed` is sound.
+/// frame first. `U256`'s all-zero bit pattern is the integer zero, so
+/// `alloc_zeroed` is sound.
 #[allow(clippy::cast_ptr_alignment)] // aligned per the array layout
 fn zeroed_chunk() -> SlotChunk {
-    unsafe { Box::from_raw(alloc_zeroed(Layout::new::<[U256; DIRTY_AREA_SIZE]>()).cast()) }
+    unsafe { Box::from_raw(alloc_zeroed(Layout::new::<[U256; SUBCHUNK_SLOTS]>()).cast()) }
 }
 
 /// VM stack.
 ///
-/// The slots are stored as [`NUMBER_OF_DIRTY_AREAS`] chunks that are allocated
+/// The slots are stored as [`NUM_SUBCHUNKS`] sub-chunks that are allocated
 /// lazily on first write, so a frame that touches only a handful of slots pays
-/// for one 32 KiB chunk rather than the full 2 MiB. An absent chunk reads as
-/// all-zero, exactly like the dense zero-initialized array it replaces — this
-/// is purely a memory-layout change with no observable difference. Keeping the
-/// backing sparse bounds the memory held by deep call stacks (each live frame
-/// keeps its own `Stack`, and `StackPool` retains them for reuse).
+/// for a couple of small sub-chunks rather than the full 2 MiB. An absent
+/// sub-chunk reads as all-zero, exactly like the dense zero-initialized array
+/// it replaces — this is purely a memory-layout change with no observable
+/// difference. Keeping the backing sparse bounds the memory held by deep call
+/// stacks (each live frame keeps its own `Stack`, and `StackPool` retains them
+/// for reuse).
 #[derive(Clone)]
 pub(crate) struct Stack {
     /// set of slots that may be interpreted as [`FatPointer`].
     pointer_flags: Bitset,
     dirty_areas: u64,
-    slots: [Option<SlotChunk>; NUMBER_OF_DIRTY_AREAS],
+    slots: [Option<SlotChunk>; NUM_SUBCHUNKS],
 }
 
 impl Stack {
@@ -48,9 +61,9 @@ impl Stack {
 
     #[inline(always)]
     pub(crate) fn get(&self, slot: u16) -> U256 {
-        let area = slot as usize / DIRTY_AREA_SIZE;
-        match &self.slots[area] {
-            Some(chunk) => chunk[slot as usize % DIRTY_AREA_SIZE],
+        let subchunk = slot as usize / SUBCHUNK_SLOTS;
+        match &self.slots[subchunk] {
+            Some(chunk) => chunk[slot as usize % SUBCHUNK_SLOTS],
             None => U256::zero(),
         }
     }
@@ -58,19 +71,24 @@ impl Stack {
     #[inline(always)]
     pub(crate) fn set(&mut self, slot: u16, value: U256) {
         let area = slot as usize / DIRTY_AREA_SIZE;
-        // Mark the area dirty on every write (including zero writes), matching
-        // the previous dense implementation so `dirty_areas` evolves identically.
+        // Mark the (coarse) area dirty on every write (including zero writes),
+        // matching the previous implementation so `dirty_areas` evolves
+        // identically and snapshot/rollback/eq are unaffected.
         self.dirty_areas |= 1 << area;
-        let chunk = self.slots[area].get_or_insert_with(zeroed_chunk);
-        chunk[slot as usize % DIRTY_AREA_SIZE] = value;
+        let subchunk = slot as usize / SUBCHUNK_SLOTS;
+        let chunk = self.slots[subchunk].get_or_insert_with(zeroed_chunk);
+        chunk[slot as usize % SUBCHUNK_SLOTS] = value;
     }
 
     fn zero(&mut self) {
-        // Dropping a dirty chunk returns it to all-zero (absent reads as zero).
-        // Only dirty areas can hold a chunk, so this clears everything.
+        // Dropping a sub-chunk returns it to all-zero (absent reads as zero).
+        // A sub-chunk can only be allocated within a dirty area, so clearing
+        // every dirty area's sub-chunks clears everything.
         for i in 0..NUMBER_OF_DIRTY_AREAS {
             if self.dirty_areas & (1 << i) != 0 {
-                self.slots[i] = None;
+                for sc in (i * SUBCHUNKS_PER_AREA)..((i + 1) * SUBCHUNKS_PER_AREA) {
+                    self.slots[sc] = None;
+                }
             }
         }
 
@@ -97,11 +115,11 @@ impl Stack {
         let dirty_prefix_end = NUMBER_OF_DIRTY_AREAS - self.dirty_areas.leading_zeros() as usize;
 
         // Materialize the same dense prefix the dense implementation stored:
-        // areas `0..dirty_prefix_end`, with absent chunks contributing zeros.
+        // areas `0..dirty_prefix_end`, with absent sub-chunks contributing zeros.
         let mut slots = vec![U256::zero(); DIRTY_AREA_SIZE * dirty_prefix_end];
-        for i in 0..dirty_prefix_end {
-            if let Some(chunk) = &self.slots[i] {
-                slots[i * DIRTY_AREA_SIZE..(i + 1) * DIRTY_AREA_SIZE].copy_from_slice(&chunk[..]);
+        for sc in 0..(dirty_prefix_end * SUBCHUNKS_PER_AREA) {
+            if let Some(chunk) = &self.slots[sc] {
+                slots[sc * SUBCHUNK_SLOTS..(sc + 1) * SUBCHUNK_SLOTS].copy_from_slice(&chunk[..]);
             }
         }
 
@@ -124,14 +142,15 @@ impl Stack {
         self.pointer_flags = pointer_flags;
         self.dirty_areas = dirty_areas;
         // Every dirty area lies within the saved prefix (`dirty_prefix_end` is
-        // the highest dirty area + 1), so restore a chunk for each from the
-        // prefix. Non-dirty areas stay absent and read as zero, exactly as they
-        // were in the snapshot.
+        // the highest dirty area + 1), so restore its sub-chunks from the prefix.
+        // Non-dirty areas stay absent and read as zero, exactly as in the snapshot.
         for i in 0..NUMBER_OF_DIRTY_AREAS {
             if dirty_areas & (1 << i) != 0 {
-                let mut chunk = zeroed_chunk();
-                chunk.copy_from_slice(&slots[i * DIRTY_AREA_SIZE..(i + 1) * DIRTY_AREA_SIZE]);
-                self.slots[i] = Some(chunk);
+                for sc in (i * SUBCHUNKS_PER_AREA)..((i + 1) * SUBCHUNKS_PER_AREA) {
+                    let mut chunk = zeroed_chunk();
+                    chunk.copy_from_slice(&slots[sc * SUBCHUNK_SLOTS..(sc + 1) * SUBCHUNK_SLOTS]);
+                    self.slots[sc] = Some(chunk);
+                }
             }
         }
     }
@@ -142,9 +161,9 @@ impl PartialEq for Stack {
         if self.dirty_areas != other.dirty_areas || self.pointer_flags != other.pointer_flags {
             return false;
         }
-        // Compare slot values, treating an absent chunk as all-zero. This
+        // Compare slot values, treating an absent sub-chunk as all-zero. This
         // reproduces the derived comparison over the previous dense array.
-        (0..NUMBER_OF_DIRTY_AREAS).all(|area| match (&self.slots[area], &other.slots[area]) {
+        (0..NUM_SUBCHUNKS).all(|sc| match (&self.slots[sc], &other.slots[sc]) {
             (Some(a), Some(b)) => a == b,
             (Some(chunk), None) | (None, Some(chunk)) => chunk.iter().all(U256::is_zero),
             (None, None) => true,
