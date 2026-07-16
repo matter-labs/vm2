@@ -18,7 +18,7 @@ pub use self::{
     predication::Predicate,
     program::Program,
     vm::{Settings, VirtualMachine},
-    world_diff::{Snapshot, StorageChange, WorldDiff},
+    world_diff::{Snapshot, StorageChange, StorageWriteEntry, WorldDiff},
 };
 use crate::precompiles::{LegacyPrecompiles, Precompiles};
 

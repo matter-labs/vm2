@@ -115,7 +115,7 @@ impl<T: Tracer, W: World<T>> StateInterface for VirtualMachine<T, W> {
         self.world_diff
             .get_storage_state()
             .iter()
-            .map(|(key, value)| (*key, *value))
+            .map(|(key, entry)| (*key, entry.value))
     }
 
     fn get_transient_storage_state(&self) -> impl Iterator<Item = ((H160, U256), U256)> {
