@@ -1237,7 +1237,7 @@ fn nonfresh_decommit_should_keep_page_alive_after_nested_frame_returns() {
     assert_eq!(vm.state.heaps[first.memory_page].read_u256(0), code_word);
     assert_eq!(first.memory_page, nested_heap);
 
-    vm.pop_frame(None)
+    vm.pop_frame(None, None)
         .expect("nested frame must be present for pop");
 
     execute_one_instruction(&mut vm, &mut world, &mut ());
@@ -1301,10 +1301,60 @@ fn decommit_page_in_keep_alive_list_should_not_be_deallocated_on_pop() {
         .heaps_i_am_keeping_alive
         .extend([decommit_heap, kept_heap]);
 
-    vm.pop_frame(Some(kept_heap))
+    vm.pop_frame(Some(kept_heap), None)
         .expect("nested frame must be present for pop");
 
     assert_eq!(vm.state.heaps[decommit_heap].read_u256(0), code_word);
+}
+
+#[test]
+fn pop_frame_compacts_kept_heap_to_returndata_window() {
+    // A returned fat pointer can only address `[start, start + length)` of the
+    // heap it points into, so on pop the kept returndata heap should retain only
+    // that window — everything the callee grew but did not return is dead memory.
+    let program: Program<(), TestWorld<()>> =
+        Program::from_raw(vec![ret_instruction::<(), TestWorld<()>>()], vec![]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program.clone(),
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let calldata_heap = vm.state.current_frame.calldata_heap;
+    let world_before_nested = vm.world_diff.snapshot();
+    vm.push_frame::<opcodes::Normal>(
+        kernel_address(),
+        program,
+        200_000,
+        0,
+        false,
+        false,
+        calldata_heap,
+        world_before_nested,
+    );
+
+    let kept_heap = allocate_standalone_heap(&mut vm, &[]);
+    let marker = U256::from(0xdead_beef_u64);
+    // Grow the heap across three distant chunks; only the middle one is returned.
+    vm.state.heaps.write_u256(kept_heap, 0, marker);
+    vm.state.heaps.write_u256(kept_heap, 5000, marker);
+    vm.state.heaps.write_u256(kept_heap, 9000, marker);
+    vm.state
+        .current_frame
+        .heaps_i_am_keeping_alive
+        .push(kept_heap);
+
+    // Return a 32-byte window at offset 5000.
+    vm.pop_frame(Some(kept_heap), Some((5000, 32)))
+        .expect("nested frame must be present for pop");
+
+    // In-window bytes survive; everything outside the window is freed and reads zero.
+    assert_eq!(vm.state.heaps[kept_heap].read_u256(5000), marker);
+    assert_eq!(vm.state.heaps[kept_heap].read_u256(0), U256::zero());
+    assert_eq!(vm.state.heaps[kept_heap].read_u256(9000), U256::zero());
 }
 
 #[test]
