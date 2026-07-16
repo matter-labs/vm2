@@ -282,7 +282,7 @@ mod tests {
             x
         }
         fn slot(&mut self) -> u16 {
-            (self.next() & 0xffff) as u16
+            u16::try_from(self.next() & 0xffff).expect("masked to 16 bits")
         }
         fn value(&mut self) -> U256 {
             U256([self.next(), self.next(), self.next(), self.next()])
@@ -300,20 +300,17 @@ mod tests {
         for _ in 0..20_000 {
             let slot = rng.slot();
             // Mix in zero writes: they must allocate/dirty exactly like nonzero.
-            let value = if rng.next() % 8 == 0 {
+            let value = if rng.next().is_multiple_of(8) {
                 U256::zero()
             } else {
                 rng.value()
             };
             stack.set(slot, value);
-            oracle[slot as usize] = value;
+            oracle[usize::from(slot)] = value;
         }
-        for slot in 0..DENSE {
-            assert_eq!(
-                stack.get(slot as u16),
-                oracle[slot],
-                "mismatch at slot {slot}"
-            );
+        for (slot, expected) in oracle.iter().enumerate() {
+            let slot = u16::try_from(slot).unwrap();
+            assert_eq!(stack.get(slot), *expected, "mismatch at slot {slot}");
         }
     }
 
@@ -328,7 +325,7 @@ mod tests {
         let fresh = Stack::new();
         assert_eq!(&stack, &fresh, "zero() must equal a fresh stack");
         for slot in 0..DENSE {
-            assert_eq!(stack.get(slot as u16), U256::zero());
+            assert_eq!(stack.get(u16::try_from(slot).unwrap()), U256::zero());
         }
     }
 
@@ -342,8 +339,8 @@ mod tests {
         }
         // Capture the exact slot state at snapshot time.
         let mut expected = vec![U256::zero(); DENSE];
-        for slot in 0..DENSE {
-            expected[slot] = stack.get(slot as u16);
+        for (slot, e) in expected.iter_mut().enumerate() {
+            *e = stack.get(u16::try_from(slot).unwrap());
         }
         let snap = stack.snapshot();
 
@@ -355,12 +352,9 @@ mod tests {
         stack.set(0, U256::zero());
 
         stack.rollback(snap);
-        for slot in 0..DENSE {
-            assert_eq!(
-                stack.get(slot as u16),
-                expected[slot],
-                "rollback mismatch at slot {slot}"
-            );
+        for (slot, e) in expected.iter().enumerate() {
+            let slot = u16::try_from(slot).unwrap();
+            assert_eq!(stack.get(slot), *e, "rollback mismatch at slot {slot}");
         }
     }
 
