@@ -149,6 +149,43 @@ fn test() {
 }
 
 #[test]
+fn manual_decommit_warms_up_subsequent_decommits() {
+    // Regression test: `manually_decommit` (used by era's `manually_decommit` test helper and
+    // required by the code-oracle refund test) must record the decommit in VM state, so that a
+    // later `decommit` opcode on the same hash is recognized as already-decommitted (and refunded).
+    let mut world = create_test_world();
+    let main_program = initial_decommit(&mut world, MAIN_ADDRESS);
+    let mut vm = VirtualMachine::new(
+        MAIN_ADDRESS,
+        main_program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        Settings {
+            default_aa_code_hash: [0; 32],
+            evm_interpreter_code_hash: [0; 32],
+            hook_address: 0,
+        },
+    );
+
+    let called_bytecode_hash = world.address_to_hash[&CALLED_ADDRESS.to_low_u64_be().into()];
+
+    // First manual decommit is fresh and must persist: a reusable page is assigned and the hash is
+    // reported among decommitted hashes.
+    assert!(vm.manually_decommit(&mut world, &mut (), called_bytecode_hash));
+    assert!(vm.world_diff().decommit_page(called_bytecode_hash).is_some());
+    let decommitted: HashSet<_> = vm.world_diff().decommitted_hashes().collect();
+    assert!(
+        decommitted.contains(&called_bytecode_hash),
+        "{decommitted:?}"
+    );
+
+    // Second manual decommit of the same hash is no longer fresh (this is what makes the later
+    // code-oracle `decommit` opcode refunded). Before the fix this incorrectly returned `true`.
+    assert!(!vm.manually_decommit(&mut world, &mut (), called_bytecode_hash));
+}
+
+#[test]
 fn test_with_initial_out_of_gas_error() {
     let mut world = create_test_world();
     let main_program = initial_decommit(&mut world, MAIN_ADDRESS);

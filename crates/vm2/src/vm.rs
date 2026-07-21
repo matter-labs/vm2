@@ -1,13 +1,13 @@
 use std::fmt;
 
-use primitive_types::H160;
+use primitive_types::{H160, U256};
 use zksync_vm2_interface::{opcodes::TypeLevelCallingMode, CallingMode, HeapId, Tracer};
 
 use crate::{
     callframe::{Callframe, FrameRemnant},
-    decommit::u256_into_address,
+    decommit::{materialize_decommit_page, u256_into_address},
     instruction::ExecutionStatus,
-    page_ids::{aux_heap_page_from_base, heap_page_from_base},
+    page_ids::{aux_heap_page_from_base, code_page_from_base, heap_page_from_base},
     stack::StackPool,
     state::{State, StateSnapshot},
     world_diff::{ExternalSnapshot, Snapshot, WorldDiff},
@@ -84,6 +84,30 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
     #[doc(hidden)]
     pub fn world_diff_mut(&mut self) -> &mut WorldDiff {
         &mut self.world_diff
+    }
+
+    /// Manually warms up a decommit of the code with the provided `code_hash`, materializing its
+    /// heap page exactly like the [`Decommit`](zksync_vm2_interface::opcodes::Decommit) opcode
+    /// handler does. Returns `true` if this was a fresh decommit (i.e., the code wasn't decommitted
+    /// previously in the same VM run).
+    ///
+    /// Unlike [`WorldDiff::decommit_opcode`], this records the decommit in the VM state (assigning a
+    /// reusable page), so a subsequent `decommit` opcode on the same hash is recognized as
+    /// already-decommitted and refunded — matching legacy `zk_evm` `execute_decommit` semantics.
+    ///
+    /// This is intended for execution-verification setup / tests; it can break VM operation if
+    /// called in the middle of execution.
+    #[doc(hidden)]
+    pub fn manually_decommit(&mut self, world: &mut W, tracer: &mut T, code_hash: U256) -> bool {
+        let (code, is_fresh) = self.world_diff.decommit_opcode(world, tracer, code_hash);
+        if is_fresh {
+            // Materialize into a fresh code page rather than reusing the current frame's heap, so
+            // manual decommits performed between frames (e.g. against the bootloader frame) don't
+            // clobber live heap data.
+            let base_page = self.state.allocate_base_page();
+            materialize_decommit_page(self, code_hash, &code, code_page_from_base(base_page));
+        }
+        is_fresh
     }
 
     /// Runs this VM with the specified [`World`] and [`Tracer`] until an end of execution due to a hook, or an error.
