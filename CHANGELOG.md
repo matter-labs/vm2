@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.6.0](https://github.com/matter-labs/vm2/compare/v0.5.0...v0.6.0) (2026-07-21)
+
+
+### Features
+
+* Extend functionality & fix regressions ([#95](https://github.com/matter-labs/vm2/issues/95)) ([2ebbed9](https://github.com/matter-labs/vm2/commit/2ebbed9110307348227d7ce32bb8d67bd25ef2b1))
+* Update protocol dependencies ([#93](https://github.com/matter-labs/vm2/issues/93)) ([e3d1830](https://github.com/matter-labs/vm2/commit/e3d183076f1a11c4bdce625c6f9ff342ad7641e4))
+
+
+### Bug Fixes
+
+* charge return-ABI heap growth on far ret.panic ([#112](https://github.com/matter-labs/vm2/issues/112)) ([f4485c7](https://github.com/matter-labs/vm2/commit/f4485c7b2b9e4ffb6e00dc1d24ef5a6f4f60f802))
+* clear dst1 to zero ([#110](https://github.com/matter-labs/vm2/issues/110)) ([62712ec](https://github.com/matter-labs/vm2/commit/62712ec32b29fc726b1058e1bde0a307b60efbb8))
+* Correctly set frame stipend for evm blob frames ([#97](https://github.com/matter-labs/vm2/issues/97)) ([e0d9deb](https://github.com/matter-labs/vm2/commit/e0d9deb998c64eebe6be7239850828c106a708de))
+* Guarantee FatPointer memory layout for U256 transmutes ([#107](https://github.com/matter-labs/vm2/issues/107)) ([d9acf0d](https://github.com/matter-labs/vm2/commit/d9acf0d72bcbd3af6a0130aa8466d6fe43939e30))
+* Preserve pointer flag on load increment ([#98](https://github.com/matter-labs/vm2/issues/98)) ([3daebb8](https://github.com/matter-labs/vm2/commit/3daebb847b23db3fda2b6583153f91b4526087e8))
+* Properly recycle heap pages on snapshot rollback ([#96](https://github.com/matter-labs/vm2/issues/96)) ([a6bb2db](https://github.com/matter-labs/vm2/commit/a6bb2db6e036c45af5181429525ecaaab2e9b3ef))
+* Use empty heap for reading unallocated heaps ([#99](https://github.com/matter-labs/vm2/issues/99)) ([4d11065](https://github.com/matter-labs/vm2/commit/4d110657a22025d4a49a563a7e119d754551b715))
+
+
+### Performance Improvements
+
+* cut verifier memory — gate storage_logs trace (Boojum-safe) + consolidate WorldDiff maps ([#109](https://github.com/matter-labs/vm2/issues/109)) ([5a5be22](https://github.com/matter-labs/vm2/commit/5a5be2220112580b4fb958d4b524e3deca73cba9))
+* reclaim bootloader returndata heaps at tx commit ([#113](https://github.com/matter-labs/vm2/issues/113)) ([28448e7](https://github.com/matter-labs/vm2/commit/28448e71a05326e0511982c3aa091b43a72c4b5f))
+
 ## [0.5.0](https://github.com/matter-labs/vm2/compare/v0.4.0...v0.5.0) (2025-10-20)
 
 
