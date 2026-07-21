@@ -173,7 +173,10 @@ fn manual_decommit_warms_up_subsequent_decommits() {
     // First manual decommit is fresh and must persist: a reusable page is assigned and the hash is
     // reported among decommitted hashes.
     assert!(vm.manually_decommit(&mut world, &mut (), called_bytecode_hash));
-    assert!(vm.world_diff().decommit_page(called_bytecode_hash).is_some());
+    assert!(vm
+        .world_diff()
+        .decommit_page(called_bytecode_hash)
+        .is_some());
     let decommitted: HashSet<_> = vm.world_diff().decommitted_hashes().collect();
     assert!(
         decommitted.contains(&called_bytecode_hash),
