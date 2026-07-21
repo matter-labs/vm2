@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["zksync_vm2",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/hash/trait.Hash.html\" title=\"trait core::hash::Hash\">Hash</a> for <a class=\"enum\" href=\"zksync_vm2/enum.Predicate.html\" title=\"enum zksync_vm2::Predicate\">Predicate</a>",0]]],["zksync_vm2_interface",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/hash/trait.Hash.html\" title=\"trait core::hash::Hash\">Hash</a> for <a class=\"enum\" href=\"zksync_vm2_interface/enum.CallingMode.html\" title=\"enum zksync_vm2_interface::CallingMode\">CallingMode</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/hash/trait.Hash.html\" title=\"trait core::hash::Hash\">Hash</a> for <a class=\"enum\" href=\"zksync_vm2_interface/enum.Opcode.html\" title=\"enum zksync_vm2_interface::Opcode\">Opcode</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/hash/trait.Hash.html\" title=\"trait core::hash::Hash\">Hash</a> for <a class=\"enum\" href=\"zksync_vm2_interface/enum.ReturnType.html\" title=\"enum zksync_vm2_interface::ReturnType\">ReturnType</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/hash/trait.Hash.html\" title=\"trait core::hash::Hash\">Hash</a> for <a class=\"struct\" href=\"zksync_vm2_interface/struct.Flags.html\" title=\"struct zksync_vm2_interface::Flags\">Flags</a>",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[270,1117]}
