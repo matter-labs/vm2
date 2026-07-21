@@ -11,205 +11,183 @@ use crate::page_ids::{
     bootloader_aux_heap_page, bootloader_calldata_page, bootloader_heap_page, static_memory_page,
 };
 
-/// Heap page size in bytes.
+/// EraVM heap page size in bytes. Storage is now chunk-granular (see
+/// [`HEAP_CHUNK_SIZE`]); this survives only as the natural addressing unit for
+/// the boundary-biased fuzz tests.
+#[cfg(test)]
 const HEAP_PAGE_SIZE: usize = 1 << 12;
 
-/// Heap page.
-#[derive(Debug, Clone, PartialEq)]
-struct HeapPage(Box<[u8; HEAP_PAGE_SIZE]>);
+/// Allocation granularity in bytes. A [`Heap`] stores only the fixed-size chunks
+/// that are actually written; an absent chunk reads as zero, exactly as a dense
+/// zero page would. This bounds the "write one byte near a boundary and keep the
+/// pointer alive" growth pattern: a boundary write costs one 256-byte chunk (plus
+/// an 8-byte index slot) instead of a full 4 KiB page (~16x less). 256 B is the
+/// measured cycles/memory knee.
+const HEAP_CHUNK_SIZE: usize = 256;
 
-impl Default for HeapPage {
-    fn default() -> Self {
-        let boxed_slice: Box<[u8]> = vec![0_u8; HEAP_PAGE_SIZE].into();
-        Self(boxed_slice.try_into().unwrap())
-    }
-}
+type Chunk = Box<[u8; HEAP_CHUNK_SIZE]>;
 
+/// Heap stored as lazily-allocated fixed-size chunks, indexed by
+/// `address / HEAP_CHUNK_SIZE`. An absent chunk is semantically an all-zero
+/// chunk; reads and equality treat it as such, so the observable behavior is
+/// identical to a dense zero-initialized heap.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Heap {
-    pages: Vec<Option<HeapPage>>,
+    chunks: Vec<Option<Chunk>>,
 }
 
 // The reference VM treats reads from missing memory pages as reads from an
 // all-zero page. Keep write paths strict, but make read-only indexing total so
 // panic-produced or otherwise empty fat pointers cannot abort the host.
-static EMPTY_HEAP: Heap = Heap { pages: Vec::new() };
+static EMPTY_HEAP: Heap = Heap { chunks: Vec::new() };
 
-// We never remove `HeapPage`s (even after rollbacks – although we do zero all added pages in this case),
-// we allow additional pages to be present if they are zeroed.
-impl PartialEq for Heap {
-    fn eq(&self, other: &Self) -> bool {
-        for i in 0..self.pages.len().max(other.pages.len()) {
-            let this_page = self.pages.get(i).and_then(Option::as_ref);
-            let other_page = other.pages.get(i).and_then(Option::as_ref);
-            match (this_page, other_page) {
-                (Some(this_page), Some(other_page)) => {
-                    if this_page != other_page {
-                        return false;
-                    }
-                }
-                (Some(page), None) | (None, Some(page)) => {
-                    if page.0.iter().any(|&byte| byte != 0) {
-                        return false;
-                    }
-                }
-                (None, None) => { /* do nothing */ }
-            }
-        }
-        true
-    }
+#[inline(always)]
+fn address_to_chunk(address: usize) -> (usize, usize) {
+    (address / HEAP_CHUNK_SIZE, address % HEAP_CHUNK_SIZE)
 }
 
 impl Heap {
-    fn from_bytes(bytes: &[u8], pagepool: &mut PagePool) -> Self {
-        let pages = bytes
-            .chunks(HEAP_PAGE_SIZE)
-            .map(|bytes| {
-                Some(if let Some(mut page) = pagepool.get_dirty_page() {
-                    page.0[..bytes.len()].copy_from_slice(bytes);
-                    page.0[bytes.len()..].fill(0);
-                    page
-                } else {
-                    let mut page = HeapPage::default();
-                    page.0[..bytes.len()].copy_from_slice(bytes);
-                    page
-                })
-            })
-            .collect();
-        Self { pages }
+    fn from_bytes(bytes: &[u8], chunk_pool: &mut ChunkPool) -> Self {
+        let mut heap = Self::default();
+        if !bytes.is_empty() {
+            heap.write_from(0, bytes, chunk_pool);
+        }
+        heap
     }
 
-    fn recycle(self, pagepool: &mut PagePool) {
-        for page in self.pages.into_iter().flatten() {
-            pagepool.recycle_page(page);
+    fn recycle(self, chunk_pool: &mut ChunkPool) {
+        for chunk in self.chunks.into_iter().flatten() {
+            chunk_pool.recycle(chunk);
+        }
+    }
+
+    fn chunk(&self, idx: usize) -> Option<&Chunk> {
+        self.chunks.get(idx)?.as_ref()
+    }
+
+    /// Copy `dst.len()` bytes starting at absolute `start` into `dst`, filling
+    /// regions backed by absent chunks with zero. Spans crossing chunk
+    /// boundaries are handled internally.
+    fn read_into(&self, start: usize, dst: &mut [u8]) {
+        let mut pos = 0;
+        while pos < dst.len() {
+            let abs = start + pos;
+            let (chunk_idx, in_chunk) = address_to_chunk(abs);
+            let n = (HEAP_CHUNK_SIZE - in_chunk).min(dst.len() - pos);
+            match self.chunk(chunk_idx) {
+                Some(chunk) => dst[pos..pos + n].copy_from_slice(&chunk[in_chunk..in_chunk + n]),
+                None => dst[pos..pos + n].fill(0),
+            }
+            pos += n;
+        }
+    }
+
+    fn get_or_insert_chunk(
+        &mut self,
+        idx: usize,
+        chunk_pool: &mut ChunkPool,
+    ) -> &mut [u8; HEAP_CHUNK_SIZE] {
+        if self.chunks.len() <= idx {
+            self.chunks.resize_with(idx + 1, || None);
+        }
+        self.chunks[idx].get_or_insert_with(|| chunk_pool.allocate())
+    }
+
+    /// Write `src` starting at absolute `start`, allocating any touched chunks.
+    fn write_from(&mut self, start: usize, src: &[u8], chunk_pool: &mut ChunkPool) {
+        let mut pos = 0;
+        while pos < src.len() {
+            let abs = start + pos;
+            let (chunk_idx, in_chunk) = address_to_chunk(abs);
+            let n = (HEAP_CHUNK_SIZE - in_chunk).min(src.len() - pos);
+            let chunk = self.get_or_insert_chunk(chunk_idx, chunk_pool);
+            chunk[in_chunk..in_chunk + n].copy_from_slice(&src[pos..pos + n]);
+            pos += n;
+        }
+    }
+
+    /// Free every chunk outside the byte range `window`, returning the freed
+    /// chunks to `chunk_pool`. Chunks that straddle a window boundary are
+    /// kept whole (they still hold live bytes); everything strictly outside is
+    /// dropped. Used to shrink a retained returndata heap to the only range the
+    /// surviving fat pointer can address — see `VirtualMachine::pop_frame`.
+    fn retain_window(&mut self, window: Range<usize>, chunk_pool: &mut ChunkPool) {
+        // Empty window: nothing is addressable, so free everything.
+        let (keep_first, keep_last) = if window.is_empty() {
+            (usize::MAX, 0) // makes the keep test always false
+        } else {
+            (
+                window.start / HEAP_CHUNK_SIZE,
+                (window.end - 1) / HEAP_CHUNK_SIZE,
+            )
+        };
+        for (idx, slot) in self.chunks.iter_mut().enumerate() {
+            if idx < keep_first || idx > keep_last {
+                if let Some(chunk) = slot.take() {
+                    chunk_pool.recycle(chunk);
+                }
+            }
+        }
+        // Drop now-trailing empty index slots so equality/`is_all_zero` stay cheap.
+        let new_len = (keep_last + 1).min(self.chunks.len());
+        if window.is_empty() {
+            self.chunks.clear();
+        } else {
+            self.chunks.truncate(new_len);
         }
     }
 
     pub(crate) fn read_u256(&self, start_address: u32) -> U256 {
-        let (page_idx, offset_in_page) = address_to_page_offset(start_address);
-        let bytes_in_page = HEAP_PAGE_SIZE - offset_in_page;
-
-        if bytes_in_page >= 32 {
-            if let Some(page) = self.page(page_idx) {
-                U256::from_big_endian(&page.0[offset_in_page..offset_in_page + 32])
-            } else {
-                U256::zero()
-            }
-        } else {
-            let mut result = [0u8; 32];
-            if let Some(page) = self.page(page_idx) {
-                for (res, src) in result.iter_mut().zip(&page.0[offset_in_page..]) {
-                    *res = *src;
-                }
-            }
-            if let Some(page) = self.page(page_idx + 1) {
-                for (res, src) in result[bytes_in_page..].iter_mut().zip(&*page.0) {
-                    *res = *src;
-                }
-            }
-            U256::from_big_endian(&result)
-        }
+        let mut result = [0u8; 32];
+        self.read_into(start_address as usize, &mut result);
+        U256::from_big_endian(&result)
     }
 
     pub(crate) fn read_u256_partially(&self, range: Range<u32>) -> U256 {
-        let (page_idx, offset_in_page) = address_to_page_offset(range.start);
         let length = range.len();
-        let bytes_in_page = length.min(HEAP_PAGE_SIZE - offset_in_page);
-
         let mut result = [0u8; 32];
-        if let Some(page) = self.page(page_idx) {
-            for (res, src) in result[..bytes_in_page]
-                .iter_mut()
-                .zip(&page.0[offset_in_page..])
-            {
-                *res = *src;
-            }
-        }
-        if let Some(page) = self.page(page_idx + 1) {
-            for (res, src) in result[bytes_in_page..length].iter_mut().zip(&*page.0) {
-                *res = *src;
-            }
-        }
+        self.read_into(range.start as usize, &mut result[..length]);
         U256::from_big_endian(&result)
     }
 
     pub(crate) fn read_range_big_endian(&self, range: Range<u32>) -> Vec<u8> {
-        let length = range.len();
-
-        let (mut page_idx, mut offset_in_page) = address_to_page_offset(range.start);
-        let mut result = Vec::with_capacity(length);
-        while result.len() < length {
-            let len_in_page = (length - result.len()).min(HEAP_PAGE_SIZE - offset_in_page);
-            if let Some(page) = self.page(page_idx) {
-                result.extend_from_slice(&page.0[offset_in_page..(offset_in_page + len_in_page)]);
-            } else {
-                result.resize(result.len() + len_in_page, 0);
-            }
-            page_idx += 1;
-            offset_in_page = 0;
-        }
+        let mut result = vec![0u8; range.len()];
+        self.read_into(range.start as usize, &mut result);
         result
     }
 
     /// Needed only by tracers
     pub(crate) fn read_byte(&self, address: u32) -> u8 {
-        let (page, offset) = address_to_page_offset(address);
-        self.page(page).map_or(0, |page| page.0[offset])
+        let (chunk_idx, in_chunk) = address_to_chunk(address as usize);
+        self.chunk(chunk_idx).map_or(0, |chunk| chunk[in_chunk])
     }
 
-    fn page(&self, idx: usize) -> Option<&HeapPage> {
-        self.pages.get(idx)?.as_ref()
+    fn write_u256(&mut self, start_address: u32, value: U256, chunk_pool: &mut ChunkPool) {
+        let mut bytes = [0u8; 32];
+        value.to_big_endian(&mut bytes);
+        self.write_from(start_address as usize, &bytes, chunk_pool);
     }
 
-    fn get_or_insert_page(&mut self, idx: usize, pagepool: &mut PagePool) -> &mut HeapPage {
-        if self.pages.len() <= idx {
-            self.pages.resize(idx + 1, None);
-        }
-        self.pages[idx].get_or_insert_with(|| pagepool.allocate_page())
-    }
-
-    fn write_u256(&mut self, start_address: u32, value: U256, pagepool: &mut PagePool) {
-        let (page_idx, offset_in_page) = address_to_page_offset(start_address);
-        let bytes_in_page = HEAP_PAGE_SIZE - offset_in_page;
-        let page = self.get_or_insert_page(page_idx, pagepool);
-
-        if bytes_in_page >= 32 {
-            value.to_big_endian(&mut page.0[offset_in_page..offset_in_page + 32]);
-        } else {
-            let mut bytes = [0; 32];
-            value.to_big_endian(&mut bytes);
-            let mut bytes_iter = bytes.into_iter();
-
-            for (dst, src) in page.0[offset_in_page..].iter_mut().zip(bytes_iter.by_ref()) {
-                *dst = src;
-            }
-
-            let page = self.get_or_insert_page(page_idx + 1, pagepool);
-            for (dst, src) in page.0.iter_mut().zip(bytes_iter) {
-                *dst = src;
-            }
-        }
-    }
-
-    fn write_bytes(&mut self, start_address: u32, bytes: &[u8], pagepool: &mut PagePool) {
-        let (mut page_idx, mut offset_in_page) = address_to_page_offset(start_address);
-        let mut remaining = bytes;
-        while !remaining.is_empty() {
-            let bytes_in_page = (HEAP_PAGE_SIZE - offset_in_page).min(remaining.len());
-            let page = self.get_or_insert_page(page_idx, pagepool);
-            page.0[offset_in_page..offset_in_page + bytes_in_page]
-                .copy_from_slice(&remaining[..bytes_in_page]);
-            remaining = &remaining[bytes_in_page..];
-            page_idx += 1;
-            offset_in_page = 0;
-        }
+    fn write_bytes(&mut self, start_address: u32, bytes: &[u8], chunk_pool: &mut ChunkPool) {
+        self.write_from(start_address as usize, bytes, chunk_pool);
     }
 }
 
-#[inline(always)]
-fn address_to_page_offset(address: u32) -> (usize, usize) {
-    let offset = address as usize;
-    (offset >> 12, offset & (HEAP_PAGE_SIZE - 1))
+// Absent and present-but-zero chunks are equivalent, so equality compares the
+// effective bytes rather than the chunk-presence structure.
+impl PartialEq for Heap {
+    fn eq(&self, other: &Self) -> bool {
+        let len = self.chunks.len().max(other.chunks.len());
+        (0..len).all(|idx| {
+            let this = self.chunks.get(idx).and_then(Option::as_ref);
+            let other = other.chunks.get(idx).and_then(Option::as_ref);
+            match (this, other) {
+                (Some(a), Some(b)) => a == b,
+                (Some(chunk), None) | (None, Some(chunk)) => chunk.iter().all(|&byte| byte == 0),
+                (None, None) => true,
+            }
+        })
+    }
 }
 
 // TODO: With all the additions, this file should be split into several under `heap/` folder.
@@ -227,9 +205,9 @@ impl DynamicPageGroup {
         self.code.is_none() && self.heap.is_none() && self.aux.is_none()
     }
 
-    fn recycle(self, pagepool: &mut PagePool) {
+    fn recycle(self, chunk_pool: &mut ChunkPool) {
         for heap in [self.code, self.heap, self.aux].into_iter().flatten() {
-            heap.recycle(pagepool);
+            heap.recycle(chunk_pool);
         }
     }
 
@@ -323,22 +301,22 @@ pub(crate) struct Heaps {
     bootloader_heap: Heap,
     bootloader_aux_heap: Heap,
     dynamic: Vec<DynamicPageGroup>,
-    pagepool: PagePool,
+    chunk_pool: ChunkPool,
     bootloader_heap_rollback_info: Vec<(u32, U256)>,
     bootloader_aux_rollback_info: Vec<(u32, U256)>,
 }
 
 impl Heaps {
     pub(crate) fn new(calldata: &[u8]) -> Self {
-        let mut pagepool = PagePool::default();
+        let mut chunk_pool = ChunkPool::default();
 
         Self {
-            static_memory: Heap::from_bytes(&[], &mut pagepool),
-            bootloader_calldata: Heap::from_bytes(calldata, &mut pagepool),
-            bootloader_heap: Heap::from_bytes(&[], &mut pagepool),
-            bootloader_aux_heap: Heap::from_bytes(&[], &mut pagepool),
+            static_memory: Heap::from_bytes(&[], &mut chunk_pool),
+            bootloader_calldata: Heap::from_bytes(calldata, &mut chunk_pool),
+            bootloader_heap: Heap::from_bytes(&[], &mut chunk_pool),
+            bootloader_aux_heap: Heap::from_bytes(&[], &mut chunk_pool),
             dynamic: Vec::new(),
-            pagepool,
+            chunk_pool,
             bootloader_heap_rollback_info: vec![],
             bootloader_aux_rollback_info: vec![],
         }
@@ -380,7 +358,7 @@ impl Heaps {
             "heap page {} is already allocated",
             page.as_u32()
         );
-        *slot = Some(Heap::from_bytes(memory, &mut self.pagepool));
+        *slot = Some(Heap::from_bytes(memory, &mut self.chunk_pool));
         page
     }
 
@@ -410,7 +388,35 @@ impl Heaps {
         let heap = decoded_dynamic_slot_mut(&mut self.dynamic, decoded)
             .take()
             .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
-        heap.recycle(&mut self.pagepool);
+        heap.recycle(&mut self.chunk_pool);
+    }
+
+    /// Shrink a retained heap to the byte range `[start, start + length)` a
+    /// surviving fat pointer can address, freeing every chunk strictly outside
+    /// it back to the pool. No-op if the page is absent (e.g. already deallocated
+    /// or a decommit-pinned code page the caller chose not to compact). Reads of
+    /// the freed region would return zero, but the range is unreachable through
+    /// the bounded pointer, so this is observably equivalent to keeping it.
+    pub(crate) fn compact_to_window(&mut self, page: HeapId, start: u32, length: u32) {
+        let Some(decoded) = DecodedPage::decode(page) else {
+            return;
+        };
+        if decoded.is_always_allocated() {
+            return;
+        }
+        let DecodedPage::Dynamic { group, kind } = decoded else {
+            return;
+        };
+        let Some(heap) = self
+            .dynamic
+            .get_mut(group)
+            .and_then(|group| group.slot_mut(kind).as_mut())
+        else {
+            return;
+        };
+        let start = start as usize;
+        let end = start.saturating_add(length as usize);
+        heap.retain_window(start..end, &mut self.chunk_pool);
     }
 
     pub(crate) fn dynamic_len(&self) -> usize {
@@ -426,8 +432,8 @@ impl Heaps {
         // keep the panic as a tripwire against any new code path.
         let decoded = DecodedPage::decode(page)
             .unwrap_or_else(|| panic!("heap page {} is not decodable", page.as_u32()));
-        let (heap, pagepool) = self.decoded_page_mut_for_write(decoded);
-        heap.write_u256(start_address, value, pagepool);
+        let (heap, chunk_pool) = self.decoded_page_mut_for_write(decoded);
+        heap.write_u256(start_address, value, chunk_pool);
     }
 
     pub(crate) fn write_bytes(&mut self, page: HeapId, start_address: u32, bytes: &[u8]) {
@@ -439,8 +445,8 @@ impl Heaps {
         // merging.
         let decoded = DecodedPage::decode(page)
             .unwrap_or_else(|| panic!("heap page {} is not decodable", page.as_u32()));
-        let (heap, pagepool) = self.decoded_page_mut_for_write(decoded);
-        heap.write_bytes(start_address, bytes, pagepool);
+        let (heap, chunk_pool) = self.decoded_page_mut_for_write(decoded);
+        heap.write_bytes(start_address, bytes, chunk_pool);
     }
 
     pub(crate) fn snapshot(&self) -> (usize, usize) {
@@ -453,12 +459,12 @@ impl Heaps {
     pub(crate) fn rollback(&mut self, (heap_snap, aux_snap): (usize, usize)) {
         for (address, value) in self.bootloader_heap_rollback_info.drain(heap_snap..).rev() {
             self.bootloader_heap
-                .write_u256(address, value, &mut self.pagepool);
+                .write_u256(address, value, &mut self.chunk_pool);
         }
 
         for (address, value) in self.bootloader_aux_rollback_info.drain(aux_snap..).rev() {
             self.bootloader_aux_heap
-                .write_u256(address, value, &mut self.pagepool);
+                .write_u256(address, value, &mut self.chunk_pool);
         }
     }
 
@@ -471,7 +477,7 @@ impl Heaps {
         );
 
         for group in self.dynamic.drain(len..) {
-            group.recycle(&mut self.pagepool);
+            group.recycle(&mut self.chunk_pool);
         }
     }
 
@@ -526,14 +532,14 @@ impl Heaps {
         self.try_decoded_page(page).unwrap_or(&EMPTY_HEAP)
     }
 
-    fn decoded_page_mut_for_write(&mut self, page: DecodedPage) -> (&mut Heap, &mut PagePool) {
+    fn decoded_page_mut_for_write(&mut self, page: DecodedPage) -> (&mut Heap, &mut ChunkPool) {
         let Self {
             static_memory,
             bootloader_calldata,
             bootloader_heap,
             bootloader_aux_heap,
             dynamic,
-            pagepool,
+            chunk_pool,
             ..
         } = self;
 
@@ -549,7 +555,7 @@ impl Heaps {
                 dynamic_slot_mut(dynamic, group, kind).get_or_insert_with(Heap::default)
             }
         };
-        (heap, pagepool)
+        (heap, chunk_pool)
     }
 }
 
@@ -614,34 +620,31 @@ fn decoded_dynamic_slot_mut(
     dynamic_slot_mut(dynamic, group, kind)
 }
 
+/// Pool of reusable heap chunks. Chunks are zeroed on recycle (see
+/// [`Self::recycle`]) so a pooled chunk is already all-zero and never retains
+/// freed heap bytes.
 #[derive(Default, Clone)]
-struct PagePool(Vec<HeapPage>);
+struct ChunkPool(Vec<Chunk>);
 
-impl fmt::Debug for PagePool {
+impl fmt::Debug for ChunkPool {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("PagePool")
+            .debug_struct("ChunkPool")
             .field("len", &self.0.len())
             .finish_non_exhaustive()
     }
 }
 
-impl PagePool {
-    fn allocate_page(&mut self) -> HeapPage {
-        self.get_dirty_page()
-            .map(|mut page| {
-                page.0.fill(0);
-                page
-            })
-            .unwrap_or_default()
+impl ChunkPool {
+    fn allocate(&mut self) -> Chunk {
+        self.0
+            .pop()
+            .unwrap_or_else(|| Box::new([0u8; HEAP_CHUNK_SIZE]))
     }
 
-    fn get_dirty_page(&mut self) -> Option<HeapPage> {
-        self.0.pop()
-    }
-
-    fn recycle_page(&mut self, page: HeapPage) {
-        self.0.push(page);
+    fn recycle(&mut self, mut chunk: Chunk) {
+        chunk.fill(0);
+        self.0.push(chunk);
     }
 }
 
@@ -650,35 +653,43 @@ impl PagePool {
 mod tests {
     use super::*;
 
+    impl Heap {
+        /// Number of allocated (present) chunks — retained-memory proxy for tests.
+        fn live_chunks(&self) -> usize {
+            self.chunks.iter().flatten().count()
+        }
+    }
+
     fn repeat_byte(byte: u8) -> U256 {
         U256::from_little_endian(&[byte; 32])
     }
 
-    fn test_heap_write_resizes(recycled_pages: &mut PagePool) {
+    fn test_heap_write_resizes(recycled_chunks: &mut ChunkPool) {
         let mut heap = Heap::default();
-        heap.write_u256(5, 1.into(), recycled_pages);
-        assert_eq!(heap.pages.len(), 1);
+        heap.write_u256(5, 1.into(), recycled_chunks);
+        assert_eq!(heap.live_chunks(), 1);
         assert_eq!(heap.read_u256(5), 1.into());
 
-        // Check writing at a page boundary
+        // Check writing at a page boundary (stays within one chunk: 4064..4096).
         heap.write_u256(
             HEAP_PAGE_SIZE as u32 - 32,
             repeat_byte(0xaa),
-            recycled_pages,
+            recycled_chunks,
         );
-        assert_eq!(heap.pages.len(), 1);
+        assert_eq!(heap.live_chunks(), 2);
         assert_eq!(
             heap.read_u256(HEAP_PAGE_SIZE as u32 - 32),
             repeat_byte(0xaa)
         );
 
+        // Writes straddling the 4096 boundary touch the chunk on each side.
         for offset in (1..=31).rev() {
             heap.write_u256(
                 HEAP_PAGE_SIZE as u32 - offset,
                 repeat_byte(offset as u8),
-                recycled_pages,
+                recycled_chunks,
             );
-            assert_eq!(heap.pages.len(), 2);
+            assert_eq!(heap.live_chunks(), 3);
             assert_eq!(
                 heap.read_u256(HEAP_PAGE_SIZE as u32 - offset),
                 repeat_byte(offset as u8)
@@ -690,31 +701,231 @@ mod tests {
             assert_eq!(heap.read_u256((1 << 20) - offset), 0.into());
         }
 
-        heap.write_u256(1 << 20, repeat_byte(0xff), recycled_pages);
-        assert_eq!(heap.pages.len(), 257);
-        assert_eq!(heap.pages.iter().flatten().count(), 3);
+        heap.write_u256(1 << 20, repeat_byte(0xff), recycled_chunks);
+        // A distant write only allocates its own chunk; the index grows to reach it.
+        assert_eq!(heap.chunks.len(), (1 << 20) / HEAP_CHUNK_SIZE + 1);
+        assert_eq!(heap.live_chunks(), 4);
         assert_eq!(heap.read_u256(1 << 20), repeat_byte(0xff));
     }
 
     #[test]
     fn heap_write_resizes() {
-        test_heap_write_resizes(&mut PagePool::default());
+        test_heap_write_resizes(&mut ChunkPool::default());
     }
 
     #[test]
-    fn heap_write_resizes_with_recycled_pages() {
-        test_heap_write_resizes(&mut populated_pagepool());
+    fn heap_write_resizes_with_recycled_chunks() {
+        test_heap_write_resizes(&mut populated_chunk_pool());
     }
 
-    fn populated_pagepool() -> PagePool {
-        let mut pagepool = PagePool::default();
+    fn populated_chunk_pool() -> ChunkPool {
+        let mut chunk_pool = ChunkPool::default();
         for _ in 0..10 {
-            let mut page = HeapPage::default();
-            // Fill pages with 0xff bytes to detect not clearing pages
-            page.0.fill(0xff);
-            pagepool.recycle_page(page);
+            // Fill with 0xff to detect a pool that hands back non-zeroed chunks.
+            chunk_pool.recycle(Box::new([0xff; HEAP_CHUNK_SIZE]));
         }
-        pagepool
+        chunk_pool
+    }
+
+    // --- Differential fuzz vs a dense oracle -------------------------------
+    // The chunked heap is not covered by the `single_instruction_test`
+    // divergence harness (that feature substitutes a mock heap), so these
+    // tests fuzz the real implementation against a dense byte-vector oracle,
+    // biased toward page/chunk boundaries where the split logic lives.
+
+    struct XorShift(u64);
+    impl XorShift {
+        fn next(&mut self) -> u64 {
+            let mut x = self.0;
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            self.0 = x;
+            x
+        }
+        fn value(&mut self) -> U256 {
+            U256([self.next(), self.next(), self.next(), self.next()])
+        }
+    }
+
+    // Heap span covering many pages and chunks; U256 writes stay in-bounds.
+    const SPAN: usize = 8 * HEAP_PAGE_SIZE; // 8 pages
+    const MAX_ADDR: usize = SPAN - 32;
+
+    // Addresses biased to land on and around page (4096) and chunk (256)
+    // boundaries, which is exactly where read_into / write_from split.
+    fn boundary_biased_addr(rng: &mut XorShift) -> u32 {
+        let base = match rng.next() % 5 {
+            0 => {
+                usize::try_from(rng.next() % (SPAN / HEAP_PAGE_SIZE) as u64).unwrap()
+                    * HEAP_PAGE_SIZE
+            } // page start
+            1 => {
+                usize::try_from(rng.next() % (SPAN / HEAP_CHUNK_SIZE) as u64).unwrap()
+                    * HEAP_CHUNK_SIZE
+            } // chunk start
+            _ => usize::try_from(rng.next() % SPAN as u64).unwrap(),
+        };
+        // Nudge by -16..=+16 to straddle the boundary (saturating, no signed casts).
+        let delta = usize::try_from(rng.next() % 33).unwrap();
+        let addr = (base + delta).saturating_sub(16).min(MAX_ADDR);
+        u32::try_from(addr).unwrap()
+    }
+
+    #[test]
+    fn differential_random_write_read_matches_dense_oracle() {
+        let mut rng = XorShift(0x9e37_79b9_7f4a_7c15);
+        let mut heap = Heap::default();
+        let mut pool = populated_chunk_pool();
+        let mut oracle = vec![0u8; SPAN];
+
+        for _ in 0..20_000 {
+            let addr = boundary_biased_addr(&mut rng);
+            let value = if rng.next().is_multiple_of(8) {
+                U256::zero() // zero writes must behave like the dense page
+            } else {
+                rng.value()
+            };
+            heap.write_u256(addr, value, &mut pool);
+            let mut be = [0u8; 32];
+            value.to_big_endian(&mut be);
+            oracle[addr as usize..addr as usize + 32].copy_from_slice(&be);
+        }
+
+        // read_u256 at every boundary-adjacent address.
+        for _ in 0..20_000 {
+            let addr = boundary_biased_addr(&mut rng);
+            let expected = U256::from_big_endian(&oracle[addr as usize..addr as usize + 32]);
+            assert_eq!(heap.read_u256(addr), expected, "read_u256 @ {addr}");
+        }
+
+        // read_byte across the whole span, incl. never-written (absent) bytes.
+        for (addr, expected) in oracle.iter().enumerate() {
+            assert_eq!(
+                heap.read_byte(u32::try_from(addr).unwrap()),
+                *expected,
+                "read_byte @ {addr}"
+            );
+        }
+
+        // read_range_big_endian across random cross-page/cross-chunk ranges.
+        for _ in 0..2_000 {
+            let start = usize::try_from(rng.next() % SPAN as u64).unwrap();
+            let len = usize::try_from(rng.next() % 1024)
+                .unwrap()
+                .min(SPAN - start);
+            let range = u32::try_from(start).unwrap()..u32::try_from(start + len).unwrap();
+            let got = heap.read_range_big_endian(range);
+            assert_eq!(
+                got,
+                &oracle[start..start + len],
+                "read_range @ {start}+{len}"
+            );
+        }
+    }
+
+    #[test]
+    fn from_bytes_matches_dense_oracle() {
+        let mut rng = XorShift(0x0123_4567_89ab_cdef);
+        // Non-page-multiple length exercises a partial final page/chunk.
+        let len = 5 * HEAP_PAGE_SIZE + 137;
+        let mut bytes = vec![0u8; len];
+        for b in &mut bytes {
+            *b = u8::try_from(rng.next() & 0xff).unwrap();
+        }
+        let mut pool = populated_chunk_pool();
+        let heap = Heap::from_bytes(&bytes, &mut pool);
+
+        for addr in (0..len.saturating_sub(32)).step_by(97) {
+            let expected = U256::from_big_endian(&bytes[addr..addr + 32]);
+            assert_eq!(
+                heap.read_u256(u32::try_from(addr).unwrap()),
+                expected,
+                "from_bytes @ {addr}"
+            );
+        }
+        // Reading past the initialized content returns zero.
+        assert_eq!(heap.read_byte(u32::try_from(len + 500).unwrap()), 0);
+    }
+
+    #[test]
+    fn chunk_pool_recycle_hands_back_zeroed_chunks() {
+        // Dirty a heap, drop it back into the pool, then confirm a new heap
+        // built from that pool reads all-zero (no leaked bytes).
+        let mut pool = ChunkPool::default();
+        let mut dirty = Heap::default();
+        for i in 0..4 {
+            dirty.write_u256(i * HEAP_PAGE_SIZE as u32 + 64, repeat_byte(0xcd), &mut pool);
+        }
+        dirty.recycle(&mut pool);
+
+        let mut fresh = Heap::default();
+        // Force allocation of chunks that will be drawn from the pool.
+        fresh.write_u256(64, 0.into(), &mut pool);
+        for addr in 0..HEAP_PAGE_SIZE {
+            assert_eq!(fresh.read_byte(addr as u32), 0, "recycled leak @ {addr}");
+        }
+    }
+
+    #[test]
+    fn eq_independent_of_chunk_presence() {
+        let mut pool = ChunkPool::default();
+        let mut a = Heap::default();
+        let mut b = Heap::default();
+
+        a.write_u256(100, repeat_byte(0x11), &mut pool);
+        a.write_u256(5000, repeat_byte(0x22), &mut pool);
+        // `a` allocates a chunk at offset 800 then zeroes it (present-but-zero).
+        a.write_u256(800, repeat_byte(0x33), &mut pool);
+        a.write_u256(800, 0.into(), &mut pool);
+
+        b.write_u256(100, repeat_byte(0x11), &mut pool);
+        b.write_u256(5000, repeat_byte(0x22), &mut pool);
+        // `b` never touches offset 800 (absent chunk) — must still equal `a`.
+
+        assert_eq!(a, b, "present-zero chunk must equal absent chunk");
+
+        b.write_u256(100, repeat_byte(0x99), &mut pool);
+        assert_ne!(a, b, "differing content must be unequal");
+    }
+
+    #[test]
+    fn retain_window_frees_outside_and_preserves_inside() {
+        let mut pool = ChunkPool::default();
+        let mut heap = Heap::default();
+        // Write across many chunks: offsets 0, 300, 600, 5000, 9000.
+        for &addr in &[0u32, 300, 600, 5000, 9000] {
+            heap.write_u256(addr, repeat_byte(0xab), &mut pool);
+        }
+        let before = heap.live_chunks();
+        assert!(before >= 5);
+
+        // Keep only the window [300, 700): covers chunks 1 and 2 (256-byte chunks).
+        heap.retain_window(300..700, &mut pool);
+
+        // In-window bytes survive.
+        assert_eq!(heap.read_u256(300), repeat_byte(0xab));
+        assert_eq!(heap.read_u256(600), repeat_byte(0xab));
+        // Out-of-window bytes now read as zero (chunks freed).
+        assert_eq!(heap.read_u256(0), U256::zero());
+        assert_eq!(heap.read_u256(5000), U256::zero());
+        assert_eq!(heap.read_u256(9000), U256::zero());
+        // Only the two window chunks remain live.
+        assert_eq!(heap.live_chunks(), 2);
+    }
+
+    #[test]
+    fn retain_empty_window_frees_everything() {
+        let mut pool = ChunkPool::default();
+        let mut heap = Heap::default();
+        heap.write_u256(100, repeat_byte(0x11), &mut pool);
+        heap.write_u256(9000, repeat_byte(0x22), &mut pool);
+
+        heap.retain_window(500..500, &mut pool);
+
+        assert_eq!(heap.live_chunks(), 0);
+        assert_eq!(heap.read_u256(100), U256::zero());
+        assert_eq!(heap.read_u256(9000), U256::zero());
     }
 
     #[test]
@@ -742,7 +953,7 @@ mod tests {
             heap.write_u256(
                 offset,
                 U256::from_big_endian(&bytes),
-                &mut PagePool::default(),
+                &mut ChunkPool::default(),
             );
             for length in 1..=32 {
                 let data = heap.read_range_big_endian(offset..offset + length);
@@ -755,7 +966,7 @@ mod tests {
     fn heap_partial_u256_reads() {
         let mut heap = Heap::default();
         let bytes: Vec<_> = (1..=32).collect();
-        heap.write_u256(0, U256::from_big_endian(&bytes), &mut PagePool::default());
+        heap.write_u256(0, U256::from_big_endian(&bytes), &mut ChunkPool::default());
         for length in 1..=32 {
             let read = heap.read_u256_partially(0..length);
             // Mask is 0xff...ff00..00, where the number of `0xff` bytes is the number of read bytes
@@ -768,7 +979,7 @@ mod tests {
         heap.write_u256(
             offset,
             U256::from_big_endian(&bytes),
-            &mut PagePool::default(),
+            &mut ChunkPool::default(),
         );
         for length in 1..=32 {
             let read = heap.read_u256_partially(offset..offset + length);
@@ -783,10 +994,10 @@ mod tests {
         assert_eq!(heap.read_u256(5), 0.into());
     }
 
-    fn test_creating_heap_from_bytes(recycled_pages: &mut PagePool) {
+    fn test_creating_heap_from_bytes(recycled_chunks: &mut ChunkPool) {
         let bytes: Vec<_> = (0..=u8::MAX).collect();
-        let heap = Heap::from_bytes(&bytes, recycled_pages);
-        assert_eq!(heap.pages.len(), 1);
+        let heap = Heap::from_bytes(&bytes, recycled_chunks);
+        assert_eq!(heap.live_chunks(), 1);
 
         assert_eq!(heap.read_range_big_endian(0..256), bytes);
         for offset in 0..256 - 32 {
@@ -794,10 +1005,10 @@ mod tests {
             assert_eq!(value, U256::from_big_endian(&bytes[offset..offset + 32]));
         }
 
-        // Test larger heap with multiple pages.
+        // Test larger heap spanning multiple chunks.
         let bytes: Vec<_> = (0..HEAP_PAGE_SIZE * 5 / 2).map(|byte| byte as u8).collect();
-        let heap = Heap::from_bytes(&bytes, recycled_pages);
-        assert_eq!(heap.pages.len(), 3);
+        let heap = Heap::from_bytes(&bytes, recycled_chunks);
+        assert_eq!(heap.live_chunks(), HEAP_PAGE_SIZE * 5 / 2 / HEAP_CHUNK_SIZE);
 
         assert_eq!(
             heap.read_range_big_endian(0..HEAP_PAGE_SIZE as u32 * 5 / 2),
@@ -828,12 +1039,12 @@ mod tests {
 
     #[test]
     fn creating_heap_from_bytes() {
-        test_creating_heap_from_bytes(&mut PagePool::default());
+        test_creating_heap_from_bytes(&mut ChunkPool::default());
     }
 
     #[test]
     fn creating_heap_from_bytes_with_recycling() {
-        test_creating_heap_from_bytes(&mut populated_pagepool());
+        test_creating_heap_from_bytes(&mut populated_chunk_pool());
     }
 
     #[test]
@@ -882,6 +1093,97 @@ mod tests {
         assert_eq!(heaps[HeapId::FIRST].read_u256(0), first_word);
         assert_eq!(heaps[HeapId::FIRST].read_u256(32), second_word);
         assert_eq!(heaps.bootloader_heap_rollback_info.len(), 2);
+    }
+
+    #[test]
+    fn compact_to_window_shrinks_kept_returndata_heap() {
+        let mut heaps = Heaps::new(&[]);
+        let page = crate::page_ids::heap_page_from_base(crate::page_ids::first_dynamic_base_page());
+        heaps.allocate_at(page);
+        // Grow the heap well past one page, then keep only a small returndata window.
+        heaps.write_u256(page, 0, repeat_byte(0x11));
+        heaps.write_u256(page, 5000, repeat_byte(0x22));
+        heaps.write_u256(page, 9000, repeat_byte(0x33));
+
+        heaps.compact_to_window(page, 5000, 32);
+
+        // Window survives; everything else reads zero.
+        assert_eq!(heaps[page].read_u256(5000), repeat_byte(0x22));
+        assert_eq!(heaps[page].read_u256(0), U256::zero());
+        assert_eq!(heaps[page].read_u256(9000), U256::zero());
+    }
+
+    impl Heaps {
+        fn page_live_chunks(&self, page: HeapId) -> usize {
+            DecodedPage::decode(page)
+                .and_then(|decoded| self.try_decoded_page(decoded))
+                .map_or(0, Heap::live_chunks)
+        }
+    }
+
+    // --- Adversarial worst-case characterization --------------------------
+    // These pin down where A (window compaction) does and does not reduce the
+    // memory an 80M-gas transaction can pin. The binding attack fills the free
+    // per-frame page (NEW_FRAME_MEMORY_STIPEND = 4096 B = 16 chunks) and returns
+    // all of it; the compaction has nothing to drop there. A only helps when the
+    // callee grows scratch beyond what it returns.
+
+    #[test]
+    fn free_page_fill_is_not_reduced_by_compaction() {
+        // Worst case: touch all 16 chunks of the free first page (each 1-word
+        // write allocates a full 256 B chunk), then return the whole [0, 4096).
+        let mut heaps = Heaps::new(&[]);
+        let page = crate::page_ids::heap_page_from_base(crate::page_ids::first_dynamic_base_page());
+        heaps.allocate_at(page);
+        let chunks_per_page = HEAP_PAGE_SIZE / HEAP_CHUNK_SIZE;
+        for chunk in 0..chunks_per_page {
+            heaps.write_u256(page, (chunk * HEAP_CHUNK_SIZE) as u32, U256::one());
+        }
+        assert_eq!(heaps.page_live_chunks(page), chunks_per_page);
+
+        // Returndata window = the entire free page: compaction frees nothing.
+        heaps.compact_to_window(page, 0, HEAP_PAGE_SIZE as u32);
+        assert_eq!(
+            heaps.page_live_chunks(page),
+            chunks_per_page,
+            "returning the whole filled free page leaves nothing to compact"
+        );
+    }
+
+    #[test]
+    fn compaction_reclaims_scratch_beyond_returned_window() {
+        // A callee grows 64 KiB of scratch but returns only 32 bytes. Compaction
+        // frees the scratch, so retained memory tracks the returned window — this
+        // is where A pays off (and where a naive attacker does *not* operate).
+        let mut heaps = Heaps::new(&[]);
+        let page = crate::page_ids::heap_page_from_base(crate::page_ids::first_dynamic_base_page());
+        heaps.allocate_at(page);
+        let scratch_chunks = 256; // 64 KiB
+        for chunk in 0..scratch_chunks {
+            heaps.write_u256(page, (chunk * HEAP_CHUNK_SIZE) as u32, U256::one());
+        }
+        assert_eq!(heaps.page_live_chunks(page), scratch_chunks);
+
+        heaps.compact_to_window(page, 0, 32);
+        assert_eq!(
+            heaps.page_live_chunks(page),
+            1,
+            "only the single returned chunk survives compaction"
+        );
+    }
+
+    #[test]
+    fn compact_to_window_ignores_always_allocated_and_absent_pages() {
+        let mut heaps = Heaps::new(b"calldata-should-be-untouched");
+        // Bootloader calldata is always-allocated: compaction must be a no-op.
+        heaps.compact_to_window(bootloader_calldata_page(), 0, 4);
+        assert_eq!(
+            heaps[bootloader_calldata_page()].read_range_big_endian(0..28),
+            b"calldata-should-be-untouched"
+        );
+        // Absent dynamic page: must not panic.
+        let page = crate::page_ids::heap_page_from_base(crate::page_ids::first_dynamic_base_page());
+        heaps.compact_to_window(page, 0, 32);
     }
 
     #[test]

@@ -101,6 +101,10 @@ impl Heaps {
 
     pub(crate) fn deallocate(&mut self, _: HeapId) {}
 
+    // Compaction only frees host memory outside the addressable window; it has no
+    // observable effect, so the single-instruction mock does nothing here.
+    pub(crate) fn compact_to_window(&mut self, _: HeapId, _: u32, _: u32) {}
+
     pub(crate) fn dynamic_len(&self) -> usize {
         unimplemented!()
     }

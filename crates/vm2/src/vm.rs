@@ -206,8 +206,8 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
     /// rollback can reference these heaps; and a committed transaction's
     /// returndata is dead once the bootloader moves on. Decommit-pinned code
     /// pages (shared across transactions by hash) are kept — the same predicate
-    /// [`Self::pop_frame`] uses. Freed pages return to the `PagePool` and are
-    /// reused by the next transaction, so peak page usage stays at roughly one
+    /// [`Self::pop_frame`] uses. Freed chunks return to the heap `ChunkPool` and
+    /// are reused by the next transaction, so peak memory stays at roughly one
     /// transaction's worth instead of growing with the transaction count.
     fn reclaim_bootloader_returndata_heaps(&mut self) {
         // `kept` is owned after the take, so the `retain` closure can borrow
@@ -290,7 +290,11 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
         self.state.previous_frames.push(new_frame);
     }
 
-    pub(crate) fn pop_frame(&mut self, heap_to_keep: Option<HeapId>) -> Option<FrameRemnant> {
+    pub(crate) fn pop_frame(
+        &mut self,
+        heap_to_keep: Option<HeapId>,
+        keep_window: Option<(u32, u32)>,
+    ) -> Option<FrameRemnant> {
         let mut frame = self.state.previous_frames.pop()?;
 
         for &heap in [
@@ -302,6 +306,18 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
         {
             if Some(heap) != heap_to_keep && !self.world_diff.is_decommit_page_pinned(heap) {
                 self.state.heaps.deallocate(heap);
+            }
+        }
+
+        // The kept returndata heap survives, but a bounded fat pointer can only
+        // ever address `[start, start + length)` of it (EraVM pointers narrow,
+        // never widen). Free every chunk outside that window: unreachable, so
+        // observably equivalent to keeping it, and it caps retained memory at
+        // the bytes the callee actually returned. Decommit-pinned pages (shared
+        // code, read in full by other frames) are left intact.
+        if let (Some(heap), Some((start, length))) = (heap_to_keep, keep_window) {
+            if !self.world_diff.is_decommit_page_pinned(heap) {
+                self.state.heaps.compact_to_window(heap, start, length);
             }
         }
 
