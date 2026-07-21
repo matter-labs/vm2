@@ -35,8 +35,8 @@ zk_evm_abstractions = { git = "https://github.com/matter-labs/zksync-protocol", 
 zk_evm = { git = "https://github.com/matter-labs/zksync-protocol", tag = "v0.153.13" }
 
 # Dependencies within the workspace
-zksync_vm2_interface = { version = "=0.6.0", path = "crates/vm2-interface" }
-zksync_vm2 = { version = "=0.6.0", path = "crates/vm2" }
+zksync_vm2_interface = { version = "=0.6.1", path = "crates/vm2-interface" }
+zksync_vm2 = { version = "=0.6.1", path = "crates/vm2" }
 
 [workspace.lints.rust]
 missing_docs = "warn"
