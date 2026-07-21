@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/matter-labs/vm2/compare/v0.6.0...v0.6.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* record manual decommits so code-oracle refund is charged once ([#118](https://github.com/matter-labs/vm2/issues/118)) ([6a38791](https://github.com/matter-labs/vm2/commit/6a38791cb072bc7a740bba16e9e271fc46f40d5c))
+
 ## [0.6.0](https://github.com/matter-labs/vm2/compare/v0.5.0...v0.6.0) (2026-07-21)
 
 
