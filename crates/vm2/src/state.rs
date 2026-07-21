@@ -6,6 +6,7 @@ use crate::{
     callframe::{Callframe, CallframeSnapshot},
     fat_pointer::FatPointer,
     heap::Heaps,
+    instruction_handlers::spontaneous_panic,
     page_ids::{first_dynamic_base_page, next_page_group},
     predication::Flags,
     program::Program,
@@ -32,6 +33,9 @@ pub(crate) struct State<T, W> {
     /// Set by every `dst1` write; if still `false` after execution, `dst1` is cleared to zero,
     /// matching `zk_evm`. Transient per-instruction bookkeeping; excluded from equality and snapshots.
     pub(crate) dst1_was_updated: bool,
+    /// Set when an invariant violation requires unwinding the whole transaction.
+    /// Transient: consumed by the unwind in `naked_ret`; excluded from equality and snapshots.
+    pub(crate) aborting: bool,
 }
 
 impl<T, W> State<T, W> {
@@ -81,6 +85,7 @@ impl<T, W> State<T, W> {
             context_u128: 0,
             next_base_page: first_dynamic_base_page(),
             dst1_was_updated: false,
+            aborting: false,
         }
     }
 
@@ -184,10 +189,24 @@ impl<T: Tracer, W: World<T>> State<T, W> {
         // start of the next instruction before being read, so this is a functional no-op; we clear
         // it here to keep the invariant "never survives an instruction boundary" self-evident.
         self.dst1_was_updated = false;
+        // Not part of the snapshot either. A rollback undoes a frame's effects via its exception
+        // handler, which an active abort always bypasses (see `abort_transaction`'s doc comment),
+        // so this can't fire mid-unwind; cleared here for the same self-evidence reason as above.
+        self.aborting = false;
     }
 
     pub(crate) fn delete_history(&mut self) {
         self.heaps.delete_history();
+    }
+
+    /// Begin an uncatchable unwind of the entire current transaction.
+    /// Callable from inside any instruction handler. The unwind itself runs in
+    /// `naked_ret` on subsequent steps, skipping every frame's exception handler
+    /// until control returns to the bootloader (frame 0).
+    pub(crate) fn abort_transaction(&mut self) {
+        self.aborting = true;
+        self.current_frame.gas = 0;
+        self.current_frame.pc = spontaneous_panic();
     }
 }
 
@@ -204,6 +223,7 @@ impl<T, W> Clone for State<T, W> {
             context_u128: self.context_u128,
             next_base_page: self.next_base_page,
             dst1_was_updated: self.dst1_was_updated,
+            aborting: self.aborting,
         }
     }
 }
@@ -281,4 +301,49 @@ pub(crate) struct StateSnapshot {
     transaction_number: u16,
     context_u128: u128,
     next_base_page: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use zkevm_opcode_defs::ethereum_types::Address;
+
+    use crate::{
+        addressing_modes::{Arguments, Register, Register1},
+        instruction_handlers::spontaneous_panic,
+        testonly::{initial_decommit, TestWorld},
+        Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
+    };
+
+    #[test]
+    fn abort_transaction_arms_panic_and_burns_gas() {
+        let address = Address::from_low_u64_be(0x_1234_5678_90ab_cdef);
+        let instructions = vec![Instruction::from_ret(
+            Register1(Register::new(0)),
+            None,
+            Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+        )];
+        let mut world = TestWorld::<()>::new(&[(address, Program::from_raw(instructions, vec![]))]);
+        let program = initial_decommit(&mut world, address);
+
+        let mut vm = VirtualMachine::new(
+            address,
+            program,
+            Address::zero(),
+            &[],
+            1000,
+            Settings {
+                default_aa_code_hash: [0; 32],
+                evm_interpreter_code_hash: [0; 32],
+                hook_address: 0,
+            },
+        );
+
+        let state = &mut vm.state;
+        state.current_frame.gas = 5000;
+        assert!(!state.aborting);
+        state.abort_transaction();
+        assert!(state.aborting);
+        assert_eq!(state.current_frame.gas, 0);
+        assert_eq!(state.current_frame.pc, spontaneous_panic::<(), _>());
+    }
 }
