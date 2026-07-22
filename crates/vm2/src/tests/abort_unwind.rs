@@ -14,7 +14,8 @@ use zksync_vm2_interface::{
 
 use crate::{
     addressing_modes::{
-        Arguments, CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
+        Arguments, CodePage, Immediate1, Immediate2, Register, Register1, Register2,
+        RegisterAndImmediate,
     },
     testonly::{initial_decommit, TestWorld},
     ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, VirtualMachine,
@@ -227,5 +228,171 @@ fn abort_unwinds_past_exception_handlers_to_bootloader() {
     assert!(
         vm.flags().less_than,
         "the panic must be delivered to the bootloader"
+    );
+}
+
+/// Stops the first `run()` the instant a near call's `destination` is reached (near calls don't
+/// change `number_of_callframes()`, so depth-based stopping — used by the far-call test above —
+/// doesn't apply; we key off the program counter instead). On the resumed `run()`, also watches
+/// for the abort being delivered to the near call's own exception handler.
+struct StopAtNearCallTracer {
+    marker_pc: u16,
+    handler_pc: u16,
+    reached_marker: bool,
+    reached_handler_delivery: bool,
+}
+
+impl Tracer for StopAtNearCallTracer {
+    fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(
+        &mut self,
+        state: &mut S,
+    ) -> ShouldStop {
+        let frame = state.current_frame();
+        let pc = frame.program_counter();
+        drop(frame);
+
+        if !self.reached_marker && pc == Some(self.marker_pc) {
+            self.reached_marker = true;
+            return ShouldStop::Stop;
+        }
+        // `flags().less_than` is how `Ret<Panic>` signals panic (see `naked_ret`'s
+        // `Flags::new(return_type == ReturnType::Panic, false, false)`).
+        if !self.reached_handler_delivery && pc == Some(self.handler_pc) && state.flags().less_than
+        {
+            self.reached_handler_delivery = true;
+            return ShouldStop::Stop;
+        }
+        ShouldStop::Continue
+    }
+}
+
+/// Covers the *other* terminal case of the abort cascade: `naked_ret`'s near-call branch,
+/// `aborting && previous_frames.is_empty()` (`ret.rs:38`). The far-call test above only ever
+/// exercises the far-frame terminal case (`ret.rs:134`), because its terminal pop is always a
+/// `pop_frame`, never a `pop_near_call`. That branch is only reachable when the abort is armed
+/// while executing *inside a near-call of frame 0 itself*, with no far frames below — a
+/// scenario the far-call cascade can never produce, since by the time the cascade's terminal
+/// step runs it has already cleared `aborting` (and it always lands via `pop_frame`, not
+/// `pop_near_call`, because near calls don't nest across far-call boundaries). So this test
+/// arms the abort directly inside a frame-0 near call, as a synthetic seam for the primitive
+/// itself (in production, only the far-call cascade currently reaches `abort_transaction`, but
+/// the near-call terminal branch exists for the general case and must behave correctly too).
+#[test]
+fn abort_unwinds_frame_zero_near_call_terminal_case() {
+    // Held-back gas: the `NearCall` instruction itself costs `NEAR_CALL_COST` (charged by
+    // `full_boilerplate` before `push_near_call` runs), and then reserves `NEAR_CALL_GAS` for the
+    // near call, leaving `INITIAL_GAS - NEAR_CALL_COST - NEAR_CALL_GAS` held back on the frame to
+    // be restored when the near call pops. Using a nonzero, distinctive value makes "gas
+    // restored" unambiguous: 0 would be indistinguishable from the (wrong) "gas burned" behavior
+    // of the non-terminal re-panic branch.
+    const INITIAL_GAS: u32 = 1_000;
+    const NEAR_CALL_COST: u32 = 5;
+    const NEAR_CALL_GAS: u32 = 100;
+    const HELD_BACK_GAS: u32 = INITIAL_GAS - NEAR_CALL_COST - NEAR_CALL_GAS;
+
+    const MARKER_PC: u16 = 2;
+    const NEAR_CALL_EXCEPTION_HANDLER_PC: u16 = 3;
+
+    let bootloader_address = Address::from_low_u64_be(0x_5000_0000_0000_0001);
+
+    let program: Program<StopAtNearCallTracer, TestWorld<StopAtNearCallTracer>> = Program::from_raw(
+        vec![
+            // 0: near_call into the marker at MARKER_PC; on failure, jump to
+            // NEAR_CALL_EXCEPTION_HANDLER_PC. `gas` (r1) carries `gas_to_pass`.
+            Instruction::from_near_call(
+                Register1(Register::new(1)),
+                Immediate1(MARKER_PC),
+                Immediate2(NEAR_CALL_EXCEPTION_HANDLER_PC),
+                Arguments::new(Predicate::Always, NEAR_CALL_COST, ModeRequirements::none()),
+            ),
+            // 1: resumption point if the near call ever returned normally (unused here).
+            ret_normal(),
+            // 2: marker — the tracer pauses the VM right before this executes.
+            ret_normal(),
+            // 3: the near call's own exception handler. Only reached via *normal* (non-aborting)
+            // delivery — i.e. exactly what the terminal case is supposed to produce.
+            catch_marker(),
+        ],
+        vec![],
+    );
+
+    let mut world = TestWorld::new(&[(bootloader_address, program)]);
+    let program = initial_decommit(&mut world, bootloader_address);
+
+    let mut vm = VirtualMachine::new(
+        bootloader_address,
+        program,
+        Address::zero(),
+        &[],
+        INITIAL_GAS,
+        Settings {
+            default_aa_code_hash: [0; 32],
+            evm_interpreter_code_hash: [0; 32],
+            hook_address: 0,
+        },
+    );
+
+    // r1 = NEAR_CALL_GAS (gas_to_pass for the near call). This is the very first instruction of
+    // the initial frame, so registers are still whatever `State::new` set them to (r1 normally
+    // holds the calldata fat pointer); overwrite it directly, as other in-crate tests do.
+    vm.state.registers[1] = U256::from(NEAR_CALL_GAS);
+    vm.state.register_pointer_flags &= !(1 << 1);
+
+    let mut tracer = StopAtNearCallTracer {
+        marker_pc: MARKER_PC,
+        handler_pc: NEAR_CALL_EXCEPTION_HANDLER_PC,
+        reached_marker: false,
+        reached_handler_delivery: false,
+    };
+
+    let end = vm.run(&mut world, &mut tracer);
+    assert_eq!(end, ExecutionEnd::StoppedByTracer);
+    assert!(tracer.reached_marker, "tracer never observed the marker pc");
+    assert!(
+        vm.state.previous_frames.is_empty(),
+        "no far frames exist in this test"
+    );
+    assert_eq!(
+        vm.current_frame().gas(),
+        NEAR_CALL_GAS,
+        "should be paused inside the near call, holding its own gas allocation"
+    );
+
+    // Arm the abort as if the near call hit an invariant violation.
+    vm.state.abort_transaction();
+
+    // Resume: the first `Ret<Panic>` pops the near call. Since `previous_frames` is empty, this
+    // must take `naked_ret`'s near-call *terminal* branch (`ret.rs:38`), not the re-panic branch
+    // (`ret.rs:48`) — there is nothing left to cascade through.
+    let end = vm.run(&mut world, &mut tracer);
+    assert_eq!(end, ExecutionEnd::StoppedByTracer);
+    assert!(
+        tracer.reached_handler_delivery,
+        "the panic never reached the near call's exception handler"
+    );
+
+    // The following three assertions are only jointly satisfiable by the terminal branch:
+    // - the re-panic branch would leave `aborting == true` and `pc` at `spontaneous_panic()`
+    //   (`program_counter()` would read `None`, not `Some(3)`);
+    // - the re-panic branch would also zero `current_frame.gas`, whereas the terminal branch
+    //   never touches it, so the pre-abort `HELD_BACK_GAS` must come back untouched.
+    assert!(!vm.state.aborting, "aborting flag must be cleared");
+    assert_eq!(
+        vm.current_frame().program_counter(),
+        Some(NEAR_CALL_EXCEPTION_HANDLER_PC),
+        "pc must be delivered to the near call's exception handler, not left at spontaneous_panic"
+    );
+    assert_eq!(
+        vm.current_frame().gas(),
+        HELD_BACK_GAS,
+        "the bootloader's held-back gas must be restored normally, not zeroed"
+    );
+    assert!(
+        vm.flags().less_than,
+        "the panic must still be delivered as a panic"
+    );
+    assert!(
+        vm.state.previous_frames.is_empty(),
+        "frame 0 must never be popped by a near-call return"
     );
 }
