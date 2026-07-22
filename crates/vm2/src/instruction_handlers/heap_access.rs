@@ -182,7 +182,11 @@ pub(crate) fn grow_heap<T: Tracer, W: World<T>, H: HeapFromState>(
         // two are distinguished by `aborting`: out-of-gas leaves it false (one-level panic), this
         // sets it true (tx-wide unwind).
         if !state.current_frame.is_kernel
-            && state.heaps.live_logical_bytes() + u64::from(to_pay) > state.memory_ceiling_bytes
+            && state
+                .heaps
+                .live_logical_bytes()
+                .saturating_add(u64::from(to_pay))
+                > state.memory_ceiling_bytes
         {
             state.abort_transaction();
             return Err(());

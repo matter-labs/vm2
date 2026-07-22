@@ -143,6 +143,11 @@ where
         // (which sees `aborting`) unwinds the whole transaction past every exception handler. This
         // differs from far_call's ordinary pre-push failures, which push a *panicking* frame (a
         // one-level, catchable panic) — the ceiling breach must be uncatchable.
+        //
+        // Note this is NOT the only way the ceiling aborts a far_call: `get_calldata` (inside
+        // `fallible_part` above) can itself grow a heap via `grow_heap`, so a breach there arms the
+        // same abort earlier — momentarily leaving one zero-gas frame before the cascade completes.
+        // Either entry yields the same uncatchable, deterministic whole-tx revert.
         if far_call_would_exceed_ceiling::<_, _, M>(vm, destination_address, is_evm_blob_format) {
             vm.state.abort_transaction();
             return ExecutionStatus::Running;
@@ -211,7 +216,11 @@ fn far_call_would_exceed_ceiling<T, W, M: TypeLevelCallingMode>(
     } else {
         NEW_FRAME_MEMORY_STIPEND
     };
-    vm.state.heaps.live_logical_bytes() + 2 * u64::from(stipend) > vm.state.memory_ceiling_bytes
+    vm.state
+        .heaps
+        .live_logical_bytes()
+        .saturating_add(2 * u64::from(stipend))
+        > vm.state.memory_ceiling_bytes
 }
 
 #[derive(Debug)]
