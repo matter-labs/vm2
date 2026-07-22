@@ -170,6 +170,11 @@ impl<T: Tracer, W: World<T>> State<T, W> {
                 self.heaps.deallocate(heap);
             }
         }
+        // Order matters for `live_logical_bytes`: `rollback` flat-overwrites the counter to its
+        // snapshotted value, and dynamic heap groups only ever grow within a snapshot's scope, so
+        // that overwrite already accounts for everything `truncate_dynamic_to` is about to drop.
+        // `truncate_dynamic_to` itself does not touch the counter (see its doc comment) — it
+        // relies on `rollback` having run first. Do not reorder these two calls.
         self.heaps.rollback(bootloader_heap_snapshot);
 
         // Pages created after the host snapshot may no longer be reachable from any frame-level

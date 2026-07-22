@@ -423,6 +423,9 @@ impl Heaps {
             page.as_u32()
         );
 
+        // `self[page]` falls back to `EMPTY_HEAP` (`counted_size == 0`) for a page that was
+        // never counted or is already removed, so this decrement is a safe no-op in that case;
+        // the `.take().unwrap_or_else(...)` panic below still fires for an unallocated page.
         self.live_logical_bytes -= u64::from(self[page].counted_size);
 
         let heap = decoded_dynamic_slot_mut(&mut self.dynamic, decoded)
@@ -506,6 +509,11 @@ impl Heaps {
         self.live_logical_bytes = live_logical_bytes;
     }
 
+    /// Does not touch `live_logical_bytes`: every caller runs [`Self::rollback`] first, whose
+    /// flat overwrite of the counter already subsumes any truncation, because dynamic groups
+    /// only grow within a snapshot's scope (so nothing truncated here could have added to the
+    /// counter *after* that snapshot was taken). If a future caller ever invokes this without a
+    /// preceding `rollback` to the same snapshot, `live_logical_bytes` will silently drift.
     pub(crate) fn truncate_dynamic_to(&mut self, len: usize) {
         assert!(
             len <= self.dynamic.len(),
@@ -953,6 +961,16 @@ mod tests {
         assert_eq!(heaps.live_logical_bytes(), 10_000);
         heaps.deallocate(p);
         assert_eq!(heaps.live_logical_bytes(), 0);
+    }
+
+    #[test]
+    fn counter_tracks_shrink() {
+        let mut heaps = Heaps::new(&[]);
+        let page = crate::page_ids::heap_page_from_base(crate::page_ids::first_dynamic_base_page());
+        let p = heaps.allocate_at(page);
+        heaps.set_counted_size(p, 10_000);
+        heaps.set_counted_size(p, 2_000); // shrink
+        assert_eq!(heaps.live_logical_bytes(), 2_000);
     }
 
     #[test]
