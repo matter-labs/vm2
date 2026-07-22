@@ -166,6 +166,7 @@ fn manual_decommit_warms_up_subsequent_decommits() {
             default_aa_code_hash: [0; 32],
             evm_interpreter_code_hash: [0; 32],
             hook_address: 0,
+            memory_ceiling_bytes: u64::MAX,
         },
     );
 

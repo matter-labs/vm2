@@ -318,7 +318,7 @@ pub(crate) struct StateSnapshot {
     next_base_page: u32,
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "single_instruction_test")))]
 mod tests {
     use zkevm_opcode_defs::ethereum_types::Address;
 
