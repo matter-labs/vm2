@@ -8,3 +8,4 @@ mod frame_stipend_counter;
 mod memory_ceiling;
 mod panic;
 mod trace_failing_far_call;
+mod tx_wide_revert;
