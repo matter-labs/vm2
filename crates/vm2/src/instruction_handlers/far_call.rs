@@ -136,22 +136,30 @@ where
         let (calldata, program, is_evm_interpreter, is_evm_blob_format) = fallible_part
             .unwrap_or_else(|| (U256::zero().into(), Program::new_panicking(), false, false));
 
-        // Enforce the per-user-tx heap-bytes ceiling BEFORE pushing the new frame (see
-        // `far_call_would_exceed_ceiling`). On a breach, do NOT push: `abort_transaction` sets
-        // `current_frame.pc` to `spontaneous_panic` on the *caller* frame and arms the tx-wide
-        // unwind; returning `Running` lets the next step panic there, and the `Ret<Panic>` cascade
-        // (which sees `aborting`) unwinds the whole transaction past every exception handler. This
-        // differs from far_call's ordinary pre-push failures, which push a *panicking* frame (a
-        // one-level, catchable panic) — the ceiling breach must be uncatchable.
+        // Enforce the per-user-tx heap-bytes ceiling. On a breach we STILL push the frame (below)
+        // and then arm the uncatchable tx-wide abort on it. Two reasons to push rather than return
+        // early without one:
+        //   * Balance: the `FarCall` opcode's `after_instruction` fires regardless, so a
+        //     call-tree-reconstructing tracer opens a callee node here. Not pushing would leave that
+        //     node unbalanced against a `Ret` (a phantom open frame). Pushing keeps `FarCall`<->`Ret`
+        //     matched, exactly like every other far_call failure.
+        //   * Gas burn: `abort_transaction` zeroes the *current* frame's gas and points its pc at
+        //     `spontaneous_panic`. Called *after* the push (when the pushed frame is current), it
+        //     zeroes that frame's `new_frame_gas` so the unwind can't recover it up the stack
+        //     (`naked_ret` adds a popped frame's leftover gas to its caller) and overrides its pc so
+        //     it panics immediately without running any of the callee's real code.
+        // The pushed frame therefore does nothing: it immediately panics and rolls back to a no-op,
+        // its transient 2*stipend is freed when it pops (the counter returns to where it was), and
+        // the `Ret<Panic>` cascade (seeing `aborting`) unwinds the whole transaction past every
+        // exception handler to the bootloader, burning all gas. Final state is identical to not
+        // pushing at all — only the (now balanced) call tree differs.
         //
         // Note this is NOT the only way the ceiling aborts a far_call: `get_calldata` (inside
         // `fallible_part` above) can itself grow a heap via `grow_heap`, so a breach there arms the
-        // same abort earlier — momentarily leaving one zero-gas frame before the cascade completes.
+        // same abort earlier — that path unwinds a real on-stack frame and needs nothing here.
         // Either entry yields the same uncatchable, deterministic whole-tx revert.
-        if far_call_would_exceed_ceiling::<_, _, M>(vm, destination_address, is_evm_blob_format) {
-            vm.state.abort_transaction();
-            return ExecutionStatus::Running;
-        }
+        let ceiling_breached =
+            far_call_would_exceed_ceiling::<_, _, M>(vm, destination_address, is_evm_blob_format);
 
         let new_frame_is_static = IS_STATIC || vm.state.current_frame.is_static;
         vm.push_frame::<M>(
@@ -164,6 +172,14 @@ where
             calldata.memory_page,
             vm.world_diff.snapshot(),
         );
+
+        // Arm the uncatchable tx-wide abort on the just-pushed frame (see the ceiling comment
+        // above): zeroes its gas and points its pc at `spontaneous_panic`, so it panics on the next
+        // step and the `Ret<Panic>` cascade unwinds every frame up to the bootloader, burning all
+        // gas.
+        if ceiling_breached {
+            vm.state.abort_transaction();
+        }
 
         vm.state.flags = Flags::new(false, false, false);
 

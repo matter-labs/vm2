@@ -267,3 +267,157 @@ fn far_call_stipend_over_ceiling_reverts_whole_tx() {
 
     run_and_assert_uncatchable_revert(&programs);
 }
+
+/// Tracks the maximum call depth reached and stops when the panic is delivered to the bootloader.
+/// A ceiling-breaching `far_call` must still PUSH a (panicking) frame — so `max_depth` reaches the
+/// full nesting — then unwind completely. A regression that returned without pushing would leave
+/// the `FarCall` opcode unbalanced against its `Ret` (a phantom open call-tree node) and top
+/// `max_depth` out one short.
+struct DepthBalanceTracer {
+    bootloader_address: Address,
+    max_depth: usize,
+    bootloader_delivery_seen: bool,
+}
+
+impl Tracer for DepthBalanceTracer {
+    fn after_instruction<OP: OpcodeType, S: GlobalStateInterface>(
+        &mut self,
+        state: &mut S,
+    ) -> ShouldStop {
+        self.max_depth = self.max_depth.max(state.number_of_callframes());
+        let frame = state.current_frame();
+        let is_bootloader = frame.address() == self.bootloader_address;
+        let pc = frame.program_counter();
+        drop(frame);
+        if is_bootloader && pc == Some(CATCH_PC) && state.flags().less_than {
+            self.bootloader_delivery_seen = true;
+            return ShouldStop::Stop;
+        }
+        ShouldStop::Continue
+    }
+}
+
+#[test]
+fn far_call_ceiling_abort_keeps_call_tree_balanced() {
+    let bootloader_address = Address::from_low_u64_be(0x_1000_0000_0000_0001);
+    let a_address = Address::from_low_u64_be(0x_2000_0000_0000_0001);
+    let b_address = Address::from_low_u64_be(0x_3000_0000_0000_0001);
+    let c_address = Address::from_low_u64_be(0x_4000_0000_0000_0001);
+
+    let programs: Vec<(
+        Address,
+        Program<DepthBalanceTracer, TestWorld<DepthBalanceTracer>>,
+    )> = vec![
+        (bootloader_address, caller_program(a_address, GAS_TO_PASS)),
+        (a_address, caller_program(b_address, GAS_TO_PASS)),
+        (b_address, caller_program(c_address, GAS_TO_PASS)),
+        (c_address, Program::from_raw(vec![ret_normal()], vec![])),
+    ];
+
+    let mut world = TestWorld::new(&programs);
+    let program = initial_decommit(&mut world, bootloader_address);
+    let mut vm = VirtualMachine::new(
+        bootloader_address,
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        Settings {
+            default_aa_code_hash: [0; 32],
+            evm_interpreter_code_hash: [0; 32],
+            hook_address: 0,
+            memory_ceiling_bytes: CEILING,
+        },
+    );
+
+    let mut tracer = DepthBalanceTracer {
+        bootloader_address,
+        max_depth: 0,
+        bootloader_delivery_seen: false,
+    };
+
+    let end = vm.run(&mut world, &mut tracer);
+    assert_eq!(end, ExecutionEnd::StoppedByTracer);
+    assert!(
+        tracer.bootloader_delivery_seen,
+        "tx never unwound to the bootloader"
+    );
+    // The breaching far_call (B -> C) pushed a real (panicking) frame, so depth reached the full
+    // four (bootloader, A, B, C). A no-push regression would top out at three, leaving the FarCall
+    // opcode's traced callee node unbalanced against any Ret.
+    assert_eq!(
+        tracer.max_depth, 4,
+        "the ceiling-breaching far_call must still push a frame (balanced FarCall<->Ret)"
+    );
+    // ...and it unwound the whole way: back at frame 0 only.
+    assert!(
+        vm.state.previous_frames.is_empty(),
+        "must unwind to the bootloader"
+    );
+}
+
+/// A minimal single-(root-)frame VM with the ceiling disabled, for the `State`-equality guards.
+fn single_frame_vm() -> VirtualMachine<(), TestWorld<()>> {
+    let address = Address::from_low_u64_be(0x_2000_0000_0000_0001);
+    let program: Program<(), TestWorld<()>> = Program::from_raw(vec![ret_normal()], vec![]);
+    let mut world = TestWorld::new(&[(address, program)]);
+    let program = initial_decommit(&mut world, address);
+    VirtualMachine::new(
+        address,
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        Settings {
+            default_aa_code_hash: [0; 32],
+            evm_interpreter_code_hash: [0; 32],
+            hook_address: 0,
+            memory_ceiling_bytes: u64::MAX,
+        },
+    )
+}
+
+#[test]
+fn transient_and_config_state_fields_excluded_from_eq() {
+    // Guards the consensus-invisibility invariant: `aborting` (transient) and `memory_ceiling_bytes`
+    // (config) must never leak into `State::eq`. Two states differing only in one of them compare
+    // equal; a future edit adding either to equality fails this test loudly. (The heap counter's
+    // exclusion is guarded in `heap.rs`'s `live_logical_bytes_excluded_from_heaps_eq`, since that
+    // field is private to the heap module.)
+    let vm = single_frame_vm();
+    let base = vm.state.clone();
+
+    let mut flipped = base.clone();
+    flipped.aborting = !flipped.aborting;
+    assert_eq!(
+        base, flipped,
+        "`aborting` must stay excluded from State::eq"
+    );
+
+    let mut reconfigured = base.clone();
+    reconfigured.memory_ceiling_bytes ^= 0xdead_beef;
+    assert_eq!(
+        base, reconfigured,
+        "`memory_ceiling_bytes` must stay excluded from State::eq"
+    );
+}
+
+#[test]
+fn excluded_state_fields_survive_snapshot_rollback() {
+    // A snapshot -> mutate-excluded-fields -> rollback round-trip must land on an equal state, even
+    // though rollback neither snapshots nor restores these fields (it resets `aborting` to false and
+    // leaves `memory_ceiling_bytes` as-is): they are excluded from equality, so the round-trip is
+    // consensus-invisible either way.
+    let mut vm = single_frame_vm();
+    vm.make_snapshot();
+    let before = vm.state.clone();
+
+    vm.state.aborting = true;
+    vm.state.memory_ceiling_bytes ^= 0xbeef;
+    vm.rollback();
+
+    assert_eq!(
+        before, vm.state,
+        "excluded fields must not perturb a snapshot round-trip"
+    );
+}

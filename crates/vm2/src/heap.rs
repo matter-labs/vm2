@@ -426,7 +426,17 @@ impl Heaps {
         // `self[page]` falls back to `EMPTY_HEAP` (`counted_size == 0`) for a page that was
         // never counted or is already removed, so this decrement is a safe no-op in that case;
         // the `.take().unwrap_or_else(...)` panic below still fires for an unallocated page.
-        self.live_logical_bytes -= u64::from(self[page].counted_size);
+        let counted = u64::from(self[page].counted_size);
+        // Invariant: `live_logical_bytes == Σ live counted_size`, so a page's counted size can
+        // never exceed the running total. Fail loudly in debug if that is ever violated, instead
+        // of wrapping silently in release.
+        debug_assert!(
+            self.live_logical_bytes >= counted,
+            "live_logical_bytes underflow: {} < {}",
+            self.live_logical_bytes,
+            counted
+        );
+        self.live_logical_bytes -= counted;
 
         let heap = decoded_dynamic_slot_mut(&mut self.dynamic, decoded)
             .take()
@@ -450,6 +460,14 @@ impl Heaps {
             .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
         let old = heap.counted_size;
         heap.counted_size = size;
+        // Invariant: `live_logical_bytes == Σ live counted_size`, so the old counted size can never
+        // exceed the running total. Fail loudly in debug if violated rather than wrapping silently.
+        debug_assert!(
+            self.live_logical_bytes >= u64::from(old),
+            "live_logical_bytes underflow: {} < {}",
+            self.live_logical_bytes,
+            old
+        );
         self.live_logical_bytes = self.live_logical_bytes - u64::from(old) + u64::from(size);
     }
 
@@ -988,6 +1006,18 @@ mod tests {
         assert_eq!(heaps.live_logical_bytes(), 13_192);
         heaps.rollback(snap);
         assert_eq!(heaps.live_logical_bytes(), 8192);
+    }
+
+    #[test]
+    fn live_logical_bytes_excluded_from_heaps_eq() {
+        // Guards the consensus-invisibility invariant at the heap layer: the running counter must
+        // never leak into `Heaps::eq`. Two heaps identical except for `live_logical_bytes` compare
+        // equal, so a future edit adding it to equality would fail this test loudly.
+        let a = Heaps::new(&[]);
+        let mut b = a.clone();
+        b.live_logical_bytes = 1_234_567; // private field; in-module access only
+        assert_eq!(a, b, "live_logical_bytes must be excluded from Heaps::eq");
+        assert_eq!(b, a);
     }
 
     #[test]
