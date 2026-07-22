@@ -32,7 +32,23 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
         snapshot,
     }) = vm.state.current_frame.pop_near_call()
     {
-        if TO_LABEL {
+        if vm.state.aborting {
+            // An uncatchable unwind is in progress: this near-call return must not stop at its
+            // label or exception handler either (`TO_LABEL`/`return_type` are irrelevant here).
+            if vm.state.previous_frames.is_empty() {
+                // We're already back in the bootloader's (frame 0's) own near-call context:
+                // deliver the panic normally so its handler runs, exactly like the ordinary
+                // failure path below. Frame 0 itself is never popped by a near-call return.
+                vm.state.aborting = false;
+                vm.state.current_frame.set_pc_from_u16(exception_handler);
+            } else {
+                // Not yet at the bootloader: keep re-panicking through the current frame's
+                // near-calls (or, once none remain, its far-frame caller) until the bootloader
+                // is reached; see the far-frame branch below for the terminal case.
+                vm.state.current_frame.gas = 0;
+                vm.state.current_frame.pc = spontaneous_panic();
+            }
+        } else if TO_LABEL {
             let pc = Immediate1::get_u16(args);
             vm.state.current_frame.set_pc_from_u16(pc);
         } else if return_type.is_failure() {
@@ -113,7 +129,20 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
         }
         vm.state.register_pointer_flags = 2;
 
-        if return_type.is_failure() {
+        if vm.state.aborting {
+            // Same uncatchable-unwind handling as the near-call branch above.
+            if vm.state.previous_frames.is_empty() {
+                // We just returned into the bootloader (frame 0): deliver the panic normally so
+                // its handler runs. Frame 0 is never popped here (`pop_frame` returned `None`
+                // for that case above, taking the early-return branch instead).
+                vm.state.aborting = false;
+                vm.state.current_frame.set_pc_from_u16(exception_handler);
+            } else {
+                // Not yet at the bootloader: re-panic this frame too, skipping its handler.
+                vm.state.current_frame.gas = 0;
+                vm.state.current_frame.pc = spontaneous_panic();
+            }
+        } else if return_type.is_failure() {
             vm.state.current_frame.set_pc_from_u16(exception_handler);
         }
 

@@ -23,6 +23,11 @@ pub struct Settings {
     pub evm_interpreter_code_hash: [u8; 32],
     /// Writing to this address in the bootloader's heap suspends execution
     pub hook_address: u32,
+    /// Global ceiling on summed logical heap bytes of non-kernel frames. A transaction
+    /// that would exceed it is reverted whole (see `State::abort_transaction`), keeping
+    /// the proving guest under its ~952 MiB heap cap. Deterministic VM state → sequencer
+    /// and verifier MUST pass the SAME value. `u64::MAX` disables the check.
+    pub memory_ceiling_bytes: u64,
 }
 
 /// High-performance out-of-circuit EraVM implementation.
@@ -49,17 +54,22 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
         let world_before_this_frame = world_diff.snapshot();
         let mut stack_pool = StackPool::default();
 
+        let mut state = State::new(
+            address,
+            caller,
+            calldata,
+            gas,
+            program,
+            world_before_this_frame,
+            stack_pool.get(),
+        );
+        // `grow_heap` only receives `&mut State`, not the whole VM, so the ceiling must live on
+        // `State` to be reachable from the heap-growth trigger. Copy it here (config → state).
+        state.memory_ceiling_bytes = settings.memory_ceiling_bytes;
+
         Self {
             world_diff,
-            state: State::new(
-                address,
-                caller,
-                calldata,
-                gas,
-                program,
-                world_before_this_frame,
-                stack_pool.get(),
-            ),
+            state,
             settings,
             stack_pool,
             snapshot: None,
@@ -309,6 +319,23 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
             world_before_this_frame,
         );
         self.state.context_u128 = 0;
+
+        // Count this frame's stipend against the per-user-tx heap-bytes ceiling, but only for
+        // non-kernel frames: the bootloader/system contracts get huge free heaps by design and
+        // must not inflate a counter that exists to bound *user* memory usage (see
+        // `Heaps::live_logical_bytes`). `pop_frame` needs no matching special-case: its existing
+        // `deallocate` calls already decrement whatever was counted here (kernel frames were
+        // never counted, so deallocating them is a no-op against the counter), and heaps kept
+        // alive as returndata are, by construction, not deallocated — so they stay counted, which
+        // is exactly the desired accounting.
+        if !new_frame.is_kernel {
+            self.state
+                .heaps
+                .set_counted_size(heap_page, new_frame.heap_size);
+            self.state
+                .heaps
+                .set_counted_size(aux_heap_page, new_frame.aux_heap_size);
+        }
 
         std::mem::swap(&mut new_frame, &mut self.state.current_frame);
         self.state.previous_frames.push(new_frame);

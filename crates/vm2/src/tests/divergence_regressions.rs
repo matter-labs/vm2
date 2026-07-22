@@ -29,6 +29,7 @@ fn default_settings() -> Settings {
         default_aa_code_hash: [0; 32],
         evm_interpreter_code_hash: [0; 32],
         hook_address: 0,
+        memory_ceiling_bytes: u64::MAX,
     }
 }
 
@@ -122,6 +123,7 @@ fn masked_default_aa_far_call(version_byte: u8) -> VirtualMachine<(), TestWorld<
             default_aa_code_hash: bytes32(default_aa_hash),
             evm_interpreter_code_hash: [0; 32],
             hook_address: 0,
+            memory_ceiling_bytes: u64::MAX,
         },
     );
 

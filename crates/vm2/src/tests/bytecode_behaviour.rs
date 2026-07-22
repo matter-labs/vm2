@@ -28,6 +28,7 @@ fn call_to_invalid_address() {
             default_aa_code_hash: [0; 32],
             evm_interpreter_code_hash: [0; 32],
             hook_address: 0,
+            memory_ceiling_bytes: u64::MAX,
         },
     );
     assert!(matches!(
@@ -65,6 +66,7 @@ fn storage_log_uses_vm_transaction_number() {
             default_aa_code_hash: [0; 32],
             evm_interpreter_code_hash: [0; 32],
             hook_address: 0,
+            memory_ceiling_bytes: u64::MAX,
         },
     );
     vm.state.transaction_number = 7;

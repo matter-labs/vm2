@@ -101,6 +101,19 @@ impl Heaps {
 
     pub(crate) fn deallocate(&mut self, _: HeapId) {}
 
+    // No-op: this mock `Heaps` doesn't model the logical-byte counter (it isn't exercised by the
+    // single-instruction property tests), so `push_frame`'s counting calls are simply ignored
+    // here, matching `deallocate`'s no-op above.
+    pub(crate) fn set_counted_size(&mut self, _: HeapId, _: u32) {}
+
+    // No-op mirror of the counter above: always reports zero live bytes. The single-instruction
+    // fuzzer runs with the ceiling disabled (`memory_ceiling_bytes == u64::MAX`, see `Settings`'s
+    // `Arbitrary`), so the ceiling checks in `grow_heap`/`far_call` that consult this are always
+    // `0 + delta > u64::MAX == false` and never fire.
+    pub(crate) fn live_logical_bytes(&self) -> u64 {
+        0
+    }
+
     pub(crate) fn dynamic_len(&self) -> usize {
         unimplemented!()
     }
@@ -123,11 +136,11 @@ impl Heaps {
         self.read.get_mut(heap).write_bytes(start_address, bytes);
     }
 
-    pub(crate) fn snapshot(&self) -> (usize, usize) {
+    pub(crate) fn snapshot(&self) -> (usize, usize, u64) {
         unimplemented!()
     }
 
-    pub(crate) fn rollback(&mut self, _: (usize, usize)) {
+    pub(crate) fn rollback(&mut self, _: (usize, usize, u64)) {
         unimplemented!()
     }
 

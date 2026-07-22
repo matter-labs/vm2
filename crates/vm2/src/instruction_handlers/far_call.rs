@@ -1,8 +1,13 @@
 use primitive_types::U256;
-use zkevm_opcode_defs::{system_params::MSG_VALUE_SIMULATOR_ADDITIVE_COST, ADDRESS_MSG_VALUE};
+use zkevm_opcode_defs::{
+    system_params::{
+        MSG_VALUE_SIMULATOR_ADDITIVE_COST, NEW_EVM_FRAME_MEMORY_STIPEND, NEW_FRAME_MEMORY_STIPEND,
+    },
+    ADDRESS_MSG_VALUE,
+};
 use zksync_vm2_interface::{
     opcodes::{FarCall, TypeLevelCallingMode},
-    Tracer,
+    CallingMode, Tracer,
 };
 
 use super::{
@@ -131,6 +136,31 @@ where
         let (calldata, program, is_evm_interpreter, is_evm_blob_format) = fallible_part
             .unwrap_or_else(|| (U256::zero().into(), Program::new_panicking(), false, false));
 
+        // Enforce the per-user-tx heap-bytes ceiling. On a breach we STILL push the frame (below)
+        // and then arm the uncatchable tx-wide abort on it. Two reasons to push rather than return
+        // early without one:
+        //   * Balance: the `FarCall` opcode's `after_instruction` fires regardless, so a
+        //     call-tree-reconstructing tracer opens a callee node here. Not pushing would leave that
+        //     node unbalanced against a `Ret` (a phantom open frame). Pushing keeps `FarCall`<->`Ret`
+        //     matched, exactly like every other far_call failure.
+        //   * Gas burn: `abort_transaction` zeroes the *current* frame's gas and points its pc at
+        //     `spontaneous_panic`. Called *after* the push (when the pushed frame is current), it
+        //     zeroes that frame's `new_frame_gas` so the unwind can't recover it up the stack
+        //     (`naked_ret` adds a popped frame's leftover gas to its caller) and overrides its pc so
+        //     it panics immediately without running any of the callee's real code.
+        // The pushed frame therefore does nothing: it immediately panics and rolls back to a no-op,
+        // its transient 2*stipend is freed when it pops (the counter returns to where it was), and
+        // the `Ret<Panic>` cascade (seeing `aborting`) unwinds the whole transaction past every
+        // exception handler to the bootloader, burning all gas. Final state is identical to not
+        // pushing at all — only the (now balanced) call tree differs.
+        //
+        // Note this is NOT the only way the ceiling aborts a far_call: `get_calldata` (inside
+        // `fallible_part` above) can itself grow a heap via `grow_heap`, so a breach there arms the
+        // same abort earlier — that path unwinds a real on-stack frame and needs nothing here.
+        // Either entry yields the same uncatchable, deterministic whole-tx revert.
+        let ceiling_breached =
+            far_call_would_exceed_ceiling::<_, _, M>(vm, destination_address, is_evm_blob_format);
+
         let new_frame_is_static = IS_STATIC || vm.state.current_frame.is_static;
         vm.push_frame::<M>(
             u256_into_address(destination_address),
@@ -142,6 +172,14 @@ where
             calldata.memory_page,
             vm.world_diff.snapshot(),
         );
+
+        // Arm the uncatchable tx-wide abort on the just-pushed frame (see the ceiling comment
+        // above): zeroes its gas and points its pc at `spontaneous_panic`, so it panics on the next
+        // step and the `Ret<Panic>` cascade unwinds every frame up to the bootloader, burning all
+        // gas.
+        if ceiling_breached {
+            vm.state.abort_transaction();
+        }
 
         vm.state.flags = Flags::new(false, false, false);
 
@@ -167,6 +205,38 @@ where
 
         ExecutionStatus::Running
     })
+}
+
+/// Returns `true` if pushing the new frame would raise `live_logical_bytes` above the configured
+/// per-user-tx ceiling. Replicates `push_frame`/`Callframe::new`'s frame-address and stipend
+/// selection exactly, so the prospective total matches what the push would actually count: the
+/// frame address depends on the calling mode (Delegate keeps the caller's address), the stipend is
+/// EVM- vs default-sized (kernel targets can't reach here — they're filtered out first), and a
+/// pushed frame counts both its heap and aux-heap stipends (`2 *`). Kernel target frames are exempt
+/// (never counted — see `Heaps::live_logical_bytes`), so they can never breach the ceiling.
+fn far_call_would_exceed_ceiling<T, W, M: TypeLevelCallingMode>(
+    vm: &VirtualMachine<T, W>,
+    destination_address: U256,
+    is_evm_blob_format: bool,
+) -> bool {
+    let new_frame_address = if M::VALUE == CallingMode::Delegate {
+        vm.state.current_frame.address
+    } else {
+        u256_into_address(destination_address)
+    };
+    if is_kernel(new_frame_address) {
+        return false;
+    }
+    let stipend = if is_evm_blob_format {
+        NEW_EVM_FRAME_MEMORY_STIPEND
+    } else {
+        NEW_FRAME_MEMORY_STIPEND
+    };
+    vm.state
+        .heaps
+        .live_logical_bytes()
+        .saturating_add(2 * u64::from(stipend))
+        > vm.state.memory_ceiling_bytes
 }
 
 #[derive(Debug)]
@@ -206,7 +276,7 @@ fn program_to_bytes<T, W>(program: &Program<T, W>) -> Vec<u8> {
 ///
 /// This function needs to be called even if we already know we will panic because
 /// overflowing start + length makes the heap resize even when already panicking.
-pub(crate) fn get_calldata<T, W>(
+pub(crate) fn get_calldata<T: Tracer, W: World<T>>(
     raw_abi: U256,
     is_pointer: bool,
     vm: &mut VirtualMachine<T, W>,
