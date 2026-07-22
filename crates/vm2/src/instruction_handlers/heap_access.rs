@@ -172,6 +172,10 @@ pub(crate) fn grow_heap<T, W, H: HeapFromState>(
     if let Some(to_pay) = new_bound.checked_sub(*H::get_heap_size(state)) {
         state.use_gas(to_pay)?;
         *H::get_heap_size(state) = new_bound;
+        if !state.current_frame.is_kernel {
+            let heap = H::get_heap(state);
+            state.heaps.set_counted_size(heap, new_bound);
+        }
     }
 
     Ok(())
