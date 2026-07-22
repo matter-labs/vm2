@@ -123,11 +123,11 @@ impl Heaps {
         self.read.get_mut(heap).write_bytes(start_address, bytes);
     }
 
-    pub(crate) fn snapshot(&self) -> (usize, usize) {
+    pub(crate) fn snapshot(&self) -> (usize, usize, u64) {
         unimplemented!()
     }
 
-    pub(crate) fn rollback(&mut self, _: (usize, usize)) {
+    pub(crate) fn rollback(&mut self, _: (usize, usize, u64)) {
         unimplemented!()
     }
 

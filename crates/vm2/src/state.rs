@@ -296,7 +296,7 @@ pub(crate) struct StateSnapshot {
     register_pointer_flags: u16,
     flags: Flags,
     bootloader_frame: CallframeSnapshot,
-    bootloader_heap_snapshot: (usize, usize),
+    bootloader_heap_snapshot: (usize, usize, u64),
     dynamic_heap_groups: usize,
     transaction_number: u16,
     context_u128: u128,

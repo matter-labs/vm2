@@ -28,12 +28,20 @@ impl Default for HeapPage {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Heap {
     pages: Vec<Option<HeapPage>>,
+    /// Logical byte size counted against [`Heaps::live_logical_bytes`]. This is a purely
+    /// host-side bookkeeping quantity (not part of VM-visible state) used to enforce a
+    /// per-transaction heap ceiling; it defaults to 0 and is only ever set explicitly via
+    /// [`Heaps::set_counted_size`].
+    counted_size: u32,
 }
 
 // The reference VM treats reads from missing memory pages as reads from an
 // all-zero page. Keep write paths strict, but make read-only indexing total so
 // panic-produced or otherwise empty fat pointers cannot abort the host.
-static EMPTY_HEAP: Heap = Heap { pages: Vec::new() };
+static EMPTY_HEAP: Heap = Heap {
+    pages: Vec::new(),
+    counted_size: 0,
+};
 
 // We never remove `HeapPage`s (even after rollbacks – although we do zero all added pages in this case),
 // we allow additional pages to be present if they are zeroed.
@@ -76,7 +84,10 @@ impl Heap {
                 })
             })
             .collect();
-        Self { pages }
+        Self {
+            pages,
+            counted_size: 0,
+        }
     }
 
     fn recycle(self, pagepool: &mut PagePool) {
@@ -326,6 +337,10 @@ pub(crate) struct Heaps {
     pagepool: PagePool,
     bootloader_heap_rollback_info: Vec<(u32, U256)>,
     bootloader_aux_rollback_info: Vec<(u32, U256)>,
+    /// Running sum of `counted_size` over all live heaps, excluding the always-allocated
+    /// bootloader heaps (`FIRST`/`FIRST_AUX`, static memory, calldata), whose `counted_size`
+    /// is never set and stays 0. Feeds the per-transaction heap ceiling enforced elsewhere.
+    live_logical_bytes: u64,
 }
 
 impl Heaps {
@@ -341,6 +356,7 @@ impl Heaps {
             pagepool,
             bootloader_heap_rollback_info: vec![],
             bootloader_aux_rollback_info: vec![],
+            live_logical_bytes: 0,
         }
     }
 
@@ -407,6 +423,8 @@ impl Heaps {
             page.as_u32()
         );
 
+        self.live_logical_bytes -= u64::from(self[page].counted_size);
+
         let heap = decoded_dynamic_slot_mut(&mut self.dynamic, decoded)
             .take()
             .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
@@ -415,6 +433,26 @@ impl Heaps {
 
     pub(crate) fn dynamic_len(&self) -> usize {
         self.dynamic.len()
+    }
+
+    /// Sets the logical byte size counted against [`Self::live_logical_bytes`] for `page`,
+    /// adjusting the running total by the signed delta between the old and new sizes. Safe to
+    /// call repeatedly (idempotent for an unchanged `size`); used both for initial accounting
+    /// and later growth.
+    pub(crate) fn set_counted_size(&mut self, page: HeapId, size: u32) {
+        let decoded = DecodedPage::decode(page)
+            .unwrap_or_else(|| panic!("heap page {} is not decodable", page.as_u32()));
+        let heap = self
+            .try_decoded_page_mut(decoded)
+            .unwrap_or_else(|| panic!("heap page {} is not allocated", page.as_u32()));
+        let old = heap.counted_size;
+        heap.counted_size = size;
+        self.live_logical_bytes = self.live_logical_bytes - u64::from(old) + u64::from(size);
+    }
+
+    /// Running sum of [`set_counted_size`](Self::set_counted_size) sizes over all live heaps.
+    pub(crate) fn live_logical_bytes(&self) -> u64 {
+        self.live_logical_bytes
     }
 
     pub(crate) fn write_u256(&mut self, page: HeapId, start_address: u32, value: U256) {
@@ -443,14 +481,18 @@ impl Heaps {
         heap.write_bytes(start_address, bytes, pagepool);
     }
 
-    pub(crate) fn snapshot(&self) -> (usize, usize) {
+    pub(crate) fn snapshot(&self) -> (usize, usize, u64) {
         (
             self.bootloader_heap_rollback_info.len(),
             self.bootloader_aux_rollback_info.len(),
+            self.live_logical_bytes,
         )
     }
 
-    pub(crate) fn rollback(&mut self, (heap_snap, aux_snap): (usize, usize)) {
+    pub(crate) fn rollback(
+        &mut self,
+        (heap_snap, aux_snap, live_logical_bytes): (usize, usize, u64),
+    ) {
         for (address, value) in self.bootloader_heap_rollback_info.drain(heap_snap..).rev() {
             self.bootloader_heap
                 .write_u256(address, value, &mut self.pagepool);
@@ -460,6 +502,8 @@ impl Heaps {
             self.bootloader_aux_heap
                 .write_u256(address, value, &mut self.pagepool);
         }
+
+        self.live_logical_bytes = live_logical_bytes;
     }
 
     pub(crate) fn truncate_dynamic_to(&mut self, len: usize) {
@@ -524,6 +568,19 @@ impl Heaps {
 
     fn decoded_page(&self, page: DecodedPage) -> &Heap {
         self.try_decoded_page(page).unwrap_or(&EMPTY_HEAP)
+    }
+
+    fn try_decoded_page_mut(&mut self, page: DecodedPage) -> Option<&mut Heap> {
+        match page {
+            DecodedPage::Static => Some(&mut self.static_memory),
+            DecodedPage::BootloaderCalldata => Some(&mut self.bootloader_calldata),
+            DecodedPage::BootloaderHeap => Some(&mut self.bootloader_heap),
+            DecodedPage::BootloaderAuxHeap => Some(&mut self.bootloader_aux_heap),
+            DecodedPage::Dynamic { group, kind } => self
+                .dynamic
+                .get_mut(group)
+                .and_then(|group| group.slot_mut(kind).as_mut()),
+        }
     }
 
     fn decoded_page_mut_for_write(&mut self, page: DecodedPage) -> (&mut Heap, &mut PagePool) {
@@ -846,7 +903,7 @@ mod tests {
         assert_eq!(heaps[HeapId::FIRST_AUX].read_u256(0), 42.into());
 
         let snapshot = heaps.snapshot();
-        assert_eq!(snapshot, (1, 1));
+        assert_eq!(snapshot, (1, 1, 0));
 
         heaps.write_u256(HeapId::FIRST, 7, U256::MAX);
         assert_eq!(
@@ -882,6 +939,37 @@ mod tests {
         assert_eq!(heaps[HeapId::FIRST].read_u256(0), first_word);
         assert_eq!(heaps[HeapId::FIRST].read_u256(32), second_word);
         assert_eq!(heaps.bootloader_heap_rollback_info.len(), 2);
+    }
+
+    #[test]
+    fn counter_tracks_set_and_deallocate() {
+        let mut heaps = Heaps::new(&[]);
+        assert_eq!(heaps.live_logical_bytes(), 0);
+        let page = crate::page_ids::heap_page_from_base(crate::page_ids::first_dynamic_base_page());
+        let p = heaps.allocate_at(page);
+        heaps.set_counted_size(p, 4096);
+        assert_eq!(heaps.live_logical_bytes(), 4096);
+        heaps.set_counted_size(p, 10_000); // grow
+        assert_eq!(heaps.live_logical_bytes(), 10_000);
+        heaps.deallocate(p);
+        assert_eq!(heaps.live_logical_bytes(), 0);
+    }
+
+    #[test]
+    fn counter_saved_and_restored_by_snapshot() {
+        let mut heaps = Heaps::new(&[]);
+        let base_page = crate::page_ids::first_dynamic_base_page();
+        let page = crate::page_ids::heap_page_from_base(base_page);
+        let other_page =
+            crate::page_ids::heap_page_from_base(crate::page_ids::next_page_group(base_page));
+        let p = heaps.allocate_at(page);
+        heaps.set_counted_size(p, 8192);
+        let snap = heaps.snapshot();
+        let q = heaps.allocate_at(other_page);
+        heaps.set_counted_size(q, 5000);
+        assert_eq!(heaps.live_logical_bytes(), 13_192);
+        heaps.rollback(snap);
+        assert_eq!(heaps.live_logical_bytes(), 8192);
     }
 
     #[test]
