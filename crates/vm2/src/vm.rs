@@ -310,6 +310,23 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
         );
         self.state.context_u128 = 0;
 
+        // Count this frame's stipend against the per-user-tx heap-bytes ceiling, but only for
+        // non-kernel frames: the bootloader/system contracts get huge free heaps by design and
+        // must not inflate a counter that exists to bound *user* memory usage (see
+        // `Heaps::live_logical_bytes`). `pop_frame` needs no matching special-case: its existing
+        // `deallocate` calls already decrement whatever was counted here (kernel frames were
+        // never counted, so deallocating them is a no-op against the counter), and heaps kept
+        // alive as returndata are, by construction, not deallocated — so they stay counted, which
+        // is exactly the desired accounting.
+        if !new_frame.is_kernel {
+            self.state
+                .heaps
+                .set_counted_size(heap_page, new_frame.heap_size);
+            self.state
+                .heaps
+                .set_counted_size(aux_heap_page, new_frame.aux_heap_size);
+        }
+
         std::mem::swap(&mut new_frame, &mut self.state.current_frame);
         self.state.previous_frames.push(new_frame);
     }

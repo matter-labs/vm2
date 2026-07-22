@@ -101,6 +101,11 @@ impl Heaps {
 
     pub(crate) fn deallocate(&mut self, _: HeapId) {}
 
+    // No-op: this mock `Heaps` doesn't model the logical-byte counter (it isn't exercised by the
+    // single-instruction property tests), so `push_frame`'s counting calls are simply ignored
+    // here, matching `deallocate`'s no-op above.
+    pub(crate) fn set_counted_size(&mut self, _: HeapId, _: u32) {}
+
     pub(crate) fn dynamic_len(&self) -> usize {
         unimplemented!()
     }
