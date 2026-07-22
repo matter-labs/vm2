@@ -78,6 +78,9 @@ impl<'a, T: Tracer, W: World<T>> Arbitrary<'a> for VirtualMachine<T, W> {
                 next_base_page: first_dynamic_base_page(),
                 dst1_was_updated: false,
                 aborting: false,
+                // Ceiling disabled for single-instruction fuzzing (matches `Settings`'s
+                // `Arbitrary`, which fixes `memory_ceiling_bytes` to `u64::MAX`).
+                memory_ceiling_bytes: u64::MAX,
             },
             settings: u.arbitrary()?,
             world_diff: WorldDiff::default(),
@@ -134,6 +137,7 @@ impl<'a> Arbitrary<'a> for Settings {
             default_aa_code_hash,
             evm_interpreter_code_hash,
             hook_address: 0, // Doesn't matter; we don't decode in bootloader mode
+            memory_ceiling_bytes: u64::MAX, // Disabled: single-instruction fuzzing must be unaffected
         })
     }
 }

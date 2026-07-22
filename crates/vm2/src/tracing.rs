@@ -450,6 +450,7 @@ mod test {
                 default_aa_code_hash: [0; 32],
                 evm_interpreter_code_hash: [0; 32],
                 hook_address: 0,
+                memory_ceiling_bytes: u64::MAX,
             },
         );
 
@@ -513,6 +514,7 @@ mod test {
                 default_aa_code_hash: [0; 32],
                 evm_interpreter_code_hash: [0; 32],
                 hook_address: 0,
+                memory_ceiling_bytes: u64::MAX,
             },
         );
 

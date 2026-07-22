@@ -1,8 +1,13 @@
 use primitive_types::U256;
-use zkevm_opcode_defs::{system_params::MSG_VALUE_SIMULATOR_ADDITIVE_COST, ADDRESS_MSG_VALUE};
+use zkevm_opcode_defs::{
+    system_params::{
+        MSG_VALUE_SIMULATOR_ADDITIVE_COST, NEW_EVM_FRAME_MEMORY_STIPEND, NEW_FRAME_MEMORY_STIPEND,
+    },
+    ADDRESS_MSG_VALUE,
+};
 use zksync_vm2_interface::{
     opcodes::{FarCall, TypeLevelCallingMode},
-    Tracer,
+    CallingMode, Tracer,
 };
 
 use super::{
@@ -131,6 +136,18 @@ where
         let (calldata, program, is_evm_interpreter, is_evm_blob_format) = fallible_part
             .unwrap_or_else(|| (U256::zero().into(), Program::new_panicking(), false, false));
 
+        // Enforce the per-user-tx heap-bytes ceiling BEFORE pushing the new frame (see
+        // `far_call_would_exceed_ceiling`). On a breach, do NOT push: `abort_transaction` sets
+        // `current_frame.pc` to `spontaneous_panic` on the *caller* frame and arms the tx-wide
+        // unwind; returning `Running` lets the next step panic there, and the `Ret<Panic>` cascade
+        // (which sees `aborting`) unwinds the whole transaction past every exception handler. This
+        // differs from far_call's ordinary pre-push failures, which push a *panicking* frame (a
+        // one-level, catchable panic) — the ceiling breach must be uncatchable.
+        if far_call_would_exceed_ceiling::<_, _, M>(vm, destination_address, is_evm_blob_format) {
+            vm.state.abort_transaction();
+            return ExecutionStatus::Running;
+        }
+
         let new_frame_is_static = IS_STATIC || vm.state.current_frame.is_static;
         vm.push_frame::<M>(
             u256_into_address(destination_address),
@@ -167,6 +184,34 @@ where
 
         ExecutionStatus::Running
     })
+}
+
+/// Returns `true` if pushing the new frame would raise `live_logical_bytes` above the configured
+/// per-user-tx ceiling. Replicates `push_frame`/`Callframe::new`'s frame-address and stipend
+/// selection exactly, so the prospective total matches what the push would actually count: the
+/// frame address depends on the calling mode (Delegate keeps the caller's address), the stipend is
+/// EVM- vs default-sized (kernel targets can't reach here — they're filtered out first), and a
+/// pushed frame counts both its heap and aux-heap stipends (`2 *`). Kernel target frames are exempt
+/// (never counted — see `Heaps::live_logical_bytes`), so they can never breach the ceiling.
+fn far_call_would_exceed_ceiling<T, W, M: TypeLevelCallingMode>(
+    vm: &VirtualMachine<T, W>,
+    destination_address: U256,
+    is_evm_blob_format: bool,
+) -> bool {
+    let new_frame_address = if M::VALUE == CallingMode::Delegate {
+        vm.state.current_frame.address
+    } else {
+        u256_into_address(destination_address)
+    };
+    if is_kernel(new_frame_address) {
+        return false;
+    }
+    let stipend = if is_evm_blob_format {
+        NEW_EVM_FRAME_MEMORY_STIPEND
+    } else {
+        NEW_FRAME_MEMORY_STIPEND
+    };
+    vm.state.heaps.live_logical_bytes() + 2 * u64::from(stipend) > vm.state.memory_ceiling_bytes
 }
 
 #[derive(Debug)]
@@ -206,7 +251,7 @@ fn program_to_bytes<T, W>(program: &Program<T, W>) -> Vec<u8> {
 ///
 /// This function needs to be called even if we already know we will panic because
 /// overflowing start + length makes the heap resize even when already panicking.
-pub(crate) fn get_calldata<T, W>(
+pub(crate) fn get_calldata<T: Tracer, W: World<T>>(
     raw_abi: U256,
     is_pointer: bool,
     vm: &mut VirtualMachine<T, W>,

@@ -126,6 +126,7 @@ fn test() {
             default_aa_code_hash: [0; 32],
             evm_interpreter_code_hash: [0; 32],
             hook_address: 0,
+            memory_ceiling_bytes: u64::MAX,
         },
     );
 
@@ -202,6 +203,7 @@ fn test_with_initial_out_of_gas_error() {
             default_aa_code_hash: [0; 32],
             evm_interpreter_code_hash: [0; 32],
             hook_address: 0,
+            memory_ceiling_bytes: u64::MAX,
         },
     );
 

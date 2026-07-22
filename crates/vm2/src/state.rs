@@ -36,6 +36,12 @@ pub(crate) struct State<T, W> {
     /// Set when an invariant violation requires unwinding the whole transaction.
     /// Transient: consumed by the unwind in `naked_ret`; excluded from equality and snapshots.
     pub(crate) aborting: bool,
+    /// Mirror of [`Settings::memory_ceiling_bytes`](crate::Settings::memory_ceiling_bytes), copied
+    /// here because `grow_heap` only sees `&mut State`. Deterministic config, constant for the
+    /// life of the VM; excluded from equality and snapshots (like `aborting`/`dst1_was_updated`),
+    /// but — unlike those transient flags — it is NOT reset by `rollback`, since it is a fixed
+    /// configuration value, not per-instruction bookkeeping. `u64::MAX` disables the check.
+    pub(crate) memory_ceiling_bytes: u64,
 }
 
 impl<T, W> State<T, W> {
@@ -86,6 +92,9 @@ impl<T, W> State<T, W> {
             next_base_page: first_dynamic_base_page(),
             dst1_was_updated: false,
             aborting: false,
+            // Disabled by default; `VirtualMachine::new` overwrites this with the configured
+            // `Settings.memory_ceiling_bytes` immediately after construction.
+            memory_ceiling_bytes: u64::MAX,
         }
     }
 
@@ -229,6 +238,7 @@ impl<T, W> Clone for State<T, W> {
             next_base_page: self.next_base_page,
             dst1_was_updated: self.dst1_was_updated,
             aborting: self.aborting,
+            memory_ceiling_bytes: self.memory_ceiling_bytes,
         }
     }
 }
@@ -340,6 +350,7 @@ mod tests {
                 default_aa_code_hash: [0; 32],
                 evm_interpreter_code_hash: [0; 32],
                 hook_address: 0,
+                memory_ceiling_bytes: u64::MAX,
             },
         );
 

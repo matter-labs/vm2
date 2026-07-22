@@ -190,6 +190,7 @@ fn abort_unwinds_past_exception_handlers_to_bootloader() {
             default_aa_code_hash: [0; 32],
             evm_interpreter_code_hash: [0; 32],
             hook_address: 0,
+            memory_ceiling_bytes: u64::MAX,
         },
     );
 
@@ -329,6 +330,7 @@ fn abort_unwinds_frame_zero_near_call_terminal_case() {
             default_aa_code_hash: [0; 32],
             evm_interpreter_code_hash: [0; 32],
             hook_address: 0,
+            memory_ceiling_bytes: u64::MAX,
         },
     );
 

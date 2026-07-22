@@ -106,6 +106,14 @@ impl Heaps {
     // here, matching `deallocate`'s no-op above.
     pub(crate) fn set_counted_size(&mut self, _: HeapId, _: u32) {}
 
+    // No-op mirror of the counter above: always reports zero live bytes. The single-instruction
+    // fuzzer runs with the ceiling disabled (`memory_ceiling_bytes == u64::MAX`, see `Settings`'s
+    // `Arbitrary`), so the ceiling checks in `grow_heap`/`far_call` that consult this are always
+    // `0 + delta > u64::MAX == false` and never fire.
+    pub(crate) fn live_logical_bytes(&self) -> u64 {
+        0
+    }
+
     pub(crate) fn dynamic_len(&self) -> usize {
         unimplemented!()
     }

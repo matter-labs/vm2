@@ -38,6 +38,7 @@ fn nested_near_call(bencher: Bencher) {
                 default_aa_code_hash: [0; 32],
                 evm_interpreter_code_hash: [0; 32],
                 hook_address: 0,
+                memory_ceiling_bytes: u64::MAX,
             },
         );
 
@@ -85,6 +86,7 @@ fn nested_near_call_with_storage_write(bencher: Bencher) {
                 default_aa_code_hash: [0; 32],
                 evm_interpreter_code_hash: [0; 32],
                 hook_address: 0,
+                memory_ceiling_bytes: u64::MAX,
             },
         );
 

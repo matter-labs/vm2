@@ -165,11 +165,28 @@ where
 
 /// Pays for more heap space. Doesn't acually grow the heap.
 /// That distinction is necessary because the bootloader gets `u32::MAX` heap for free.
-pub(crate) fn grow_heap<T, W, H: HeapFromState>(
+pub(crate) fn grow_heap<T: Tracer, W: World<T>, H: HeapFromState>(
     state: &mut State<T, W>,
     new_bound: u32,
 ) -> Result<(), ()> {
     if let Some(to_pay) = new_bound.checked_sub(*H::get_heap_size(state)) {
+        // Enforce the per-user-tx heap-bytes ceiling FIRST, on the PROSPECTIVE total, and only for
+        // non-kernel frames (kernel frames get huge free heaps by design and are never counted —
+        // see `Heaps::live_logical_bytes`). `to_pay` is exactly the growth over what has already
+        // been counted for this heap (counted size stays in sync with `heap_size` below), so
+        // `live_logical_bytes() + to_pay` is the total this grow would reach. On a breach we abort
+        // the whole transaction and bail *before* paying gas, growing the heap, or bumping the
+        // counter: `abort_transaction` arms the uncatchable tx-wide unwind (`aborting = true`), and
+        // the `Err(())` drives the caller onto its panic path where the next `Ret<Panic>` sees
+        // `aborting` and cascades. This overloads `Err` (also used for plain out-of-gas), but the
+        // two are distinguished by `aborting`: out-of-gas leaves it false (one-level panic), this
+        // sets it true (tx-wide unwind).
+        if !state.current_frame.is_kernel
+            && state.heaps.live_logical_bytes() + u64::from(to_pay) > state.memory_ceiling_bytes
+        {
+            state.abort_transaction();
+            return Err(());
+        }
         state.use_gas(to_pay)?;
         *H::get_heap_size(state) = new_bound;
         if !state.current_frame.is_kernel {
