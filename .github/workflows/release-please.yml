@@ -28,5 +28,8 @@ jobs:
       config: '.github/release-please/config.json'     # Specify the path to the configuration file
       manifest: '.github/release-please/manifest.json' # Specify the path to the manifest file
       update-cargo-lock: true                          # Update Cargo.lock file
-      publish-to-crates-io: true                       # Enable publishing to crates.io
+      # Publishing to crates.io is disabled: vm2 pins zksync-protocol via a git tag
+      # (protocol has a git-only airbender-crypto dep and is not on crates.io), which
+      # makes vm2 unpublishable to crates.io. Consumers pin vm2 via git rev/tag.
+      publish-to-crates-io: false                      # Disabled (git-only protocol dep)
       cargo_build_args: '--workspace --exclude zksync_vm2_afl_fuzz' # Do not build fuzzer during publishing

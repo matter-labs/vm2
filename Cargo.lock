@@ -29,7 +29,7 @@ dependencies = [
 [[package]]
 name = "airbender-crypto"
 version = "0.2.3"
-source = "git+https://github.com/matter-labs/airbender-platform?branch=main#db2767d9ba871bb556ad8a2c8b4d39717f36cd47"
+source = "git+https://github.com/matter-labs/airbender-platform?tag=v0.2.3#db2767d9ba871bb556ad8a2c8b4d39717f36cd47"
 dependencies = [
  "ark-bls12-381",
  "ark-bn254",
@@ -1748,8 +1748,8 @@ dependencies = [
 
 [[package]]
 name = "zk_evm"
-version = "0.153.12"
-source = "git+https://github.com/matter-labs/zksync-protocol?branch=popzxc-airbender-precompiles#ac58f32895502dfcbaa827810d2904500146637f"
+version = "0.153.13"
+source = "git+https://github.com/matter-labs/zksync-protocol?tag=v0.153.13#b60b7bde6cd5809593b4753c26e3072957c47e38"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -1762,8 +1762,8 @@ dependencies = [
 
 [[package]]
 name = "zk_evm_abstractions"
-version = "0.153.12"
-source = "git+https://github.com/matter-labs/zksync-protocol?branch=popzxc-airbender-precompiles#ac58f32895502dfcbaa827810d2904500146637f"
+version = "0.153.13"
+source = "git+https://github.com/matter-labs/zksync-protocol?tag=v0.153.13#b60b7bde6cd5809593b4753c26e3072957c47e38"
 dependencies = [
  "airbender-crypto",
  "anyhow",
@@ -1776,8 +1776,8 @@ dependencies = [
 
 [[package]]
 name = "zkevm_opcode_defs"
-version = "0.153.12"
-source = "git+https://github.com/matter-labs/zksync-protocol?branch=popzxc-airbender-precompiles#ac58f32895502dfcbaa827810d2904500146637f"
+version = "0.153.13"
+source = "git+https://github.com/matter-labs/zksync-protocol?tag=v0.153.13#b60b7bde6cd5809593b4753c26e3072957c47e38"
 dependencies = [
  "bitflags",
  "blake2",
@@ -1836,7 +1836,7 @@ dependencies = [
 
 [[package]]
 name = "zksync_vm2"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -1852,7 +1852,7 @@ dependencies = [
 
 [[package]]
 name = "zksync_vm2_afl_fuzz"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "afl",
  "arbitrary",
@@ -1864,7 +1864,7 @@ dependencies = [
 
 [[package]]
 name = "zksync_vm2_interface"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "primitive-types",
 ]
