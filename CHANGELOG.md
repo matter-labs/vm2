@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/matter-labs/vm2/compare/v0.6.1...v0.6.2) (2026-08-04)
+
+
+### Bug Fixes
+
+* automated protocol upgrade for 0.29.5 ([#121](https://github.com/matter-labs/vm2/issues/121)) ([3a8263b](https://github.com/matter-labs/vm2/commit/3a8263b75bbea7c442652b1b634cea7d911c1574))
+
 ## [0.6.1](https://github.com/matter-labs/vm2/compare/v0.6.0...v0.6.1) (2026-07-21)
 
 
