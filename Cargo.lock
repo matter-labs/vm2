@@ -1748,8 +1748,8 @@ dependencies = [
 
 [[package]]
 name = "zk_evm"
-version = "0.153.13"
-source = "git+https://github.com/matter-labs/zksync-protocol?tag=v0.153.13#b60b7bde6cd5809593b4753c26e3072957c47e38"
+version = "0.153.14"
+source = "git+https://github.com/matter-labs/zksync-protocol?tag=v0.153.14#4b2c1e618c6df65e9cdf656172a60fee6c91a2d4"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -1762,8 +1762,8 @@ dependencies = [
 
 [[package]]
 name = "zk_evm_abstractions"
-version = "0.153.13"
-source = "git+https://github.com/matter-labs/zksync-protocol?tag=v0.153.13#b60b7bde6cd5809593b4753c26e3072957c47e38"
+version = "0.153.14"
+source = "git+https://github.com/matter-labs/zksync-protocol?tag=v0.153.14#4b2c1e618c6df65e9cdf656172a60fee6c91a2d4"
 dependencies = [
  "airbender-crypto",
  "anyhow",
@@ -1776,8 +1776,8 @@ dependencies = [
 
 [[package]]
 name = "zkevm_opcode_defs"
-version = "0.153.13"
-source = "git+https://github.com/matter-labs/zksync-protocol?tag=v0.153.13#b60b7bde6cd5809593b4753c26e3072957c47e38"
+version = "0.153.14"
+source = "git+https://github.com/matter-labs/zksync-protocol?tag=v0.153.14#4b2c1e618c6df65e9cdf656172a60fee6c91a2d4"
 dependencies = [
  "bitflags",
  "blake2",
