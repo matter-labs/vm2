@@ -70,9 +70,9 @@ checksum = "55cc3b69f167a1ef2e161439aa98aed94e6028e5f9a59be9a6ffb47aef1651f9"
 
 [[package]]
 name = "anyhow"
-version = "1.0.98"
+version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
+checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "arbitrary"
@@ -1229,9 +1229,9 @@ dependencies = [
 
 [[package]]
 name = "ruint"
-version = "1.17.2"
+version = "1.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c141e807189ad38a07276942c6623032d3753c8859c146104ac2e4d68865945a"
+checksum = "f5e99bff0393163bb25029a6af25d3d8d202ba5b5438a74d1bd8789f5c822970"
 dependencies = [
  "ruint-macro",
 ]
@@ -1748,8 +1748,8 @@ dependencies = [
 
 [[package]]
 name = "zk_evm"
-version = "0.153.13"
-source = "git+https://github.com/matter-labs/zksync-protocol?tag=v0.153.13#b60b7bde6cd5809593b4753c26e3072957c47e38"
+version = "0.153.14"
+source = "git+https://github.com/matter-labs/zksync-protocol?tag=v0.153.14#4b2c1e618c6df65e9cdf656172a60fee6c91a2d4"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -1762,8 +1762,8 @@ dependencies = [
 
 [[package]]
 name = "zk_evm_abstractions"
-version = "0.153.13"
-source = "git+https://github.com/matter-labs/zksync-protocol?tag=v0.153.13#b60b7bde6cd5809593b4753c26e3072957c47e38"
+version = "0.153.14"
+source = "git+https://github.com/matter-labs/zksync-protocol?tag=v0.153.14#4b2c1e618c6df65e9cdf656172a60fee6c91a2d4"
 dependencies = [
  "airbender-crypto",
  "anyhow",
@@ -1776,8 +1776,8 @@ dependencies = [
 
 [[package]]
 name = "zkevm_opcode_defs"
-version = "0.153.13"
-source = "git+https://github.com/matter-labs/zksync-protocol?tag=v0.153.13#b60b7bde6cd5809593b4753c26e3072957c47e38"
+version = "0.153.14"
+source = "git+https://github.com/matter-labs/zksync-protocol?tag=v0.153.14#4b2c1e618c6df65e9cdf656172a60fee6c91a2d4"
 dependencies = [
  "bitflags",
  "blake2",
