@@ -1,5 +1,5 @@
 use std::{
-    alloc::{alloc_zeroed, Layout},
+    alloc::{alloc_zeroed, handle_alloc_error, Layout},
     fmt,
 };
 
@@ -10,15 +10,13 @@ use crate::{bitset::Bitset, fat_pointer::FatPointer, hash_for_debugging};
 const NUMBER_OF_DIRTY_AREAS: usize = 64;
 const DIRTY_AREA_SIZE: usize = (1 << 16) / NUMBER_OF_DIRTY_AREAS;
 
-// Storage is allocated at a finer granularity than the dirty-area granularity:
-// each sub-chunk holds `SUBCHUNK_SLOTS` slots, so a frame that scatters writes
-// allocates only the sub-chunks it actually touches, not a full 32 KiB area.
-// This bounds the "scatter one write into every area to force 2 MiB/frame"
-// pattern (deep nested calls). Once materialized, a sub-chunk stays allocated
-// for the stack's lifetime and is cleared in place on reuse (`zero()`), so a
-// stack's memory is its high-water mark and there is no per-frame allocator
-// traffic. Dirty tracking stays at the coarse area level (the `dirty_areas`
-// u64), so snapshot/rollback/equality semantics are unchanged.
+// Slots live in lazily-allocated sub-chunks of `SUBCHUNK_SLOTS` slots: a frame
+// pays only for the sub-chunks it writes, so scatter-writes cost KBs, not
+// 2 MiB per frame. Once materialized, a sub-chunk is kept for the stack's
+// lifetime and cleared in place on reuse — freeing it would let guest programs
+// trigger unpriced allocator work on every far call. Dirty tracking stays at
+// the coarse `dirty_areas` level, so snapshot/rollback/equality semantics
+// match the dense stack exactly.
 const SUBCHUNK_SLOTS: usize = 16;
 const NUM_SUBCHUNKS: usize = (1 << 16) / SUBCHUNK_SLOTS;
 const SUBCHUNKS_PER_AREA: usize = DIRTY_AREA_SIZE / SUBCHUNK_SLOTS;
@@ -26,24 +24,24 @@ const SUBCHUNKS_PER_AREA: usize = DIRTY_AREA_SIZE / SUBCHUNK_SLOTS;
 /// A contiguous block of `SUBCHUNK_SLOTS` stack slots, allocated on demand.
 type SlotChunk = Box<[U256; SUBCHUNK_SLOTS]>;
 
-/// Allocate a zeroed slot chunk without materializing it on the caller's stack
-/// frame first. `U256`'s all-zero bit pattern is the integer zero, so
-/// `alloc_zeroed` is sound.
+/// Allocates a zeroed chunk directly on the heap (all-zero bits are a valid
+/// `U256` array; `Box::new` would materialize it on the caller's stack first).
 #[allow(clippy::cast_ptr_alignment)] // aligned per the array layout
 fn zeroed_chunk() -> SlotChunk {
-    unsafe { Box::from_raw(alloc_zeroed(Layout::new::<[U256; SUBCHUNK_SLOTS]>()).cast()) }
+    let layout = Layout::new::<[U256; SUBCHUNK_SLOTS]>();
+    let ptr = unsafe { alloc_zeroed(layout) };
+    if ptr.is_null() {
+        handle_alloc_error(layout);
+    }
+    unsafe { Box::from_raw(ptr.cast()) }
 }
 
-/// VM stack.
+/// VM stack: 2^16 slots stored as [`NUM_SUBCHUNKS`] lazily-allocated sub-chunks.
 ///
-/// The slots are stored as [`NUM_SUBCHUNKS`] sub-chunks that are allocated
-/// lazily on first write, so a frame that touches only a handful of slots pays
-/// for a couple of small sub-chunks rather than the full 2 MiB. An absent
-/// sub-chunk reads as all-zero, exactly like the dense zero-initialized array
-/// it replaces — this is purely a memory-layout change with no observable
-/// difference. Keeping the backing sparse bounds the memory held by deep call
-/// stacks (each live frame keeps its own `Stack`, and `StackPool` retains them
-/// for reuse).
+/// An absent sub-chunk reads as all-zero and is indistinguishable from a
+/// materialized all-zero one, so the layout is invisible to VM behavior. A
+/// stack keeps its materialized sub-chunks for its whole lifetime — its memory
+/// is its high-water mark — and `zero()` clears them in place for reuse.
 #[derive(Clone)]
 pub(crate) struct Stack {
     /// set of slots that may be interpreted as [`FatPointer`].
@@ -57,7 +55,12 @@ impl Stack {
     pub(crate) fn new() -> Box<Self> {
         // A zeroed `Stack` is valid: `Bitset` is all-zero, `dirty_areas` is 0,
         // and `Option<Box<_>>` uses the null-pointer niche, so all chunks are `None`.
-        unsafe { Box::from_raw(alloc_zeroed(Layout::new::<Self>()).cast()) }
+        let layout = Layout::new::<Self>();
+        let ptr = unsafe { alloc_zeroed(layout) };
+        if ptr.is_null() {
+            handle_alloc_error(layout);
+        }
+        unsafe { Box::from_raw(ptr.cast()) }
     }
 
     #[inline(always)]
@@ -72,9 +75,8 @@ impl Stack {
     #[inline(always)]
     pub(crate) fn set(&mut self, slot: u16, value: U256) {
         let area = slot as usize / DIRTY_AREA_SIZE;
-        // Mark the (coarse) area dirty on every write (including zero writes),
-        // matching the previous implementation so `dirty_areas` evolves
-        // identically and snapshot/rollback/eq are unaffected.
+        // Every write dirties its area — including zero writes — matching the
+        // dense implementation, so `dirty_areas` evolves identically.
         self.dirty_areas |= 1 << area;
         let subchunk = slot as usize / SUBCHUNK_SLOTS;
         let chunk = self.slots[subchunk].get_or_insert_with(zeroed_chunk);
@@ -82,20 +84,13 @@ impl Stack {
     }
 
     fn zero(&mut self) {
-        // Clear materialized sub-chunks in place instead of dropping them: an
-        // all-zero chunk is observationally identical to an absent one (`get`
-        // reads zero for both and `PartialEq` treats them as equal), and
-        // keeping the allocation avoids a free/alloc round-trip per sub-chunk
-        // on every frame that reuses a pooled stack — up to `NUM_SUBCHUNKS`
-        // allocator operations per far call, which is host-side work an EraVM
-        // program does not pay gas for.
-        //
-        // Clearing only dirty areas suffices: a sub-chunk may stay
-        // materialized in a non-dirty area (chunks now outlive `dirty_areas`
-        // resets), but it can only become *nonzero* via `set`, which marks its
-        // area dirty in the same call, or via `rollback`, which restores
-        // `dirty_areas` alongside the data. So chunks in non-dirty areas are
-        // always all-zero already.
+        // Clear materialized sub-chunks in place instead of dropping them:
+        // freeing would round-trip the allocator up to `NUM_SUBCHUNKS` times
+        // per pooled-stack reuse — unpriced host work a guest program can
+        // trigger on every far call. Clearing only dirty areas suffices: a
+        // sub-chunk becomes nonzero only via `set` (which dirties its area) or
+        // `rollback` (which restores `dirty_areas` alongside the data), so
+        // chunks in non-dirty areas are already all-zero.
         for i in 0..NUMBER_OF_DIRTY_AREAS {
             if self.dirty_areas & (1 << i) != 0 {
                 for sc in (i * SUBCHUNKS_PER_AREA)..((i + 1) * SUBCHUNKS_PER_AREA) {
@@ -108,6 +103,14 @@ impl Stack {
 
         self.dirty_areas = 0;
         self.pointer_flags = Bitset::default();
+
+        debug_assert!(
+            self.slots
+                .iter()
+                .flatten()
+                .all(|chunk| chunk.iter().all(U256::is_zero)),
+            "nonzero sub-chunk survived zero(): `nonzero => dirty` was violated"
+        );
     }
 
     #[inline(always)]
@@ -155,16 +158,21 @@ impl Stack {
 
         self.pointer_flags = pointer_flags;
         self.dirty_areas = dirty_areas;
-        // Every dirty area lies within the saved prefix (`dirty_prefix_end` is
-        // the highest dirty area + 1), so restore its sub-chunks from the
-        // prefix, reusing chunks that are already materialized. Non-dirty
-        // areas read as zero, exactly as in the snapshot: `zero()` above left
-        // their chunks (if any) all-zero.
+        // Restore the sub-chunks of the snapshot's dirty areas (all of which
+        // lie within the saved prefix), reusing chunks that are already
+        // materialized and skipping ones that would be created just to hold
+        // zeros — absent already reads as zero. Non-dirty areas are all-zero
+        // after the `zero()` above.
         for i in 0..NUMBER_OF_DIRTY_AREAS {
             if dirty_areas & (1 << i) != 0 {
                 for sc in (i * SUBCHUNKS_PER_AREA)..((i + 1) * SUBCHUNKS_PER_AREA) {
-                    let chunk = self.slots[sc].get_or_insert_with(zeroed_chunk);
-                    chunk.copy_from_slice(&slots[sc * SUBCHUNK_SLOTS..(sc + 1) * SUBCHUNK_SLOTS]);
+                    let src = &slots[sc * SUBCHUNK_SLOTS..(sc + 1) * SUBCHUNK_SLOTS];
+                    if self.slots[sc].is_none() && src.iter().all(U256::is_zero) {
+                        continue;
+                    }
+                    self.slots[sc]
+                        .get_or_insert_with(zeroed_chunk)
+                        .copy_from_slice(src);
                 }
             }
         }
