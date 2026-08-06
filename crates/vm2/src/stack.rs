@@ -310,6 +310,14 @@ mod tests {
         fn value(&mut self) -> U256 {
             U256([self.next(), self.next(), self.next(), self.next()])
         }
+        /// 1-in-8 zero values: zero writes must dirty/allocate like nonzero ones.
+        fn value_or_zero(&mut self) -> U256 {
+            if self.next().is_multiple_of(8) {
+                U256::zero()
+            } else {
+                self.value()
+            }
+        }
     }
 
     const DENSE: usize = 1 << 16;
@@ -321,13 +329,7 @@ mod tests {
         let mut oracle = vec![U256::zero(); DENSE];
 
         for _ in 0..20_000 {
-            let slot = rng.slot();
-            // Mix in zero writes: they must allocate/dirty exactly like nonzero.
-            let value = if rng.next().is_multiple_of(8) {
-                U256::zero()
-            } else {
-                rng.value()
-            };
+            let (slot, value) = (rng.slot(), rng.value_or_zero());
             stack.set(slot, value);
             oracle[usize::from(slot)] = value;
         }
@@ -345,36 +347,28 @@ mod tests {
             stack.set(rng.slot(), rng.value());
         }
         stack.zero();
-        assert_eq!(stack.dirty_areas, 0, "zero() must clear all dirty bits");
-        let fresh = Stack::new();
-        assert_eq!(&stack, &fresh, "zero() must equal a fresh stack");
-        for slot in 0..DENSE {
-            assert_eq!(stack.get(u16::try_from(slot).unwrap()), U256::zero());
-        }
+        // `eq` covers slot values, dirty bits, and pointer flags.
+        assert_eq!(&stack, &Stack::new(), "zero() must equal a fresh stack");
     }
 
     #[test]
     fn zero_retains_materialized_chunks() {
-        // Regression test for the frame-reuse path: `zero()` must clear
-        // sub-chunks in place, not free them, so that reusing a pooled stack
-        // causes no allocator traffic. A refactor that reintroduces the drop
-        // fails the `is_some` assertions below.
+        // `zero()` must clear sub-chunks in place, not free them: dropping
+        // them here reintroduces per-far-call allocator churn on pooled reuse.
+        let slots = [0u16, 17, 1000, 4096, 32_768, 65_535]; // scattered, incl. area boundaries
         let mut stack = Stack::new();
-        // One write per scattered sub-chunk, including area boundaries.
-        for (i, slot) in [0u16, 17, 1000, 4096, 32_768, 65_535]
-            .into_iter()
-            .enumerate()
-        {
+        for (i, slot) in slots.into_iter().enumerate() {
             stack.set(slot, U256::from(u64::try_from(i).unwrap() + 1));
         }
         let materialized: Vec<usize> = (0..NUM_SUBCHUNKS)
             .filter(|&sc| stack.slots[sc].is_some())
             .collect();
-        assert_eq!(
-            materialized.len(),
-            6,
-            "each write hits a distinct sub-chunk"
-        );
+        let mut expected: Vec<usize> = slots
+            .iter()
+            .map(|&s| usize::from(s) / SUBCHUNK_SLOTS)
+            .collect();
+        expected.sort_unstable(); // `materialized` is in ascending index order
+        assert_eq!(materialized, expected, "each write hits its own sub-chunk");
 
         stack.zero();
         for &sc in &materialized {
@@ -383,7 +377,7 @@ mod tests {
                 .unwrap_or_else(|| panic!("zero() must keep sub-chunk {sc}, not free it"));
             assert!(
                 chunk.iter().all(U256::is_zero),
-                "zero() must clear retained sub-chunk {sc}"
+                "sub-chunk {sc} not cleared"
             );
         }
     }
@@ -402,54 +396,11 @@ mod tests {
 
         let mut fresh = Stack::new();
         for _ in 0..5_000 {
-            let slot = rng.slot();
-            let value = if rng.next().is_multiple_of(8) {
-                U256::zero()
-            } else {
-                rng.value()
-            };
+            let (slot, value) = (rng.slot(), rng.value_or_zero());
             reused.set(slot, value);
             fresh.set(slot, value);
         }
         assert_eq!(&reused, &fresh, "reuse must not be observable");
-        for slot in 0..DENSE {
-            let slot = u16::try_from(slot).unwrap();
-            assert_eq!(reused.get(slot), fresh.get(slot), "mismatch at slot {slot}");
-        }
-    }
-
-    #[test]
-    fn snapshot_rollback_after_reuse_matches_dense_oracle() {
-        let mut rng = XorShift(0x9876_5432_10ab_cdef);
-        let mut stack = Stack::new();
-        let mut oracle = vec![U256::zero(); DENSE];
-
-        // Dirty the stack, then recycle it the way `StackPool::get` does.
-        for _ in 0..4_000 {
-            stack.set(rng.slot(), rng.value());
-        }
-        stack.zero();
-
-        for _ in 0..4_000 {
-            let (slot, value) = (rng.slot(), rng.value());
-            stack.set(slot, value);
-            oracle[usize::from(slot)] = value;
-        }
-        let snap = stack.snapshot();
-
-        // Diverge, then roll back; the oracle keeps the snapshot-time state.
-        for _ in 0..4_000 {
-            stack.set(rng.slot(), rng.value());
-        }
-        stack.rollback(snap);
-        for (slot, expected) in oracle.iter().enumerate() {
-            let slot = u16::try_from(slot).unwrap();
-            assert_eq!(
-                stack.get(slot),
-                *expected,
-                "rollback mismatch at slot {slot}"
-            );
-        }
     }
 
     #[test]
@@ -475,15 +426,18 @@ mod tests {
     #[test]
     fn snapshot_rollback_restores_exact_state() {
         let mut rng = XorShift(0x0abc_1234_5678_9def);
+        // Start from a recycled stack — the state `StackPool::get` hands out.
         let mut stack = Stack::new();
-
-        for _ in 0..8_000 {
+        for _ in 0..4_000 {
             stack.set(rng.slot(), rng.value());
         }
-        // Capture the exact slot state at snapshot time.
-        let mut expected = vec![U256::zero(); DENSE];
-        for (slot, e) in expected.iter_mut().enumerate() {
-            *e = stack.get(u16::try_from(slot).unwrap());
+        stack.zero();
+
+        let mut oracle = vec![U256::zero(); DENSE];
+        for _ in 0..8_000 {
+            let (slot, value) = (rng.slot(), rng.value_or_zero());
+            stack.set(slot, value);
+            oracle[usize::from(slot)] = value;
         }
         let snap = stack.snapshot();
 
@@ -495,10 +449,56 @@ mod tests {
         stack.set(0, U256::zero());
 
         stack.rollback(snap);
-        for (slot, e) in expected.iter().enumerate() {
+        for (slot, expected) in oracle.iter().enumerate() {
             let slot = u16::try_from(slot).unwrap();
-            assert_eq!(stack.get(slot), *e, "rollback mismatch at slot {slot}");
+            assert_eq!(
+                stack.get(slot),
+                *expected,
+                "rollback mismatch at slot {slot}"
+            );
         }
+    }
+
+    #[test]
+    fn rollback_narrowing_dirty_areas_restores_flags_and_reuses_chunks() {
+        // The one transition that can strand state: a rollback that NARROWS
+        // `dirty_areas`, leaving a materialized (all-zero) chunk in a
+        // non-dirty area. Also pins rollback's pointer-flag restoration,
+        // in-place chunk reuse, and the skip of all-zero materializations.
+        let mut stack = Stack::new();
+        stack.set(5, U256::from(42u64)); // area 0, sub-chunk 0
+        stack.set_pointer_flag(5);
+        let chunk_ptr = stack.slots[0].as_ref().unwrap().as_ptr();
+        let snap = stack.snapshot();
+
+        // Diverge into area 63, including pointer-flag churn.
+        stack.set(u16::MAX, U256::from(7u64));
+        stack.set_pointer_flag(u16::MAX);
+        stack.clear_pointer_flag(5);
+        stack.rollback(snap);
+
+        assert_eq!(stack.dirty_areas, 1, "dirty_areas must narrow to {{0}}");
+        assert_eq!(stack.get(5), U256::from(42u64));
+        assert_eq!(
+            stack.get(u16::MAX),
+            U256::zero(),
+            "diverged write must be gone"
+        );
+        assert!(stack.get_pointer_flag(5), "cleared flag must be restored");
+        assert!(
+            !stack.get_pointer_flag(u16::MAX),
+            "diverged flag must be gone"
+        );
+        // Rollback reuses the materialized chunk in place (no realloc churn)…
+        assert_eq!(stack.slots[0].as_ref().unwrap().as_ptr(), chunk_ptr);
+        // …and materializes nothing just to hold zeros: only sub-chunk 0 and
+        // the diverged-then-zeroed one at the top may exist.
+        assert_eq!(stack.slots.iter().flatten().count(), 2);
+
+        // The retained chunk for `u16::MAX` now sits in a NON-dirty area; the
+        // next recycle must still hand out a fresh-equal stack.
+        stack.zero();
+        assert_eq!(&stack, &Stack::new());
     }
 
     #[test]
@@ -541,9 +541,5 @@ mod tests {
         // Mutating the original must not affect the clone.
         original.set(1234, U256::from(0xffff_ffffu64));
         assert_eq!(cloned.get(1234), U256::zero());
-        // And the clone still matches its snapshot of the original.
-        for slot in [0u16, 5, 1024, 3100, 60000, 65535] {
-            let _ = cloned.get(slot); // no panic; values already checked via eq
-        }
     }
 }
