@@ -32,7 +32,7 @@ fn default_settings() -> Settings {
     }
 }
 
-fn kernel_address() -> Address {
+pub(super) fn kernel_address() -> Address {
     // First 18 bytes are zero, so this address executes in kernel mode.
     Address::from_low_u64_be(1)
 }
@@ -41,7 +41,7 @@ fn non_kernel_address() -> Address {
     Address::repeat_byte(1)
 }
 
-fn execute_one_instruction<T: Tracer, W: World<T>>(
+pub(super) fn execute_one_instruction<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -1835,7 +1835,7 @@ fn far_ret_panic_charges_heap_growth_for_overflowing_pointer() {
 
 /// `ret.ok r1` — forwards whatever return ABI sits in r1. `ret_instruction` above uses r0,
 /// so it can never forward a pointer.
-fn ret_r1_instruction<T: Tracer, W: World<T>>() -> Instruction<T, W> {
+pub(super) fn ret_r1_instruction<T: Tracer, W: World<T>>() -> Instruction<T, W> {
     Instruction::from_ret(
         Register1(Register::new(1)),
         None,
@@ -1847,7 +1847,7 @@ fn ret_r1_instruction<T: Tracer, W: World<T>>() -> Instruction<T, W> {
 /// sets r1's pointer flag — the register state a callee's [`ret_r1_instruction`] consumes when
 /// it forwards a pointer rather than building a fresh one. Only r1's flag is touched: `Decommit`
 /// leaves a live pointer in r3, and assigning the bitmap would silently clear it.
-fn load_forward_ret_abi<T: Tracer, W: World<T>>(
+pub(super) fn load_forward_ret_abi<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     page: HeapId,
     start: u32,
