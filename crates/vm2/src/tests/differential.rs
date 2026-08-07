@@ -1,7 +1,9 @@
 //! Differential tests against `zk_evm`'s reference memory implementation.
 //!
 //! The rest of the suite asserts vm2's behaviour and argues about `zk_evm`'s in prose. These tests
-//! measure it: they run vm2's real heap against `zk_evm`'s real `SimpleMemory`.
+//! put vm2's real heap against `zk_evm`'s real `SimpleMemory` instead, so the argument is checked
+//! against the reference implementation rather than restated. Read "How much this proves" below
+//! before relying on them: the guarantee is narrower than "differential execution".
 //!
 //! # Scope, and what it does not cover
 //!
