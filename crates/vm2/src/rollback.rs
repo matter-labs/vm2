@@ -21,6 +21,26 @@ impl<K: Ord + Clone, V: Clone> RollbackableMap<K, V> {
         old_value
     }
 
+    /// Inserts or updates the entry for `key` in a single map traversal,
+    /// journaling the prior value for rollback. `compute` receives the current
+    /// value (`None` if absent) and returns the new value. Saves the separate
+    /// `get` a read-modify-write would otherwise need.
+    pub(crate) fn update(&mut self, key: K, compute: impl FnOnce(Option<&V>) -> V) {
+        use std::collections::btree_map::Entry;
+        match self.map.entry(key) {
+            Entry::Occupied(mut entry) => {
+                let new = compute(Some(entry.get()));
+                let old = std::mem::replace(entry.get_mut(), new);
+                self.old_entries.push((entry.key().clone(), Some(old)));
+            }
+            Entry::Vacant(entry) => {
+                let new = compute(None);
+                self.old_entries.push((entry.key().clone(), None));
+                entry.insert(new);
+            }
+        }
+    }
+
     pub(crate) fn changes_after(
         &self,
         snapshot: <Self as Rollback>::Snapshot,
@@ -33,6 +53,35 @@ impl<K: Ord + Clone, V: Clone> RollbackableMap<K, V> {
                 .or_insert((old_value.clone(), self.map.get(key).unwrap().clone()));
         }
         changes
+    }
+}
+
+impl<K: Ord + Clone> RollbackableMap<K, u8> {
+    /// OR `flags` into the entry for `key` (an absent entry counts as `0`) in a
+    /// single map traversal, journaling the prior value so the change rolls
+    /// back. Returns `true` iff at least one previously-unset bit was set.
+    ///
+    /// Equivalent to a `get` followed by a conditional `insert`, but with one
+    /// traversal instead of two, and no journal entry when no bit changes.
+    pub(crate) fn add_flags(&mut self, key: K, flags: u8) -> bool {
+        use std::collections::btree_map::Entry;
+        match self.map.entry(key) {
+            Entry::Occupied(mut entry) => {
+                let old = *entry.get();
+                let new = old | flags;
+                if new == old {
+                    return false;
+                }
+                entry.insert(new);
+                self.old_entries.push((entry.key().clone(), Some(old)));
+                true
+            }
+            Entry::Vacant(entry) => {
+                self.old_entries.push((entry.key().clone(), None));
+                entry.insert(flags);
+                true
+            }
+        }
     }
 }
 
@@ -135,6 +184,13 @@ impl<T> Rollback for RollbackableLog<T> {
 impl<T> RollbackableLog<T> {
     pub(crate) fn push(&mut self, entry: T) {
         self.entries.push(entry);
+    }
+
+    pub(crate) fn reserve(&mut self, n: usize) {
+        let extra = n.saturating_sub(self.entries.len());
+        if extra > 0 {
+            self.entries.reserve_exact(extra);
+        }
     }
 
     pub(crate) fn logs_after(&self, snapshot: <RollbackableLog<T> as Rollback>::Snapshot) -> &[T] {
