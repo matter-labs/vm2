@@ -20,14 +20,25 @@
 //!     );
 //! ```
 //!
-//! so [`zk_evm_far_return`] calls that with the same arguments. `SimpleMemory`'s implementation of
-//! it keeps every page — the clearing loop is present but commented out, above the note "we should
-//! not clean pages" — which is the concrete form of "`zk_evm` never frees a memory page".
+//! so [`zk_evm_far_return`] calls that with the same arguments.
 //!
-//! What is assumed rather than measured: that `finish_global_frame` is the only memory mutation a
-//! far return performs. Verified by reading the handler, not by executing it. Executing `zk_evm`'s
-//! `ret` opcode would need a full `VmState` with all its oracles and a raw encoding of the
-//! instruction, which the real [`Program`](crate::Program) does not carry.
+//! # How much this proves
+//!
+//! `SimpleMemory::finish_global_frame` frees nothing. Its clearing loop is present but commented
+//! out, above the note "we should not clean pages", and the only mutations left are to the
+//! observable-page bookkeeping. So `zk_evm`'s side of the comparison does not move, and what these
+//! tests really check is that vm2's memory still matches the pre-return snapshot `zk_evm` would have
+//! kept. That is weaker than a differential execution and worth stating plainly: a snapshot alone
+//! would give the same signal.
+//!
+//! What it does buy is that the premise is pinned to `zk_evm`'s code rather than to prose.
+//! [`zk_evm_far_return`] asserts the pages handed to it come back untouched, so a `zk_evm` bump that
+//! re-enables the clearing loop fails here instead of silently changing what these tests mean.
+//!
+//! Also assumed rather than executed: that `finish_global_frame` is the only memory mutation a far
+//! return performs. That is read off the handler. Executing `zk_evm`'s `ret` would need a full
+//! `VmState` with its oracles plus a raw encoding of the instruction, which the real
+//! [`Program`](crate::Program) does not carry.
 
 use primitive_types::{H160, U256};
 use zk_evm::{
@@ -68,13 +79,22 @@ fn mirror_page(heaps: &Heaps, page: HeapId) -> SimpleMemory {
     memory
 }
 
-/// The one memory operation `zk_evm`'s far `ret` performs — see the module comment.
+/// The one memory operation `zk_evm`'s far `ret` performs, and a check that it leaves
+/// `pages_that_must_survive` alone — the premise every comparison here rests on. See the module
+/// comment for why that is asserted rather than assumed.
+#[track_caller]
 fn zk_evm_far_return(
     memory: &mut SimpleMemory,
     dying_frame_heap: HeapId,
     dying_frame_address: H160,
     returned: &FatPointer,
+    pages_that_must_survive: &[HeapId],
 ) {
+    let before: Vec<_> = pages_that_must_survive
+        .iter()
+        .map(|page| memory.dump_full_page(page.as_u32()))
+        .collect();
+
     memory.finish_global_frame(
         MemoryPage(base_page_from_heap(dying_frame_heap)),
         dying_frame_address,
@@ -86,11 +106,27 @@ fn zk_evm_far_return(
         },
         Timestamp(0),
     );
+
+    for (page, before) in pages_that_must_survive.iter().zip(before) {
+        assert_eq!(
+            memory.dump_full_page(page.as_u32()),
+            before,
+            "zk_evm changed page {} on frame exit. These tests assume `finish_global_frame` frees \
+             nothing; if that is no longer true, their premise is void, not merely their result.",
+            page.as_u32()
+        );
+    }
 }
 
 /// Asserts vm2 and `zk_evm` hold the same word, naming both values on failure.
 #[track_caller]
 fn assert_word_eq(heaps: &Heaps, memory: &SimpleMemory, page: HeapId, offset: u32, what: &str) {
+    // Past the mirrored range zk_evm reads zero, which would compare equal to an absent vm2 chunk
+    // and pass for the wrong reason.
+    assert!(
+        offset / 32 < MIRRORED_WORDS,
+        "offset {offset} is outside the mirrored range; raise MIRRORED_WORDS"
+    );
     let ours = heaps[page].read_u256(offset);
     let theirs =
         U256::from_big_endian(&memory.dump_full_page(page.as_u32())[(offset / 32) as usize]);
@@ -210,7 +246,13 @@ fn kernel_ret_forward_matches_zk_evm_on_a_live_callers_heap() {
         "must be back in the still-live victim frame"
     );
 
-    zk_evm_far_return(&mut zk_memory, dying_heap, dying_address, &returned);
+    zk_evm_far_return(
+        &mut zk_memory,
+        dying_heap,
+        dying_address,
+        &returned,
+        &[victim_heap],
+    );
 
     assert_word_eq(
         &vm.state.heaps,
