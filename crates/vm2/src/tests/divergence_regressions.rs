@@ -32,7 +32,7 @@ fn default_settings() -> Settings {
     }
 }
 
-fn kernel_address() -> Address {
+pub(super) fn kernel_address() -> Address {
     // First 18 bytes are zero, so this address executes in kernel mode.
     Address::from_low_u64_be(1)
 }
@@ -41,7 +41,7 @@ fn non_kernel_address() -> Address {
     Address::repeat_byte(1)
 }
 
-fn execute_one_instruction<T: Tracer, W: World<T>>(
+pub(super) fn execute_one_instruction<T: Tracer, W: World<T>>(
     vm: &mut VirtualMachine<T, W>,
     world: &mut W,
     tracer: &mut T,
@@ -1308,10 +1308,13 @@ fn decommit_page_in_keep_alive_list_should_not_be_deallocated_on_pop() {
 }
 
 #[test]
-fn pop_frame_compacts_kept_heap_to_returndata_window() {
-    // A returned fat pointer can only address `[start, start + length)` of the
-    // heap it points into, so on pop the kept returndata heap should retain only
-    // that window — everything the callee grew but did not return is dead memory.
+fn pop_frame_does_not_compact_a_kept_heap_the_dying_frame_does_not_own() {
+    // Compaction is gated on the returned page belonging to the dying frame. A page that is
+    // merely on the dying frame's keep-alive list is not owned by it: the list is filled from
+    // whatever page the frame's *child* returned, so it can name a live ancestor's heap.
+    // Widening the ownership test to cover it would reintroduce the kernel ret-forward
+    // divergence with a three-frame chain, so this must stay a no-op.
+    // The owned counterpart is `pop_frame_compacts_dying_frames_own_heaps_to_returndata_window`.
     let program: Program<(), TestWorld<()>> =
         Program::from_raw(vec![ret_instruction::<(), TestWorld<()>>()], vec![]);
     let mut vm = VirtualMachine::new(
@@ -1338,7 +1341,7 @@ fn pop_frame_compacts_kept_heap_to_returndata_window() {
 
     let kept_heap = allocate_standalone_heap(&mut vm, &[]);
     let marker = U256::from(0xdead_beef_u64);
-    // Grow the heap across three distant chunks; only the middle one is returned.
+    // Three distant chunks; only the middle one is inside the returned window.
     vm.state.heaps.write_u256(kept_heap, 0, marker);
     vm.state.heaps.write_u256(kept_heap, 5000, marker);
     vm.state.heaps.write_u256(kept_heap, 9000, marker);
@@ -1346,15 +1349,17 @@ fn pop_frame_compacts_kept_heap_to_returndata_window() {
         .current_frame
         .heaps_i_am_keeping_alive
         .push(kept_heap);
+    assert_ne!(kept_heap, vm.state.current_frame.heap);
+    assert_ne!(kept_heap, vm.state.current_frame.aux_heap);
 
     // Return a 32-byte window at offset 5000.
     vm.pop_frame(Some(kept_heap), Some((5000, 32)))
         .expect("nested frame must be present for pop");
 
-    // In-window bytes survive; everything outside the window is freed and reads zero.
+    // Every byte survives: the page is not the dying frame's to free.
     assert_eq!(vm.state.heaps[kept_heap].read_u256(5000), marker);
-    assert_eq!(vm.state.heaps[kept_heap].read_u256(0), U256::zero());
-    assert_eq!(vm.state.heaps[kept_heap].read_u256(9000), U256::zero());
+    assert_eq!(vm.state.heaps[kept_heap].read_u256(0), marker);
+    assert_eq!(vm.state.heaps[kept_heap].read_u256(9000), marker);
 }
 
 #[test]
@@ -1821,5 +1826,693 @@ fn far_ret_panic_charges_heap_growth_for_overflowing_pointer() {
         "caller gas {} should be below the {gas_to_pass} passed in — the callee's gas must have \
          been drained by u32::MAX heap growth",
         vm.state.current_frame.gas,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// PR #116 returndata-window compaction: ownership of the compacted page.
+// ---------------------------------------------------------------------------
+
+/// `ret.ok r1` — forwards whatever return ABI sits in r1. `ret_instruction` above uses r0,
+/// so it can never forward a pointer.
+pub(super) fn ret_r1_instruction<T: Tracer, W: World<T>>() -> Instruction<T, W> {
+    Instruction::from_ret(
+        Register1(Register::new(1)),
+        None,
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    )
+}
+
+/// Loads a `ForwardFatPointer` return ABI over `[start, start + length)` of `page` into r1 and
+/// sets r1's pointer flag — the register state a callee's [`ret_r1_instruction`] consumes when
+/// it forwards a pointer rather than building a fresh one. Only r1's flag is touched: `Decommit`
+/// leaves a live pointer in r3, and assigning the bitmap would silently clear it.
+pub(super) fn load_forward_ret_abi<T: Tracer, W: World<T>>(
+    vm: &mut VirtualMachine<T, W>,
+    page: HeapId,
+    start: u32,
+    length: u32,
+) {
+    let mut abi = FatPointer {
+        offset: 0,
+        memory_page: page,
+        start,
+        length,
+    }
+    .into_u256();
+    abi.0[3] = 1_u64 << 32; // FatPointerSource::ForwardFatPointer
+    vm.state.registers[1] = abi;
+    vm.state.register_pointer_flags |= 1 << 1;
+}
+
+/// The same for a fresh `MakeNewPointer(ToHeap)` pointer, whose page `get_calldata` fills in from
+/// the returning frame. It grows that frame's heap to `start + length` and charges for it.
+fn load_new_heap_ret_abi<T: Tracer, W: World<T>>(
+    vm: &mut VirtualMachine<T, W>,
+    start: u32,
+    length: u32,
+) {
+    let mut abi = FatPointer {
+        offset: 0,
+        memory_page: HeapId::from_u32_unchecked(0),
+        start,
+        length,
+    }
+    .into_u256();
+    abi.0[3] = 0; // FatPointerSource::MakeNewPointer(ToHeap)
+    vm.state.registers[1] = abi;
+    vm.state.register_pointer_flags &= !(1 << 1);
+}
+
+/// Asserts r1 holds the fat pointer a `ret` was meant to return. Stronger than "r1 is non-zero",
+/// which any successful return satisfies even if the pointer was re-targeted or zero-lengthed.
+fn assert_returned_pointer<T: Tracer, W: World<T>>(
+    vm: &VirtualMachine<T, W>,
+    page: HeapId,
+    start: u32,
+    length: u32,
+) {
+    let returned = FatPointer::from(vm.state.registers[1]);
+    assert_eq!(
+        (returned.memory_page, returned.start, returned.length),
+        (page, start, length)
+    );
+}
+
+/// A kernel VM with one pushed frame — the dying one — both frames running `ret.ok r1`.
+fn vm_with_pushed_kernel_frame() -> (VirtualMachine<(), TestWorld<()>>, TestWorld<()>) {
+    let program: Program<(), TestWorld<()>> = Program::from_raw(vec![ret_r1_instruction()], vec![]);
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program.clone(),
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+    let calldata_heap = vm.state.current_frame.calldata_heap;
+    vm.push_frame::<opcodes::Normal>(
+        kernel_address(),
+        program,
+        200_000,
+        0,
+        false,
+        false,
+        calldata_heap,
+        vm.world_diff.snapshot(),
+    );
+    (vm, TestWorld::new(&[]))
+}
+
+/// A kernel callee that ret-forwards its `calldata_heap` pointer must not free any part
+/// of the *victim* (still-live caller) frame's heap. `zk_evm` never frees a memory page, and
+/// the victim reads its own heap through `HeapRead`, which no fat pointer bounds.
+#[test]
+fn kernel_ret_forward_must_not_compact_older_frame_heap() {
+    let heap_read = Instruction::from_heap_read(
+        Register1(Register::new(2)).into(),
+        Register1(Register::new(5)),
+        None,
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    // pc 0 is never executed by the victim: we set its pc to 1 so it resumes on the heap read.
+    let victim_program: Program<(), TestWorld<()>> = Program::from_raw(
+        vec![ret_instruction(), heap_read, ret_instruction()],
+        vec![],
+    );
+    let callee_program: Program<(), TestWorld<()>> =
+        Program::from_raw(vec![ret_r1_instruction()], vec![]);
+
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        non_kernel_address(),
+        victim_program.clone(),
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    // The victim must be a *pushed* frame: the initial frame's heap is `BOOTLOADER_HEAP_PAGE`,
+    // which `compact_to_window` skips as `is_always_allocated`, making the test vacuous.
+    let initial_heap = vm.state.current_frame.heap;
+    vm.push_frame::<opcodes::Normal>(
+        non_kernel_address(),
+        victim_program,
+        500_000,
+        0,
+        false,
+        false,
+        initial_heap,
+        vm.world_diff.snapshot(),
+    );
+
+    let victim_heap = vm.state.current_frame.heap;
+    let marker_lo = U256::from(0x1111_1111_u64);
+    let marker_in = U256::from(0x2222_2222_u64);
+    let marker_hi = U256::from(0x3333_3333_u64);
+    vm.state.heaps.write_u256(victim_heap, 0, marker_lo);
+    vm.state.heaps.write_u256(victim_heap, 1024, marker_in);
+    vm.state.heaps.write_u256(victim_heap, 5000, marker_hi);
+    // So the victim's own `HeapRead` is in bounds after it resumes.
+    vm.state.current_frame.heap_size = 8192;
+    vm.state.current_frame.set_pc_from_u16(1);
+    vm.state.registers[2] = U256::zero(); // HeapRead address 0
+
+    // The kernel callee's calldata heap *is* the victim's live heap page — exactly what
+    // `get_calldata`'s `MakeNewPointer(ToHeap)` branch produces for any heap far call.
+    vm.push_frame::<opcodes::Normal>(
+        kernel_address(),
+        callee_program,
+        200_000,
+        0,
+        false,
+        false,
+        victim_heap,
+        vm.world_diff.snapshot(),
+    );
+    assert!(vm.state.current_frame.is_kernel);
+    assert_eq!(vm.state.current_frame.calldata_heap, victim_heap);
+
+    load_forward_ret_abi(&mut vm, victim_heap, 1024, 32);
+
+    // The callee's `ret.ok r1`.
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+
+    // The kernel filter lets the forward through, so we really are back in the victim frame.
+    assert_returned_pointer(&vm, victim_heap, 1024, 32);
+    assert_eq!(vm.state.current_frame.heap, victim_heap);
+
+    // The victim frame is still alive and reads its own heap through `HeapRead`, which is
+    // bounded by `heap_size` only. Every byte must survive.
+    assert_eq!(
+        vm.state.heaps[victim_heap].read_u256(1024),
+        marker_in,
+        "in-window word must survive"
+    );
+    assert_eq!(
+        vm.state.heaps[victim_heap].read_u256(0),
+        marker_lo,
+        "out-of-window word of a LIVE frame's heap must not be freed"
+    );
+    assert_eq!(
+        vm.state.heaps[victim_heap].read_u256(5000),
+        marker_hi,
+        "out-of-window word of a LIVE frame's heap must not be freed"
+    );
+
+    // ... and through the victim's own `HeapRead` at address 0.
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+    assert_eq!(
+        vm.state.registers[5], marker_lo,
+        "the victim's own HeapRead must not observe a freed chunk"
+    );
+}
+
+/// The non-kernel counterpart. The `naked_ret` filter converts the same forward into a
+/// panic, which is what makes the bug kernel-only. Locks that in.
+#[test]
+fn non_kernel_ret_forward_of_calldata_heap_should_panic() {
+    let victim_program: Program<(), TestWorld<()>> =
+        Program::from_raw(vec![ret_instruction()], vec![]);
+    let callee_program: Program<(), TestWorld<()>> =
+        Program::from_raw(vec![ret_r1_instruction()], vec![]);
+
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        non_kernel_address(),
+        victim_program.clone(),
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let initial_heap = vm.state.current_frame.heap;
+    vm.push_frame::<opcodes::Normal>(
+        non_kernel_address(),
+        victim_program,
+        500_000,
+        0,
+        false,
+        false,
+        initial_heap,
+        vm.world_diff.snapshot(),
+    );
+
+    let victim_heap = vm.state.current_frame.heap;
+    let marker = U256::from(0x1111_1111_u64);
+    vm.state.heaps.write_u256(victim_heap, 0, marker);
+    vm.state.heaps.write_u256(victim_heap, 1024, marker);
+    vm.state.heaps.write_u256(victim_heap, 5000, marker);
+
+    vm.push_frame::<opcodes::Normal>(
+        non_kernel_address(),
+        callee_program,
+        200_000,
+        0,
+        false,
+        false,
+        victim_heap,
+        vm.world_diff.snapshot(),
+    );
+    assert!(!vm.state.current_frame.is_kernel);
+
+    load_forward_ret_abi(&mut vm, victim_heap, 1024, 32);
+
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+
+    assert_eq!(
+        vm.state.registers[1],
+        U256::zero(),
+        "non-kernel forward of the calldata heap must be converted to a panic"
+    );
+    assert_eq!(vm.state.heaps[victim_heap].read_u256(0), marker);
+    assert_eq!(vm.state.heaps[victim_heap].read_u256(1024), marker);
+    assert_eq!(vm.state.heaps[victim_heap].read_u256(5000), marker);
+}
+
+/// The owned case must still compact, for both arms of the gate's `heap == dying.heap || aux_heap`.
+#[test]
+fn pop_frame_compacts_dying_frames_own_heaps_to_returndata_window() {
+    for use_aux_heap in [false, true] {
+        let (mut vm, _) = vm_with_pushed_kernel_frame();
+        let page = if use_aux_heap {
+            vm.state.current_frame.aux_heap
+        } else {
+            vm.state.current_frame.heap
+        };
+        let marker = U256::from(0xdead_beef_u64);
+        for offset in [0, 5000, 9000] {
+            vm.state.heaps.write_u256(page, offset, marker);
+        }
+
+        vm.pop_frame(Some(page), Some((5000, 32)))
+            .expect("nested frame must be present for pop");
+
+        assert_eq!(vm.state.heaps[page].read_u256(5000), marker, "in-window");
+        for outside in [0, 9000] {
+            let read = vm.state.heaps[page].read_u256(outside);
+            assert_eq!(read, U256::zero(), "outside the window");
+        }
+    }
+}
+
+/// Covers the compaction *wiring*: the test above hands `pop_frame` a hand-built window, so a change
+/// to the `(page, (start, length))` pair `naked_ret` derives from the returned pointer would leave it
+/// green while the optimization silently stopped working.
+#[test]
+fn ret_with_new_pointer_compacts_dying_frames_own_heap() {
+    let (mut vm, mut world) = vm_with_pushed_kernel_frame();
+    let own_heap = vm.state.current_frame.heap;
+    let marker = U256::from(0xdead_beef_u64);
+    for offset in [0, 5000, 9000] {
+        vm.state.heaps.write_u256(own_heap, offset, marker);
+    }
+
+    // The callee returns a fresh pointer over [5000, 5032) of its own heap.
+    load_new_heap_ret_abi(&mut vm, 5000, 32);
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+
+    assert_returned_pointer(&vm, own_heap, 5000, 32);
+    assert_eq!(
+        vm.state.heaps[own_heap].read_u256(5000),
+        marker,
+        "in-window"
+    );
+    for outside in [0, 9000] {
+        let read = vm.state.heaps[own_heap].read_u256(outside);
+        assert_eq!(read, U256::zero(), "outside the window");
+    }
+}
+
+/// The state left by [`keepalive_chain_with_live_grandparent_heap`].
+struct KeepaliveChain {
+    vm: VirtualMachine<(), TestWorld<()>>,
+    world: TestWorld<()>,
+    /// `G`'s heap page — a live grandparent's dynamic page, now in `A`'s keep-alive list.
+    hg: HeapId,
+    /// Written to `hg` at offsets 0, 1024 and 5000.
+    marker: U256,
+}
+
+/// Drives `frame0 -> G (dynamic heap Hg) -> A -> B (kernel)` and has `B` ret-forward the
+/// pointer naming `Hg`, leaving execution back in `A` — whose `heaps_i_am_keeping_alive` now
+/// holds `Hg`, a **live grandparent's** heap page.
+///
+/// `A` is deliberately non-kernel: the kernel restriction lives in `ret` (forwarding up), not
+/// in `get_calldata` (forwarding down), so `A` can forward its calldata pointer downward.
+/// `G` is left at pc 1, ready to execute its own `HeapRead` of address 0 into r5, with
+/// `heap_size` set so that read is in bounds rather than bounding out.
+fn keepalive_chain_with_live_grandparent_heap() -> KeepaliveChain {
+    let heap_read = Instruction::from_heap_read(
+        Register1(Register::new(2)).into(),
+        Register1(Register::new(5)),
+        None,
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    // `G` resumes at pc 1 on its own `HeapRead`.
+    let g_program: Program<(), TestWorld<()>> = Program::from_raw(
+        vec![ret_instruction(), heap_read, ret_instruction()],
+        vec![],
+    );
+    let a_program: Program<(), TestWorld<()>> =
+        Program::from_raw(vec![ret_r1_instruction()], vec![]);
+    let b_program: Program<(), TestWorld<()>> =
+        Program::from_raw(vec![ret_r1_instruction()], vec![]);
+
+    let mut world = TestWorld::new(&[]);
+    let mut vm = VirtualMachine::new(
+        non_kernel_address(),
+        g_program.clone(),
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    // frame0 (initial, BOOTLOADER_HEAP_PAGE) -> G (dynamic heap)
+    let initial_heap = vm.state.current_frame.heap;
+    vm.push_frame::<opcodes::Normal>(
+        non_kernel_address(),
+        g_program,
+        700_000,
+        0,
+        false,
+        false,
+        initial_heap,
+        vm.world_diff.snapshot(),
+    );
+    let hg = vm.state.current_frame.heap;
+    let marker = U256::from(0x1111_1111_u64);
+    vm.state.heaps.write_u256(hg, 0, marker);
+    vm.state.heaps.write_u256(hg, 1024, marker);
+    vm.state.heaps.write_u256(hg, 5000, marker);
+    vm.state.current_frame.heap_size = 8192;
+    vm.state.current_frame.set_pc_from_u16(1);
+    vm.state.registers[2] = U256::zero();
+
+    vm.push_frame::<opcodes::Normal>(
+        non_kernel_address(),
+        a_program,
+        400_000,
+        0,
+        false,
+        false,
+        hg, // A.calldata_heap == Hg
+        vm.world_diff.snapshot(),
+    );
+    let a_heap = vm.state.current_frame.heap;
+    assert!(!vm.state.current_frame.is_kernel, "A must be non-kernel");
+
+    // A -> B (kernel), with A forwarding its calldata pointer down as B's calldata.
+    vm.push_frame::<opcodes::Normal>(
+        kernel_address(),
+        b_program,
+        200_000,
+        0,
+        false,
+        false,
+        hg, // B.calldata_heap == Hg (what ForwardFatPointer down produces)
+        vm.world_diff.snapshot(),
+    );
+    assert!(vm.state.current_frame.is_kernel, "B must be kernel");
+
+    // B rets a forwarded pointer naming Hg.
+    load_forward_ret_abi(&mut vm, hg, 1024, 32);
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+    assert_eq!(vm.state.current_frame.heap, a_heap, "must be back in A");
+
+    KeepaliveChain {
+        vm,
+        world,
+        hg,
+        marker,
+    }
+}
+
+/// Two properties of the same post-state, asserted after `B`'s pop and before `A` returns: the
+/// ownership gate leaves a **live grandparent's** heap page intact even though `B` ret-forwarded a
+/// narrow pointer naming it, and that page lands in `A`'s keep-alive list — which `pop_frame`
+/// consumes as pages `A` may free, the precondition the deallocation defect below rests on.
+#[test]
+fn kernel_ret_forward_puts_live_grandparent_heap_in_callers_keepalive() {
+    let KeepaliveChain { vm, hg, marker, .. } = keepalive_chain_with_live_grandparent_heap();
+
+    assert_returned_pointer(&vm, hg, 1024, 32);
+    assert!(
+        vm.state
+            .current_frame
+            .heaps_i_am_keeping_alive
+            .contains(&hg),
+        "A's keep-alive must hold Hg, a live ancestor's page"
+    );
+    assert!(vm.state.heaps.contains(hg));
+    for offset in [0, 1024, 5000] {
+        assert_eq!(
+            vm.state.heaps[hg].read_u256(offset),
+            marker,
+            "a live grandparent's heap must not be compacted"
+        );
+    }
+}
+
+/// When `A` then returns something other than `Hg`, `pop_frame`'s deallocation walk frees `Hg`
+/// while `G` is still live, and `G` resumes reading zeros from its own heap.
+///
+/// Asserts the CURRENT, DEFECTIVE outcome deliberately, so a fix shows up here as a failure rather
+/// than passing unnoticed — when that happens, rewrite this test, do not relax it. `zk_evm` never
+/// frees a page, so the correct outcome is an intact `Hg`. Pre-existing on this PR's base and not
+/// closed by the ownership gate: `extend(heap_to_keep)` ingests the child's returned page into the
+/// *parent's* keep-alive list without checking the parent may free it.
+#[test]
+fn keepalive_deallocation_frees_live_grandparent_heap() {
+    let KeepaliveChain {
+        mut vm,
+        mut world,
+        hg,
+        ..
+    } = keepalive_chain_with_live_grandparent_heap();
+
+    // A returns something that is NOT Hg: a fresh pointer into A's own heap, so the
+    // `Some(heap) != heap_to_keep` test in `pop_frame`'s deallocation loop does not skip the
+    // keep-alive entry.
+    load_new_heap_ret_abi(&mut vm, 0, 32);
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+
+    // Back in G, which is still live and about to read its own heap.
+    assert_eq!(vm.state.current_frame.heap, hg, "must be back in G");
+    assert!(
+        !vm.state.heaps.contains(hg),
+        "pre-existing defect: A's pop deallocates a live grandparent's heap page"
+    );
+    assert_eq!(vm.state.heaps[hg].read_u256(0), U256::zero());
+    assert_eq!(vm.state.heaps[hg].read_u256(1024), U256::zero());
+    assert_eq!(vm.state.heaps[hg].read_u256(5000), U256::zero());
+    assert_eq!(
+        vm.state.current_frame.heap_size, 8192,
+        "no gas, bounds or panic signal accompanies the loss"
+    );
+
+    // G's own HeapRead at address 0 observes zero where it wrote a marker.
+    execute_one_instruction(&mut vm, &mut world, &mut ());
+    assert_eq!(vm.state.registers[5], U256::zero());
+}
+
+/// Verifies the precondition the keep-alive chain above rests on: the kernel restriction lives in `ret`
+/// (forwarding returndata *up*), not in `get_calldata` (forwarding calldata *down*). A
+/// NON-kernel frame can therefore hand its own calldata pointer — naming a live ancestor's
+/// dynamic heap page — down to a kernel callee, via a real `FarCall` with
+/// `FatPointerSource::ForwardFatPointer` and the production `ptr.pack` idiom.
+#[test]
+fn non_kernel_frame_can_forward_calldata_pointer_downward() {
+    let a_address = Address::repeat_byte(2); // non-kernel
+    let b_address = kernel_address(); // kernel
+
+    let mut forward_abi_high = U256::zero();
+    forward_abi_high.0[3] = 0x0003_0d40_u64 | (1_u64 << 32); // gas 200_000 | ForwardFatPointer
+
+    // A: pack the ForwardFatPointer far-call ABI onto the calldata pointer it received in r1,
+    // then far call the kernel contract B with it.
+    let a_program = Program::from_raw(
+        vec![
+            load_code_page_word(0, Register::new(2)),
+            Instruction::from_pointer_pack(
+                Register1(Register::new(1)).into(),
+                Register2(Register::new(2)),
+                Register1(Register::new(1)).into(),
+                Arguments::new(Predicate::Always, 7, ModeRequirements::none()),
+                false,
+            ),
+            load_code_page_word(1, Register::new(3)),
+            normal_far_call(Register::new(1), Register::new(3)),
+            ret_instruction(),
+        ],
+        vec![forward_abi_high, address_into_u256(b_address)],
+    );
+    let b_program = Program::from_raw(vec![ret_instruction()], vec![]);
+    let g_program: Program<(), TestWorld<()>> = Program::from_raw(
+        vec![
+            normal_far_call(Register::new(1), Register::new(2)),
+            ret_instruction(),
+        ],
+        vec![],
+    );
+
+    let mut world = TestWorld::new(&[(a_address, a_program), (b_address, b_program)]);
+    let mut vm = VirtualMachine::new(
+        non_kernel_address(),
+        g_program.clone(),
+        Address::zero(),
+        &[],
+        3_000_000,
+        default_settings(),
+    );
+
+    // G must be a pushed frame so its heap is a dynamic page, as in the keep-alive chain.
+    let initial_heap = vm.state.current_frame.heap;
+    vm.push_frame::<opcodes::Normal>(
+        non_kernel_address(),
+        g_program,
+        2_000_000,
+        0,
+        false,
+        false,
+        initial_heap,
+        vm.world_diff.snapshot(),
+    );
+    let hg = vm.state.current_frame.heap;
+    vm.state
+        .heaps
+        .write_u256(hg, 0, U256::from(0x1111_1111_u64));
+
+    // G far calls A with a fresh heap calldata pointer: MakeNewPointer / ToHeap, [0, 128).
+    let mut g_abi = FatPointer {
+        offset: 0,
+        memory_page: HeapId::from_u32_unchecked(0),
+        start: 0,
+        length: 128,
+    }
+    .into_u256();
+    g_abi.0[3] = 1_000_000_u64; // gas, source byte 0 = MakeNewPointer / ToHeap
+    vm.state.registers[1] = g_abi;
+    vm.state.registers[2] = address_into_u256(a_address);
+    vm.state.register_pointer_flags &= !(1 << 1);
+
+    execute_one_instruction(&mut vm, &mut world, &mut ()); // G's FarCall
+
+    assert!(!vm.state.current_frame.is_kernel, "A must be non-kernel");
+    assert_eq!(
+        vm.state.current_frame.calldata_heap, hg,
+        "A's calldata heap must be G's live dynamic heap page"
+    );
+    let a_calldata_pointer = FatPointer::from(vm.state.registers[1]);
+    assert_eq!(a_calldata_pointer.memory_page, hg);
+
+    // A: load ABI high limbs, ptr.pack, load B's address, far call B.
+    for _ in 0..4 {
+        execute_one_instruction(&mut vm, &mut world, &mut ());
+    }
+
+    assert!(vm.state.current_frame.is_kernel, "B must be kernel");
+    assert_eq!(
+        vm.state.current_frame.calldata_heap, hg,
+        "a NON-kernel frame must be able to forward its calldata pointer down to a kernel \
+         callee, so the kernel callee's calldata heap is a live ancestor's page"
+    );
+}
+
+/// The decommit pin still protects an *owned* page. `Decommit` passes
+/// `current_frame.heap` as the candidate page, so a decommit page can be the dying frame's own
+/// heap — the ownership test passes and the pin is the only remaining guard. This is the shape
+/// `CodeOracle.yul` uses (`active_ptr_shrink_assign` then `active_ptr_return_forward`), and
+/// other frames read the shared code page in full.
+#[test]
+fn decommit_pin_protects_owned_page_from_returndata_compaction() {
+    let code_word = U256::from(0xaaaa_aaaa_u64);
+    // 60 code words = 1920 bytes, spanning several 256-byte chunks.
+    let contract = (
+        non_kernel_address(),
+        Program::from_raw(vec![ret_instruction()], vec![code_word; 60]),
+    );
+    let mut world = TestWorld::new(&[contract]);
+    let code_hash = *world
+        .address_to_hash
+        .values()
+        .next()
+        .expect("test contract hash must exist");
+
+    let decommit = Instruction::from_decommit(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Register1(Register::new(3)),
+        Arguments::new(Predicate::Always, 5, ModeRequirements::none()),
+    );
+    let outer_program: Program<(), TestWorld<()>> =
+        Program::from_raw(vec![ret_instruction()], vec![]);
+    let decommitting_program: Program<(), TestWorld<()>> =
+        Program::from_raw(vec![decommit, ret_r1_instruction()], vec![]);
+
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        outer_program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let caller_heap = vm.state.current_frame.heap;
+    vm.push_frame::<opcodes::Normal>(
+        kernel_address(),
+        decommitting_program,
+        500_000,
+        0,
+        false,
+        false,
+        caller_heap,
+        vm.world_diff.snapshot(),
+    );
+
+    vm.state.registers[1] = code_hash;
+    vm.state.registers[2] = U256::zero();
+    execute_one_instruction(&mut vm, &mut world, &mut ()); // the callee's `Decommit`
+
+    let decommit_page = FatPointer::from(vm.state.registers[3]).memory_page;
+    assert_eq!(
+        decommit_page, vm.state.current_frame.heap,
+        "the decommit candidate page is the dying frame's own heap, so it is owned"
+    );
+    assert!(vm.world_diff.is_decommit_page_pinned(decommit_page));
+    assert_eq!(vm.state.heaps[decommit_page].read_u256(0), code_word);
+    assert_eq!(vm.state.heaps[decommit_page].read_u256(1024), code_word);
+
+    // Ret-forward a pointer narrowed to 32 bytes at offset 1024, as `CodeOracle` does.
+    load_forward_ret_abi(&mut vm, decommit_page, 1024, 32);
+    assert_ne!(
+        vm.state.register_pointer_flags & (1 << 3),
+        0,
+        "the return-ABI setup must leave the r3 pointer `Decommit` produced tagged"
+    );
+
+    execute_one_instruction(&mut vm, &mut world, &mut ()); // the callee's `ret.ok r1`
+
+    assert_eq!(
+        vm.state.current_frame.heap, caller_heap,
+        "back in the caller"
+    );
+    assert!(
+        vm.world_diff.is_decommit_page_pinned(decommit_page),
+        "no return path can unpin a decommit page"
+    );
+    assert_eq!(
+        vm.state.heaps[decommit_page].read_u256(1024),
+        code_word,
+        "in-window code bytes survive"
+    );
+    assert_eq!(
+        vm.state.heaps[decommit_page].read_u256(0),
+        code_word,
+        "a pinned decommit page must not be compacted even though the dying frame owns it"
     );
 }
