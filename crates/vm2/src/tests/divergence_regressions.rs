@@ -1314,7 +1314,7 @@ fn pop_frame_does_not_compact_a_kept_heap_the_dying_frame_does_not_own() {
     // whatever page the frame's *child* returned, so it can name a live ancestor's heap.
     // Widening the ownership test to cover it would reintroduce the kernel ret-forward
     // divergence with a three-frame chain, so this must stay a no-op.
-    // The owned counterpart is `pop_frame_compacts_dying_frames_own_heap_to_returndata_window`.
+    // The owned counterpart is `pop_frame_compacts_dying_frames_own_heaps_to_returndata_window`.
     let program: Program<(), TestWorld<()>> =
         Program::from_raw(vec![ret_instruction::<(), TestWorld<()>>()], vec![]);
     let mut vm = VirtualMachine::new(
