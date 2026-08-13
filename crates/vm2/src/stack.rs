@@ -11,12 +11,16 @@ const NUMBER_OF_DIRTY_AREAS: usize = 64;
 const DIRTY_AREA_SIZE: usize = (1 << 16) / NUMBER_OF_DIRTY_AREAS;
 
 // Slots live in lazily-allocated sub-chunks of `SUBCHUNK_SLOTS` slots: a frame
-// pays only for the sub-chunks it writes, so scatter-writes cost KBs, not
-// 2 MiB per frame. Once materialized, a sub-chunk is kept for the stack's
-// lifetime and cleared in place on reuse — freeing it would let guest programs
-// trigger unpriced allocator work on every far call. Dirty tracking stays at
-// the coarse `dirty_areas` level, so snapshot/rollback/equality semantics
-// match the dense stack exactly.
+// allocates one sub-chunk per *distinct* sub-chunk it writes, so allocation is
+// proportional to the sub-chunks it touches rather than to the full 2 MiB of
+// slots: a frame writing few, clustered slots costs a few KB, while one writing
+// a slot in every sub-chunk materializes all `NUM_SUBCHUNKS` of them — the same
+// 2 MiB the dense layout paid unconditionally, which is the cap. Once
+// materialized, a sub-chunk is kept for the stack's lifetime and cleared in
+// place on reuse — freeing it would let guest programs trigger unpriced
+// allocator work on every far call. Dirty tracking stays at the coarse
+// `dirty_areas` level, so snapshot/rollback/equality semantics match the dense
+// stack exactly.
 const SUBCHUNK_SLOTS: usize = 16;
 const NUM_SUBCHUNKS: usize = (1 << 16) / SUBCHUNK_SLOTS;
 const SUBCHUNKS_PER_AREA: usize = DIRTY_AREA_SIZE / SUBCHUNK_SLOTS;
@@ -91,6 +95,12 @@ impl Stack {
         // sub-chunk becomes nonzero only via `set` (which dirties its area) or
         // `rollback` (which restores `dirty_areas` alongside the data), so
         // chunks in non-dirty areas are already all-zero.
+        //
+        // The work is proportional to the materialized chunks in the dirty
+        // areas — the stack's high-water mark, not the writes of the frame being
+        // recycled — and is bounded above by what the dense layout memset for
+        // the same dirty mask, which cleared every slot of a dirty area whether
+        // it had been written or not.
         for i in 0..NUMBER_OF_DIRTY_AREAS {
             if self.dirty_areas & (1 << i) != 0 {
                 for sc in (i * SUBCHUNKS_PER_AREA)..((i + 1) * SUBCHUNKS_PER_AREA) {
@@ -163,6 +173,11 @@ impl Stack {
         // materialized and skipping ones that would be created just to hold
         // zeros — absent already reads as zero. Non-dirty areas are all-zero
         // after the `zero()` above.
+        //
+        // Retention is therefore workload-dependent: rolling back to a snapshot
+        // whose `dirty_areas` is narrower than the current one keeps the chunks
+        // materialized outside it. They hold zeros, so `nonzero => dirty` still
+        // holds and they stay invisible to `get`/`PartialEq`/`snapshot`.
         for i in 0..NUMBER_OF_DIRTY_AREAS {
             if dirty_areas & (1 << i) != 0 {
                 for sc in (i * SUBCHUNKS_PER_AREA)..((i + 1) * SUBCHUNKS_PER_AREA) {
@@ -200,6 +215,15 @@ pub(crate) struct StackSnapshot {
     slots: Box<[U256]>,
 }
 
+/// Pool of stacks reused across frames, LIFO.
+///
+/// [`Stack::zero`] runs when the pool hands a stack *out* ([`Self::get`]), never
+/// when a frame hands one back ([`Self::recycle`]). Two consequences are easy to
+/// get backwards: the pool does not shrink as a deep call chain unwinds — those
+/// stacks go back into it materialized and stay that way — and clearing on reuse
+/// only ever reaches entries a later workload actually re-pops, so a workload
+/// that stays shallow leaves deeper entries as they were. A pooled stack's
+/// footprint is therefore its high-water mark for the lifetime of the pool.
 #[derive(Debug, Default)]
 pub(crate) struct StackPool {
     stacks: Vec<Box<Stack>>,
