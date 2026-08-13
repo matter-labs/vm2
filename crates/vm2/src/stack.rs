@@ -25,6 +25,15 @@ const SUBCHUNK_SLOTS: usize = 16;
 const NUM_SUBCHUNKS: usize = (1 << 16) / SUBCHUNK_SLOTS;
 const SUBCHUNKS_PER_AREA: usize = DIRTY_AREA_SIZE / SUBCHUNK_SLOTS;
 
+// A dirty area is exactly `SUBCHUNKS_PER_AREA` whole sub-chunks, which is what
+// keeps `zero()`'s per-area work bounded by the `DIRTY_AREA_SIZE` slots the
+// dense layout memset for the same mask, and keeps every sub-chunk inside one
+// area (so the area loops below cannot straddle).
+const _: () = assert!(SUBCHUNKS_PER_AREA * SUBCHUNK_SLOTS == DIRTY_AREA_SIZE);
+const _: () = assert!(NUM_SUBCHUNKS * SUBCHUNK_SLOTS == 1 << 16);
+// `dirty_areas` is a `u64` bitmask indexed by area, so `1 << i` must not overflow.
+const _: () = assert!(NUMBER_OF_DIRTY_AREAS <= u64::BITS as usize);
+
 /// A contiguous block of `SUBCHUNK_SLOTS` stack slots, allocated on demand.
 type SlotChunk = Box<[U256; SUBCHUNK_SLOTS]>;
 
@@ -404,6 +413,55 @@ mod tests {
                 "sub-chunk {sc} not cleared"
             );
         }
+    }
+
+    #[test]
+    fn pooled_reuse_after_full_materialization_allocates_nothing() {
+        // The coarse-dirty shape raised in review, at the data-structure level:
+        // one frame writes a slot in every sub-chunk, then the frame that reuses
+        // the pooled stack writes one slot per dirty area. The union must
+        // survive `zero()` — freeing it is what puts up to `NUM_SUBCHUNKS`
+        // allocator round-trips on every far call — so those reuse writes find
+        // every chunk already materialized.
+        let mut stack = Stack::new();
+        for sc in 0..NUM_SUBCHUNKS {
+            let slot = u16::try_from(sc * SUBCHUNK_SLOTS).expect("sub-chunk starts in range");
+            stack.set(slot, U256::one());
+        }
+        assert_eq!(
+            stack.slots.iter().flatten().count(),
+            NUM_SUBCHUNKS,
+            "one write per sub-chunk must materialize all of them"
+        );
+        assert_eq!(
+            stack.dirty_areas.count_ones() as usize,
+            NUMBER_OF_DIRTY_AREAS,
+            "those writes span every area"
+        );
+
+        stack.zero();
+        // The discriminator between clearing and freeing: dropping the chunks
+        // here (what the pooled-reuse path used to do) leaves zero of them.
+        assert_eq!(
+            stack.slots.iter().flatten().count(),
+            NUM_SUBCHUNKS,
+            "zero() must clear the union in place, not free it"
+        );
+
+        for area in 0..NUMBER_OF_DIRTY_AREAS {
+            let slot = u16::try_from(area * DIRTY_AREA_SIZE).expect("area starts in range");
+            stack.set(slot, U256::from(9u64));
+        }
+        assert_eq!(
+            stack.slots.iter().flatten().count(),
+            NUM_SUBCHUNKS,
+            "reuse writes must land in materialized chunks, allocating none"
+        );
+        assert_eq!(
+            stack.dirty_areas.count_ones() as usize,
+            NUMBER_OF_DIRTY_AREAS,
+            "one write per area re-dirties every area"
+        );
     }
 
     #[test]
