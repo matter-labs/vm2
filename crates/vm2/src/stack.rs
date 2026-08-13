@@ -1,5 +1,5 @@
 use std::{
-    alloc::{alloc_zeroed, Layout},
+    alloc::{alloc_zeroed, handle_alloc_error, Layout},
     fmt,
 };
 
@@ -10,39 +10,51 @@ use crate::{bitset::Bitset, fat_pointer::FatPointer, hash_for_debugging};
 const NUMBER_OF_DIRTY_AREAS: usize = 64;
 const DIRTY_AREA_SIZE: usize = (1 << 16) / NUMBER_OF_DIRTY_AREAS;
 
-// Storage is allocated at a finer granularity than the dirty-area granularity:
-// each sub-chunk holds `SUBCHUNK_SLOTS` slots, so a frame that scatters writes
-// allocates only the sub-chunks it actually touches, not a full 32 KiB area.
-// This bounds the "scatter one write into every area to force 2 MiB/frame"
-// pattern (deep nested calls) and, because far-call frames no longer pay a
-// large per-frame zeroing, it also *reduces* cycles vs. both the dense stack
-// and the coarser chunking. Dirty tracking stays at the coarse area level (the
-// `dirty_areas` u64), so snapshot/rollback/equality semantics are unchanged.
+// Slots live in lazily-allocated sub-chunks of `SUBCHUNK_SLOTS` slots: a frame
+// allocates one sub-chunk per *distinct* sub-chunk it writes, so allocation is
+// proportional to the sub-chunks it touches rather than to the full 2 MiB of
+// slots: a frame writing few, clustered slots costs a few KB, while one writing
+// a slot in every sub-chunk materializes all `NUM_SUBCHUNKS` of them — the same
+// 2 MiB the dense layout paid unconditionally, which is the cap. Once
+// materialized, a sub-chunk is kept for the stack's lifetime and cleared in
+// place on reuse — freeing it would let guest programs trigger unpriced
+// allocator work on every far call. Dirty tracking stays at the coarse
+// `dirty_areas` level, so snapshot/rollback/equality semantics match the dense
+// stack exactly.
 const SUBCHUNK_SLOTS: usize = 16;
 const NUM_SUBCHUNKS: usize = (1 << 16) / SUBCHUNK_SLOTS;
 const SUBCHUNKS_PER_AREA: usize = DIRTY_AREA_SIZE / SUBCHUNK_SLOTS;
 
+// A dirty area is exactly `SUBCHUNKS_PER_AREA` whole sub-chunks, which is what
+// keeps `zero()`'s per-area work bounded by the `DIRTY_AREA_SIZE` slots the
+// dense layout memset for the same mask, and keeps every sub-chunk inside one
+// area (so the area loops below cannot straddle).
+const _: () = assert!(SUBCHUNKS_PER_AREA * SUBCHUNK_SLOTS == DIRTY_AREA_SIZE);
+const _: () = assert!(NUM_SUBCHUNKS * SUBCHUNK_SLOTS == 1 << 16);
+// `dirty_areas` is a `u64` bitmask indexed by area, so `1 << i` must not overflow.
+const _: () = assert!(NUMBER_OF_DIRTY_AREAS <= u64::BITS as usize);
+
 /// A contiguous block of `SUBCHUNK_SLOTS` stack slots, allocated on demand.
 type SlotChunk = Box<[U256; SUBCHUNK_SLOTS]>;
 
-/// Allocate a zeroed slot chunk without materializing it on the caller's stack
-/// frame first. `U256`'s all-zero bit pattern is the integer zero, so
-/// `alloc_zeroed` is sound.
+/// Allocates a zeroed chunk directly on the heap (all-zero bits are a valid
+/// `U256` array; `Box::new` would materialize it on the caller's stack first).
 #[allow(clippy::cast_ptr_alignment)] // aligned per the array layout
 fn zeroed_chunk() -> SlotChunk {
-    unsafe { Box::from_raw(alloc_zeroed(Layout::new::<[U256; SUBCHUNK_SLOTS]>()).cast()) }
+    let layout = Layout::new::<[U256; SUBCHUNK_SLOTS]>();
+    let ptr = unsafe { alloc_zeroed(layout) };
+    if ptr.is_null() {
+        handle_alloc_error(layout);
+    }
+    unsafe { Box::from_raw(ptr.cast()) }
 }
 
-/// VM stack.
+/// VM stack: 2^16 slots stored as [`NUM_SUBCHUNKS`] lazily-allocated sub-chunks.
 ///
-/// The slots are stored as [`NUM_SUBCHUNKS`] sub-chunks that are allocated
-/// lazily on first write, so a frame that touches only a handful of slots pays
-/// for a couple of small sub-chunks rather than the full 2 MiB. An absent
-/// sub-chunk reads as all-zero, exactly like the dense zero-initialized array
-/// it replaces — this is purely a memory-layout change with no observable
-/// difference. Keeping the backing sparse bounds the memory held by deep call
-/// stacks (each live frame keeps its own `Stack`, and `StackPool` retains them
-/// for reuse).
+/// An absent sub-chunk reads as all-zero and is indistinguishable from a
+/// materialized all-zero one, so the layout is invisible to VM behavior. A
+/// stack keeps its materialized sub-chunks for its whole lifetime — its memory
+/// is its high-water mark — and `zero()` clears them in place for reuse.
 #[derive(Clone)]
 pub(crate) struct Stack {
     /// set of slots that may be interpreted as [`FatPointer`].
@@ -56,7 +68,12 @@ impl Stack {
     pub(crate) fn new() -> Box<Self> {
         // A zeroed `Stack` is valid: `Bitset` is all-zero, `dirty_areas` is 0,
         // and `Option<Box<_>>` uses the null-pointer niche, so all chunks are `None`.
-        unsafe { Box::from_raw(alloc_zeroed(Layout::new::<Self>()).cast()) }
+        let layout = Layout::new::<Self>();
+        let ptr = unsafe { alloc_zeroed(layout) };
+        if ptr.is_null() {
+            handle_alloc_error(layout);
+        }
+        unsafe { Box::from_raw(ptr.cast()) }
     }
 
     #[inline(always)]
@@ -71,9 +88,8 @@ impl Stack {
     #[inline(always)]
     pub(crate) fn set(&mut self, slot: u16, value: U256) {
         let area = slot as usize / DIRTY_AREA_SIZE;
-        // Mark the (coarse) area dirty on every write (including zero writes),
-        // matching the previous implementation so `dirty_areas` evolves
-        // identically and snapshot/rollback/eq are unaffected.
+        // Every write dirties its area — including zero writes — matching the
+        // dense implementation, so `dirty_areas` evolves identically.
         self.dirty_areas |= 1 << area;
         let subchunk = slot as usize / SUBCHUNK_SLOTS;
         let chunk = self.slots[subchunk].get_or_insert_with(zeroed_chunk);
@@ -81,19 +97,39 @@ impl Stack {
     }
 
     fn zero(&mut self) {
-        // Dropping a sub-chunk returns it to all-zero (absent reads as zero).
-        // A sub-chunk can only be allocated within a dirty area, so clearing
-        // every dirty area's sub-chunks clears everything.
+        // Clear materialized sub-chunks in place instead of dropping them:
+        // freeing would round-trip the allocator up to `NUM_SUBCHUNKS` times
+        // per pooled-stack reuse — unpriced host work a guest program can
+        // trigger on every far call. Clearing only dirty areas suffices: a
+        // sub-chunk becomes nonzero only via `set` (which dirties its area) or
+        // `rollback` (which restores `dirty_areas` alongside the data), so
+        // chunks in non-dirty areas are already all-zero.
+        //
+        // The work is proportional to the materialized chunks in the dirty
+        // areas — the stack's high-water mark, not the writes of the frame being
+        // recycled — and is bounded above by what the dense layout memset for
+        // the same dirty mask, which cleared every slot of a dirty area whether
+        // it had been written or not.
         for i in 0..NUMBER_OF_DIRTY_AREAS {
             if self.dirty_areas & (1 << i) != 0 {
                 for sc in (i * SUBCHUNKS_PER_AREA)..((i + 1) * SUBCHUNKS_PER_AREA) {
-                    self.slots[sc] = None;
+                    if let Some(chunk) = self.slots[sc].as_mut() {
+                        chunk.fill(U256::zero());
+                    }
                 }
             }
         }
 
         self.dirty_areas = 0;
         self.pointer_flags = Bitset::default();
+
+        debug_assert!(
+            self.slots
+                .iter()
+                .flatten()
+                .all(|chunk| chunk.iter().all(U256::is_zero)),
+            "nonzero sub-chunk survived zero(): `nonzero => dirty` was violated"
+        );
     }
 
     #[inline(always)]
@@ -141,15 +177,26 @@ impl Stack {
 
         self.pointer_flags = pointer_flags;
         self.dirty_areas = dirty_areas;
-        // Every dirty area lies within the saved prefix (`dirty_prefix_end` is
-        // the highest dirty area + 1), so restore its sub-chunks from the prefix.
-        // Non-dirty areas stay absent and read as zero, exactly as in the snapshot.
+        // Restore the sub-chunks of the snapshot's dirty areas (all of which
+        // lie within the saved prefix), reusing chunks that are already
+        // materialized and skipping ones that would be created just to hold
+        // zeros — absent already reads as zero. Non-dirty areas are all-zero
+        // after the `zero()` above.
+        //
+        // Retention is therefore workload-dependent: rolling back to a snapshot
+        // whose `dirty_areas` is narrower than the current one keeps the chunks
+        // materialized outside it. They hold zeros, so `nonzero => dirty` still
+        // holds and they stay invisible to `get`/`PartialEq`/`snapshot`.
         for i in 0..NUMBER_OF_DIRTY_AREAS {
             if dirty_areas & (1 << i) != 0 {
                 for sc in (i * SUBCHUNKS_PER_AREA)..((i + 1) * SUBCHUNKS_PER_AREA) {
-                    let mut chunk = zeroed_chunk();
-                    chunk.copy_from_slice(&slots[sc * SUBCHUNK_SLOTS..(sc + 1) * SUBCHUNK_SLOTS]);
-                    self.slots[sc] = Some(chunk);
+                    let src = &slots[sc * SUBCHUNK_SLOTS..(sc + 1) * SUBCHUNK_SLOTS];
+                    if self.slots[sc].is_none() && src.iter().all(U256::is_zero) {
+                        continue;
+                    }
+                    self.slots[sc]
+                        .get_or_insert_with(zeroed_chunk)
+                        .copy_from_slice(src);
                 }
             }
         }
@@ -177,6 +224,15 @@ pub(crate) struct StackSnapshot {
     slots: Box<[U256]>,
 }
 
+/// Pool of stacks reused across frames, LIFO.
+///
+/// [`Stack::zero`] runs when the pool hands a stack *out* ([`Self::get`]), never
+/// when a frame hands one back ([`Self::recycle`]). Two consequences are easy to
+/// get backwards: the pool does not shrink as a deep call chain unwinds — those
+/// stacks go back into it materialized and stay that way — and clearing on reuse
+/// only ever reaches entries a later workload actually re-pops, so a workload
+/// that stays shallow leaves deeper entries as they were. A pooled stack's
+/// footprint is therefore its high-water mark for the lifetime of the pool.
 #[derive(Debug, Default)]
 pub(crate) struct StackPool {
     stacks: Vec<Box<Stack>>,
@@ -287,6 +343,14 @@ mod tests {
         fn value(&mut self) -> U256 {
             U256([self.next(), self.next(), self.next(), self.next()])
         }
+        /// 1-in-8 zero values: zero writes must dirty/allocate like nonzero ones.
+        fn value_or_zero(&mut self) -> U256 {
+            if self.next().is_multiple_of(8) {
+                U256::zero()
+            } else {
+                self.value()
+            }
+        }
     }
 
     const DENSE: usize = 1 << 16;
@@ -298,13 +362,7 @@ mod tests {
         let mut oracle = vec![U256::zero(); DENSE];
 
         for _ in 0..20_000 {
-            let slot = rng.slot();
-            // Mix in zero writes: they must allocate/dirty exactly like nonzero.
-            let value = if rng.next().is_multiple_of(8) {
-                U256::zero()
-            } else {
-                rng.value()
-            };
+            let (slot, value) = (rng.slot(), rng.value_or_zero());
             stack.set(slot, value);
             oracle[usize::from(slot)] = value;
         }
@@ -322,25 +380,146 @@ mod tests {
             stack.set(rng.slot(), rng.value());
         }
         stack.zero();
-        let fresh = Stack::new();
-        assert_eq!(&stack, &fresh, "zero() must equal a fresh stack");
-        for slot in 0..DENSE {
-            assert_eq!(stack.get(u16::try_from(slot).unwrap()), U256::zero());
+        // `eq` covers slot values, dirty bits, and pointer flags.
+        assert_eq!(&stack, &Stack::new(), "zero() must equal a fresh stack");
+    }
+
+    #[test]
+    fn zero_retains_materialized_chunks() {
+        // `zero()` must clear sub-chunks in place, not free them: dropping
+        // them here reintroduces per-far-call allocator churn on pooled reuse.
+        let slots = [0u16, 17, 1000, 4096, 32_768, 65_535]; // scattered, incl. area boundaries
+        let mut stack = Stack::new();
+        for (i, slot) in slots.into_iter().enumerate() {
+            stack.set(slot, U256::from(u64::try_from(i).unwrap() + 1));
         }
+        let materialized: Vec<usize> = (0..NUM_SUBCHUNKS)
+            .filter(|&sc| stack.slots[sc].is_some())
+            .collect();
+        let mut expected: Vec<usize> = slots
+            .iter()
+            .map(|&s| usize::from(s) / SUBCHUNK_SLOTS)
+            .collect();
+        expected.sort_unstable(); // `materialized` is in ascending index order
+        assert_eq!(materialized, expected, "each write hits its own sub-chunk");
+
+        stack.zero();
+        for &sc in &materialized {
+            let chunk = stack.slots[sc]
+                .as_ref()
+                .unwrap_or_else(|| panic!("zero() must keep sub-chunk {sc}, not free it"));
+            assert!(
+                chunk.iter().all(U256::is_zero),
+                "sub-chunk {sc} not cleared"
+            );
+        }
+    }
+
+    #[test]
+    fn pooled_reuse_after_full_materialization_allocates_nothing() {
+        // The coarse-dirty shape raised in review, at the data-structure level:
+        // one frame writes a slot in every sub-chunk, then the frame that reuses
+        // the pooled stack writes one slot per dirty area. The union must
+        // survive `zero()` — freeing it is what puts up to `NUM_SUBCHUNKS`
+        // allocator round-trips on every far call — so those reuse writes find
+        // every chunk already materialized.
+        let mut stack = Stack::new();
+        for sc in 0..NUM_SUBCHUNKS {
+            let slot = u16::try_from(sc * SUBCHUNK_SLOTS).expect("sub-chunk starts in range");
+            stack.set(slot, U256::one());
+        }
+        assert_eq!(
+            stack.slots.iter().flatten().count(),
+            NUM_SUBCHUNKS,
+            "one write per sub-chunk must materialize all of them"
+        );
+        assert_eq!(
+            stack.dirty_areas.count_ones() as usize,
+            NUMBER_OF_DIRTY_AREAS,
+            "those writes span every area"
+        );
+
+        stack.zero();
+        // The discriminator between clearing and freeing: dropping the chunks
+        // here (what the pooled-reuse path used to do) leaves zero of them.
+        assert_eq!(
+            stack.slots.iter().flatten().count(),
+            NUM_SUBCHUNKS,
+            "zero() must clear the union in place, not free it"
+        );
+
+        for area in 0..NUMBER_OF_DIRTY_AREAS {
+            let slot = u16::try_from(area * DIRTY_AREA_SIZE).expect("area starts in range");
+            stack.set(slot, U256::from(9u64));
+        }
+        assert_eq!(
+            stack.slots.iter().flatten().count(),
+            NUM_SUBCHUNKS,
+            "reuse writes must land in materialized chunks, allocating none"
+        );
+        assert_eq!(
+            stack.dirty_areas.count_ones() as usize,
+            NUMBER_OF_DIRTY_AREAS,
+            "one write per area re-dirties every area"
+        );
+    }
+
+    #[test]
+    fn reused_stack_matches_fresh_after_same_writes() {
+        // A stack recycled through `zero()` (the `StackPool` reuse path) must
+        // be indistinguishable from a fresh one under the same writes, even
+        // though it keeps previously materialized sub-chunks around.
+        let mut rng = XorShift(0x1122_3344_5566_7788);
+        let mut reused = Stack::new();
+        for _ in 0..5_000 {
+            reused.set(rng.slot(), rng.value());
+        }
+        reused.zero();
+
+        let mut fresh = Stack::new();
+        for _ in 0..5_000 {
+            let (slot, value) = (rng.slot(), rng.value_or_zero());
+            reused.set(slot, value);
+            fresh.set(slot, value);
+        }
+        assert_eq!(&reused, &fresh, "reuse must not be observable");
+    }
+
+    #[test]
+    fn zero_write_still_dirties_the_area() {
+        // `set(slot, 0)` must mark `dirty_areas` exactly like the dense stack
+        // did, including on a recycled stack whose chunks are already present.
+        let mut stack = Stack::new();
+        assert_eq!(stack.dirty_areas, 0);
+        stack.set(0, U256::zero());
+        assert_eq!(stack.dirty_areas, 1);
+        let area3_slot = u16::try_from(3 * DIRTY_AREA_SIZE).unwrap();
+        stack.set(area3_slot, U256::zero());
+        assert_eq!(stack.dirty_areas, 0b1001);
+
+        stack.zero();
+        assert_eq!(stack.dirty_areas, 0);
+        // The chunk for slot 0 is still materialized; a zero write must dirty
+        // its area again regardless.
+        stack.set(0, U256::zero());
+        assert_eq!(stack.dirty_areas, 1);
     }
 
     #[test]
     fn snapshot_rollback_restores_exact_state() {
         let mut rng = XorShift(0x0abc_1234_5678_9def);
+        // Start from a recycled stack — the state `StackPool::get` hands out.
         let mut stack = Stack::new();
-
-        for _ in 0..8_000 {
+        for _ in 0..4_000 {
             stack.set(rng.slot(), rng.value());
         }
-        // Capture the exact slot state at snapshot time.
-        let mut expected = vec![U256::zero(); DENSE];
-        for (slot, e) in expected.iter_mut().enumerate() {
-            *e = stack.get(u16::try_from(slot).unwrap());
+        stack.zero();
+
+        let mut oracle = vec![U256::zero(); DENSE];
+        for _ in 0..8_000 {
+            let (slot, value) = (rng.slot(), rng.value_or_zero());
+            stack.set(slot, value);
+            oracle[usize::from(slot)] = value;
         }
         let snap = stack.snapshot();
 
@@ -352,10 +531,56 @@ mod tests {
         stack.set(0, U256::zero());
 
         stack.rollback(snap);
-        for (slot, e) in expected.iter().enumerate() {
+        for (slot, expected) in oracle.iter().enumerate() {
             let slot = u16::try_from(slot).unwrap();
-            assert_eq!(stack.get(slot), *e, "rollback mismatch at slot {slot}");
+            assert_eq!(
+                stack.get(slot),
+                *expected,
+                "rollback mismatch at slot {slot}"
+            );
         }
+    }
+
+    #[test]
+    fn rollback_narrowing_dirty_areas_restores_flags_and_reuses_chunks() {
+        // The one transition that can strand state: a rollback that NARROWS
+        // `dirty_areas`, leaving a materialized (all-zero) chunk in a
+        // non-dirty area. Also pins rollback's pointer-flag restoration,
+        // in-place chunk reuse, and the skip of all-zero materializations.
+        let mut stack = Stack::new();
+        stack.set(5, U256::from(42u64)); // area 0, sub-chunk 0
+        stack.set_pointer_flag(5);
+        let chunk_ptr = stack.slots[0].as_ref().unwrap().as_ptr();
+        let snap = stack.snapshot();
+
+        // Diverge into area 63, including pointer-flag churn.
+        stack.set(u16::MAX, U256::from(7u64));
+        stack.set_pointer_flag(u16::MAX);
+        stack.clear_pointer_flag(5);
+        stack.rollback(snap);
+
+        assert_eq!(stack.dirty_areas, 1, "dirty_areas must narrow to {{0}}");
+        assert_eq!(stack.get(5), U256::from(42u64));
+        assert_eq!(
+            stack.get(u16::MAX),
+            U256::zero(),
+            "diverged write must be gone"
+        );
+        assert!(stack.get_pointer_flag(5), "cleared flag must be restored");
+        assert!(
+            !stack.get_pointer_flag(u16::MAX),
+            "diverged flag must be gone"
+        );
+        // Rollback reuses the materialized chunk in place (no realloc churn)…
+        assert_eq!(stack.slots[0].as_ref().unwrap().as_ptr(), chunk_ptr);
+        // …and materializes nothing just to hold zeros: only sub-chunk 0 and
+        // the diverged-then-zeroed one at the top may exist.
+        assert_eq!(stack.slots.iter().flatten().count(), 2);
+
+        // The retained chunk for `u16::MAX` now sits in a NON-dirty area; the
+        // next recycle must still hand out a fresh-equal stack.
+        stack.zero();
+        assert_eq!(&stack, &Stack::new());
     }
 
     #[test]
@@ -398,9 +623,5 @@ mod tests {
         // Mutating the original must not affect the clone.
         original.set(1234, U256::from(0xffff_ffffu64));
         assert_eq!(cloned.get(1234), U256::zero());
-        // And the clone still matches its snapshot of the original.
-        for slot in [0u16, 5, 1024, 3100, 60000, 65535] {
-            let _ = cloned.get(slot); // no panic; values already checked via eq
-        }
     }
 }
