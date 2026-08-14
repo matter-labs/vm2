@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.3](https://github.com/matter-labs/vm2/compare/v0.6.2...v0.6.3) (2026-08-14)
+
+
+### Performance Improvements
+
+* **heap:** lazily-allocated 256B chunks + returndata-window compaction ([#116](https://github.com/matter-labs/vm2/issues/116)) ([657eb5e](https://github.com/matter-labs/vm2/commit/657eb5e343d2dd3ad8729814f2e82633533df102))
+* **stack:** lazily allocate stack slots in sub-chunks ([#115](https://github.com/matter-labs/vm2/issues/115)) ([3e04feb](https://github.com/matter-labs/vm2/commit/3e04feb317753a60c1f6254a0a1cd04d67f678f6))
+
 ## [0.6.2](https://github.com/matter-labs/vm2/compare/v0.6.1...v0.6.2) (2026-08-04)
 
 
