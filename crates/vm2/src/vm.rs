@@ -230,8 +230,8 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
     /// rollback can reference these heaps; and a committed transaction's
     /// returndata is dead once the bootloader moves on. Decommit-pinned code
     /// pages (shared across transactions by hash) are kept — the same predicate
-    /// [`Self::pop_frame`] uses. Freed pages return to the `PagePool` and are
-    /// reused by the next transaction, so peak page usage stays at roughly one
+    /// [`Self::pop_frame`] uses. Freed chunks return to the heap `ChunkPool` and
+    /// are reused by the next transaction, so peak memory stays at roughly one
     /// transaction's worth instead of growing with the transaction count.
     fn reclaim_bootloader_returndata_heaps(&mut self) {
         // `kept` is owned after the take, so the `retain` closure can borrow
@@ -314,7 +314,17 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
         self.state.previous_frames.push(new_frame);
     }
 
-    pub(crate) fn pop_frame(&mut self, heap_to_keep: Option<HeapId>) -> Option<FrameRemnant> {
+    /// Pops the current frame, returning the caller's exception handler and world snapshot.
+    ///
+    /// `heap_to_keep` and `keep_window` are the page and the `(start, length)` of the fat pointer
+    /// the frame returns, and must come from the *same* pointer: the page is spared from
+    /// deallocation, and if the dying frame owns it, every chunk outside the window is freed. Pass
+    /// `None`/`None` when no pointer is returned, as on a panic.
+    pub(crate) fn pop_frame(
+        &mut self,
+        heap_to_keep: Option<HeapId>,
+        keep_window: Option<(u32, u32)>,
+    ) -> Option<FrameRemnant> {
         let mut frame = self.state.previous_frames.pop()?;
 
         for &heap in [
@@ -326,6 +336,40 @@ impl<T: Tracer, W> VirtualMachine<T, W> {
         {
             if Some(heap) != heap_to_keep && !self.world_diff.is_decommit_page_pinned(heap) {
                 self.state.heaps.deallocate(heap);
+            }
+        }
+
+        // The kept returndata heap survives, but freeing the chunks outside
+        // `[start, start + length)` is sound only while no live frame can *name* the page. For a
+        // page the dying frame owns, the returned pointer is the only handle left (pointers narrow,
+        // never widen, and every register but r1 is cleared on return), so this is observably
+        // equivalent to keeping the page and caps retained memory at what the callee returned.
+        //
+        // Hence the `heap`/`aux_heap` test: a kernel frame may return a pointer naming *any* page,
+        // including its `calldata_heap`, which belongs to a still-live older frame (the `is_kernel`
+        // branch in `naked_ret`, mirroring zk_evm). That page is read via `HeapRead`, which no
+        // pointer bounds, and zk_evm never frees a page at all, so compacting it would be a silent
+        // consensus divergence. Do not widen the test to `heaps_i_am_keeping_alive`: that list is
+        // filled after the swap below with the *child's* returned page, so it can hold a live
+        // ancestor's heap. Decommit-pinned pages stay intact even when owned, because `Decommit`
+        // materializes into `current_frame.heap` and the pin is their only protection.
+        //
+        // Ownership is necessary but not sufficient, which is why the invariant is "name" rather
+        // than "address through a pointer": `PrecompileCall`'s `memory_page_to_read` and the
+        // `read_heap_byte`/`read_heap_u256` tracer API take a raw page id and see a compacted page
+        // as zeros, including in the owned case compacted here. A kernel frame can hash bytes
+        // outside the window for a different digest than zk_evm; only convention in
+        // `era-contracts` — no shipping caller passes a foreign page id — keeps that out of
+        // production, nothing enforced here. The keep-alive *deallocation* sinks above and in
+        // `reclaim_bootloader_returndata_heaps` share the trigger and remain open: they predate
+        // this and can free a live frame's whole page or panic on a duplicate `deallocate`.
+        if let (Some(heap), Some((start, length))) = (heap_to_keep, keep_window) {
+            // `current_frame` is still the dying frame here — the `mem::swap` is below.
+            let dying = &self.state.current_frame;
+            if (heap == dying.heap || heap == dying.aux_heap)
+                && !self.world_diff.is_decommit_page_pinned(heap)
+            {
+                self.state.heaps.compact_to_window(heap, start, length);
             }
         }
 

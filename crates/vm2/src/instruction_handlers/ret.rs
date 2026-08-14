@@ -78,6 +78,9 @@ fn naked_ret<T: Tracer, W: World<T>, RT: TypeLevelReturnType, const TO_LABEL: bo
             return_value_or_panic
                 .as_ref()
                 .map(|pointer| pointer.memory_page),
+            return_value_or_panic
+                .as_ref()
+                .map(|pointer| (pointer.start, pointer.length)),
         )
         else {
             // The initial frame is not rolled back, even if it fails.

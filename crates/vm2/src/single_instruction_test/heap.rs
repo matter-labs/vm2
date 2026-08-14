@@ -101,6 +101,11 @@ impl Heaps {
 
     pub(crate) fn deallocate(&mut self, _: HeapId) {}
 
+    // A no-op, so the harness cannot see compaction. That is a coverage gap, not a safety proof:
+    // raw page-id readers (`PrecompileCall`'s `memory_page_to_read`, the tracer heap API) read
+    // freed chunks as zero. Modelling it here alone won't help; `UniversalVmState` has no memory.
+    pub(crate) fn compact_to_window(&mut self, _: HeapId, _: u32, _: u32) {}
+
     pub(crate) fn dynamic_len(&self) -> usize {
         unimplemented!()
     }

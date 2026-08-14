@@ -26,6 +26,10 @@ anyhow = { workspace = true, optional = true }
 [dev-dependencies]
 divan.workspace = true
 proptest.workspace = true
+# Needed by the differential tests in `tests::differential`, which run the real heap against
+# `zk_evm`. The optional dependency above cannot serve them: enabling `single_instruction_test`
+# swaps in the mock heap, whose `compact_to_window` is a no-op.
+zk_evm.workspace = true
 
 [lints]
 workspace = true
