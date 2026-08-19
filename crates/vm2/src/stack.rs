@@ -1,5 +1,5 @@
 use std::{
-    alloc::{alloc_zeroed, Layout},
+    alloc::{alloc_zeroed, handle_alloc_error, Layout},
     fmt,
 };
 
@@ -30,7 +30,16 @@ type SlotChunk = Box<[U256; SUBCHUNK_SLOTS]>;
 /// `alloc_zeroed` is sound.
 #[allow(clippy::cast_ptr_alignment)] // aligned per the array layout
 fn zeroed_chunk() -> SlotChunk {
-    unsafe { Box::from_raw(alloc_zeroed(Layout::new::<[U256; SUBCHUNK_SLOTS]>()).cast()) }
+    let layout = Layout::new::<[U256; SUBCHUNK_SLOTS]>();
+    // `alloc_zeroed` returns null on failure; wrapping null in a `Box` is UB, so bail
+    // out through `handle_alloc_error` (a clean abort) before `Box::from_raw`.
+    unsafe {
+        let ptr = alloc_zeroed(layout);
+        if ptr.is_null() {
+            handle_alloc_error(layout);
+        }
+        Box::from_raw(ptr.cast())
+    }
 }
 
 /// VM stack.
@@ -56,7 +65,16 @@ impl Stack {
     pub(crate) fn new() -> Box<Self> {
         // A zeroed `Stack` is valid: `Bitset` is all-zero, `dirty_areas` is 0,
         // and `Option<Box<_>>` uses the null-pointer niche, so all chunks are `None`.
-        unsafe { Box::from_raw(alloc_zeroed(Layout::new::<Self>()).cast()) }
+        let layout = Layout::new::<Self>();
+        // `alloc_zeroed` returns null on failure; wrapping null in a `Box` is UB, so bail
+        // out through `handle_alloc_error` (a clean abort) before `Box::from_raw`.
+        unsafe {
+            let ptr = alloc_zeroed(layout);
+            if ptr.is_null() {
+                handle_alloc_error(layout);
+            }
+            Box::from_raw(ptr.cast())
+        }
     }
 
     #[inline(always)]
