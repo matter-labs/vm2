@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.4](https://github.com/matter-labs/vm2/compare/v0.6.3...v0.6.4) (2026-08-21)
+
+
+### Bug Fixes
+
+* **stack:** guard alloc_zeroed against null before Box::from_raw ([#128](https://github.com/matter-labs/vm2/issues/128)) ([9a378c1](https://github.com/matter-labs/vm2/commit/9a378c1bd9cea2c3422edb4d0bba262700477877))
+
 ## [0.6.3](https://github.com/matter-labs/vm2/compare/v0.6.2...v0.6.3) (2026-08-14)
 
 
