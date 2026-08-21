@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+
+  pull_request:
+  merge_group:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Nightly Rust necessary for building docs.
+  RUST_NIGHTLY_VERSION: nightly-2026-02-10
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac # v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY_VERSION }}
+          components: rustfmt, clippy, rust-src
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-afl
+        run: cargo install cargo-afl --version=^0.15 --locked --force
+
+      - name: Build project
+        run: |
+          # AFL fuzzing requires a separate command
+          cargo build --workspace --all-targets --exclude zksync_vm2_afl_fuzz
+
+      - name: Build fuzzer
+        run: cargo afl build -p zksync_vm2_afl_fuzz --release
+
+      # Two runs are needed. One for normal VM, another for the mocked version
+      - name: Run clippy
+        run: |
+          # Check the main library with non-test features (needs to be tested in isolation since the fuzzing crate enables test features)
+          cargo clippy -p zksync_vm2 --all-targets -- -D warnings
+          # The benches in `vm2` don't compile with fuzzing enabled
+          cargo clippy --workspace --all-features --lib --bins --tests -- -D warnings
+
+      - name: Check formatting
+        run: |
+          cargo fmt --check -- --config imports_granularity=Crate --config group_imports=StdExternalCrate
+
+      - name: Run tests
+        run: |
+          PROPTEST_CASES=10000 \
+          cargo test -p zksync_vm2_interface -p zksync_vm2 --all-targets
+
+      - name: Run doc tests
+        run: cargo test --workspace --doc
+
+      - name: Run fuzzer for a bit
+        run: |
+          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
+          cargo afl fuzz -i tests/afl-fuzz/in -o tests/afl-fuzz/out -V 60 -g $(cargo run --bin check_input_size) target/release/zksync_vm2_afl_fuzz
+
+      - name: Fail if the fuzzer found a crash
+        run: |
+          if [ -n "$(ls tests/afl-fuzz/out/default/crashes)" ]; then
+            cd tests/afl-fuzz/ && sh show_crash.sh;
+            exit 1
+          fi
+
+  document:
+    needs:
+     - build_and_test
+    if: github.event_name == 'push' && github.ref_type == 'branch'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac # v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY_VERSION }}
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build docs
+        run: |
+          cargo clean --doc && \
+          cargo rustdoc -p zksync_vm2_interface -- -Z unstable-options --enable-index-page && \
+          cargo rustdoc -p zksync_vm2 -- -Z unstable-options --enable-index-page
+
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: target/doc
+          single-commit: true

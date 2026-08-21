@@ -1,0 +1,240 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/vm2/src/decommit.rs`."><title>decommit.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-b7b9f40b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="zksync_vm2" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0-nightly (18d13b533 2026-02-09)" data-channel="nightly" data-search-js="search-fb33671b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-f9617a14.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-12f88f4f.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">zksync_vm2/</div>decommit.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>primitive_types::{H160, U256};
+<a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>zkevm_opcode_defs::{
+<a href=#3 id=3 data-nosnippet>3</a>    ethereum_types::Address, system_params::DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW,
+<a href=#4 id=4 data-nosnippet>4</a>};
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>zksync_vm2_interface::{CycleStats, HeapId, Tracer};
+<a href=#6 id=6 data-nosnippet>6</a>
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>crate::{
+<a href=#8 id=8 data-nosnippet>8</a>    program::Program,
+<a href=#9 id=9 data-nosnippet>9</a>    world_diff::{DecommitState, WorldDiff},
+<a href=#10 id=10 data-nosnippet>10</a>    VirtualMachine, World,
+<a href=#11 id=11 data-nosnippet>11</a>};
+<a href=#12 id=12 data-nosnippet>12</a>
+<a href=#13 id=13 data-nosnippet>13</a><span class="doccomment">/// Ensures that a decommit hash has a materialized reusable page and returns it.
+<a href=#14 id=14 data-nosnippet>14</a>///
+<a href=#15 id=15 data-nosnippet>15</a>/// The resulting page is pinned globally in [`WorldDiff`]. If that page is not owned by the
+<a href=#16 id=16 data-nosnippet>16</a>/// current frame, it is also recorded as kept alive in the bootloader frame (or current frame if
+<a href=#17 id=17 data-nosnippet>17</a>/// no bootloader frame exists), matching decommit opcode teardown semantics.
+<a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>materialize_decommit_page&lt;T: Tracer, W: World&lt;T&gt;&gt;(
+<a href=#19 id=19 data-nosnippet>19</a>    vm: <span class="kw-2">&amp;mut </span>VirtualMachine&lt;T, W&gt;,
+<a href=#20 id=20 data-nosnippet>20</a>    code_hash: U256,
+<a href=#21 id=21 data-nosnippet>21</a>    code: <span class="kw-2">&amp;</span>[u8],
+<a href=#22 id=22 data-nosnippet>22</a>    candidate_page: HeapId,
+<a href=#23 id=23 data-nosnippet>23</a>) -&gt; HeapId {
+<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(existing) = vm.world_diff.decommit_page(code_hash) {
+<a href=#25 id=25 data-nosnippet>25</a>        <span class="kw">return </span>existing;
+<a href=#26 id=26 data-nosnippet>26</a>    }
+<a href=#27 id=27 data-nosnippet>27</a>
+<a href=#28 id=28 data-nosnippet>28</a>    vm.state.heaps.write_bytes(candidate_page, <span class="number">0</span>, code);
+<a href=#29 id=29 data-nosnippet>29</a>    <span class="kw">let </span>heap = candidate_page;
+<a href=#30 id=30 data-nosnippet>30</a>    vm.world_diff.set_decommit_page(code_hash, heap);
+<a href=#31 id=31 data-nosnippet>31</a>
+<a href=#32 id=32 data-nosnippet>32</a>    <span class="kw">if </span><span class="macro">heap !</span>= vm.state.current_frame.heap &amp;&amp; <span class="macro">heap !</span>= vm.state.current_frame.aux_heap {
+<a href=#33 id=33 data-nosnippet>33</a>        <span class="kw">let </span>heaps_to_keep_alive =
+<a href=#34 id=34 data-nosnippet>34</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(bootloader_frame) = vm.state.previous_frames.first_mut() {
+<a href=#35 id=35 data-nosnippet>35</a>                <span class="kw-2">&amp;mut </span>bootloader_frame.heaps_i_am_keeping_alive
+<a href=#36 id=36 data-nosnippet>36</a>            } <span class="kw">else </span>{
+<a href=#37 id=37 data-nosnippet>37</a>                <span class="kw-2">&amp;mut </span>vm.state.current_frame.heaps_i_am_keeping_alive
+<a href=#38 id=38 data-nosnippet>38</a>            };
+<a href=#39 id=39 data-nosnippet>39</a>        heaps_to_keep_alive.push(heap);
+<a href=#40 id=40 data-nosnippet>40</a>    }
+<a href=#41 id=41 data-nosnippet>41</a>
+<a href=#42 id=42 data-nosnippet>42</a>    heap
+<a href=#43 id=43 data-nosnippet>43</a>}
+<a href=#44 id=44 data-nosnippet>44</a>
+<a href=#45 id=45 data-nosnippet>45</a><span class="kw">impl </span>WorldDiff {
+<a href=#46 id=46 data-nosnippet>46</a>    <span class="attr">#[allow(clippy::too_many_arguments)]
+<a href=#47 id=47 data-nosnippet>47</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>decommit&lt;T: Tracer&gt;(
+<a href=#48 id=48 data-nosnippet>48</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#49 id=49 data-nosnippet>49</a>        world: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>World&lt;T&gt;,
+<a href=#50 id=50 data-nosnippet>50</a>        tracer: <span class="kw-2">&amp;mut </span>T,
+<a href=#51 id=51 data-nosnippet>51</a>        address: U256,
+<a href=#52 id=52 data-nosnippet>52</a>        default_aa_code_hash: [u8; <span class="number">32</span>],
+<a href=#53 id=53 data-nosnippet>53</a>        evm_interpreter_code_hash: [u8; <span class="number">32</span>],
+<a href=#54 id=54 data-nosnippet>54</a>        is_constructor_call: bool,
+<a href=#55 id=55 data-nosnippet>55</a>        tx_number_in_block: u16,
+<a href=#56 id=56 data-nosnippet>56</a>    ) -&gt; <span class="prelude-ty">Option</span>&lt;(UnpaidDecommit, bool, bool)&gt; {
+<a href=#57 id=57 data-nosnippet>57</a>        <span class="kw">let </span>deployer_system_contract_address =
+<a href=#58 id=58 data-nosnippet>58</a>            Address::from_low_u64_be(DEPLOYER_SYSTEM_CONTRACT_ADDRESS_LOW.into());
+<a href=#59 id=59 data-nosnippet>59</a>
+<a href=#60 id=60 data-nosnippet>60</a>        <span class="kw">let </span><span class="kw-2">mut </span>is_evm = <span class="bool-val">false</span>;
+<a href=#61 id=61 data-nosnippet>61</a>        <span class="comment">// zk_evm grants the larger EVM frame stipend based on the version byte alone.
+<a href=#62 id=62 data-nosnippet>62</a>        // Keep this separate from `is_evm`: calls masked to default AA should not execute
+<a href=#63 id=63 data-nosnippet>63</a>        // via the EVM interpreter, but their frame bounds still expose the original blob
+<a href=#64 id=64 data-nosnippet>64</a>        // format classification.
+<a href=#65 id=65 data-nosnippet>65</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>is_evm_blob_format = <span class="bool-val">false</span>;
+<a href=#66 id=66 data-nosnippet>66</a>
+<a href=#67 id=67 data-nosnippet>67</a>        <span class="kw">let </span><span class="kw-2">mut </span>code_info = {
+<a href=#68 id=68 data-nosnippet>68</a>            <span class="kw">let </span>code_info = <span class="self">self</span>.read_storage_without_refund(
+<a href=#69 id=69 data-nosnippet>69</a>                world,
+<a href=#70 id=70 data-nosnippet>70</a>                tracer,
+<a href=#71 id=71 data-nosnippet>71</a>                deployer_system_contract_address,
+<a href=#72 id=72 data-nosnippet>72</a>                address,
+<a href=#73 id=73 data-nosnippet>73</a>                tx_number_in_block,
+<a href=#74 id=74 data-nosnippet>74</a>            );
+<a href=#75 id=75 data-nosnippet>75</a>            <span class="kw">let </span><span class="kw-2">mut </span>code_info_bytes = [<span class="number">0</span>; <span class="number">32</span>];
+<a href=#76 id=76 data-nosnippet>76</a>            code_info.to_big_endian(<span class="kw-2">&amp;mut </span>code_info_bytes);
+<a href=#77 id=77 data-nosnippet>77</a>
+<a href=#78 id=78 data-nosnippet>78</a>            <span class="comment">// Note that EOAs are considered constructed because their code info is all zeroes.
+<a href=#79 id=79 data-nosnippet>79</a>            </span><span class="kw">let </span>is_constructed = <span class="kw">match </span>code_info_bytes[<span class="number">1</span>] {
+<a href=#80 id=80 data-nosnippet>80</a>                <span class="number">0 </span>=&gt; <span class="bool-val">true</span>,
+<a href=#81 id=81 data-nosnippet>81</a>                <span class="number">1 </span>=&gt; <span class="bool-val">false</span>,
+<a href=#82 id=82 data-nosnippet>82</a>                <span class="kw">_ </span>=&gt; {
+<a href=#83 id=83 data-nosnippet>83</a>                    <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#84 id=84 data-nosnippet>84</a>                }
+<a href=#85 id=85 data-nosnippet>85</a>            };
+<a href=#86 id=86 data-nosnippet>86</a>
+<a href=#87 id=87 data-nosnippet>87</a>            <span class="kw">let </span>try_default_aa = <span class="kw">if </span>is_kernel(u256_into_address(address)) {
+<a href=#88 id=88 data-nosnippet>88</a>                <span class="prelude-val">None
+<a href=#89 id=89 data-nosnippet>89</a>            </span>} <span class="kw">else </span>{
+<a href=#90 id=90 data-nosnippet>90</a>                <span class="prelude-val">Some</span>(default_aa_code_hash)
+<a href=#91 id=91 data-nosnippet>91</a>            };
+<a href=#92 id=92 data-nosnippet>92</a>
+<a href=#93 id=93 data-nosnippet>93</a>            <span class="comment">// The address aliasing contract implements Ethereum-like behavior of calls to EOAs
+<a href=#94 id=94 data-nosnippet>94</a>            // returning successfully (and address aliasing when called from the bootloader).
+<a href=#95 id=95 data-nosnippet>95</a>            // It makes sense that unconstructed code is treated as an EOA but for some reason
+<a href=#96 id=96 data-nosnippet>96</a>            // a constructor call to constructed code is also treated as EOA.
+<a href=#97 id=97 data-nosnippet>97</a>            </span><span class="kw">match </span>code_info_bytes[<span class="number">0</span>] {
+<a href=#98 id=98 data-nosnippet>98</a>                <span class="number">1 </span>=&gt; {
+<a href=#99 id=99 data-nosnippet>99</a>                    <span class="kw">if </span>is_constructed == is_constructor_call {
+<a href=#100 id=100 data-nosnippet>100</a>                        try_default_aa<span class="question-mark">?
+<a href=#101 id=101 data-nosnippet>101</a>                    </span>} <span class="kw">else </span>{
+<a href=#102 id=102 data-nosnippet>102</a>                        code_info_bytes
+<a href=#103 id=103 data-nosnippet>103</a>                    }
+<a href=#104 id=104 data-nosnippet>104</a>                }
+<a href=#105 id=105 data-nosnippet>105</a>                <span class="number">2 </span>=&gt; {
+<a href=#106 id=106 data-nosnippet>106</a>                    is_evm_blob_format = <span class="bool-val">true</span>;
+<a href=#107 id=107 data-nosnippet>107</a>                    <span class="kw">if </span>is_constructed == is_constructor_call {
+<a href=#108 id=108 data-nosnippet>108</a>                        try_default_aa<span class="question-mark">?
+<a href=#109 id=109 data-nosnippet>109</a>                    </span>} <span class="kw">else </span>{
+<a href=#110 id=110 data-nosnippet>110</a>                        is_evm = <span class="bool-val">true</span>;
+<a href=#111 id=111 data-nosnippet>111</a>                        evm_interpreter_code_hash
+<a href=#112 id=112 data-nosnippet>112</a>                    }
+<a href=#113 id=113 data-nosnippet>113</a>                }
+<a href=#114 id=114 data-nosnippet>114</a>                <span class="kw">_ if </span>code_info == U256::zero() =&gt; try_default_aa<span class="question-mark">?</span>,
+<a href=#115 id=115 data-nosnippet>115</a>                <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">None</span>,
+<a href=#116 id=116 data-nosnippet>116</a>            }
+<a href=#117 id=117 data-nosnippet>117</a>        };
+<a href=#118 id=118 data-nosnippet>118</a>
+<a href=#119 id=119 data-nosnippet>119</a>        code_info[<span class="number">1</span>] = <span class="number">0</span>;
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">let </span>code_key: U256 = U256::from_big_endian(<span class="kw-2">&amp;</span>code_info);
+<a href=#121 id=121 data-nosnippet>121</a>
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="kw">let </span>decommit_state = <span class="self">self</span>.decommitted_hashes.as_ref().get(<span class="kw-2">&amp;</span>code_key).copied();
+<a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">let </span>was_decommitted = <span class="macro">matches!</span>(decommit_state, <span class="prelude-val">Some</span>(DecommitState::Succeeded(<span class="kw">_</span>)));
+<a href=#124 id=124 data-nosnippet>124</a>        <span class="kw">let </span>cost = <span class="kw">if </span>was_decommitted {
+<a href=#125 id=125 data-nosnippet>125</a>            <span class="number">0
+<a href=#126 id=126 data-nosnippet>126</a>        </span>} <span class="kw">else </span>{
+<a href=#127 id=127 data-nosnippet>127</a>            <span class="kw">let </span>code_length_in_words = u16::from_be_bytes([code_info[<span class="number">2</span>], code_info[<span class="number">3</span>]]);
+<a href=#128 id=128 data-nosnippet>128</a>            u32::from(code_length_in_words) * zkevm_opcode_defs::ERGS_PER_CODE_WORD_DECOMMITTMENT
+<a href=#129 id=129 data-nosnippet>129</a>        };
+<a href=#130 id=130 data-nosnippet>130</a>
+<a href=#131 id=131 data-nosnippet>131</a>        <span class="kw">let </span>should_materialize = !was_decommitted;
+<a href=#132 id=132 data-nosnippet>132</a>
+<a href=#133 id=133 data-nosnippet>133</a>        <span class="prelude-val">Some</span>((
+<a href=#134 id=134 data-nosnippet>134</a>            UnpaidDecommit {
+<a href=#135 id=135 data-nosnippet>135</a>                cost,
+<a href=#136 id=136 data-nosnippet>136</a>                code_key,
+<a href=#137 id=137 data-nosnippet>137</a>                should_materialize,
+<a href=#138 id=138 data-nosnippet>138</a>            },
+<a href=#139 id=139 data-nosnippet>139</a>            is_evm,
+<a href=#140 id=140 data-nosnippet>140</a>            is_evm_blob_format,
+<a href=#141 id=141 data-nosnippet>141</a>        ))
+<a href=#142 id=142 data-nosnippet>142</a>    }
+<a href=#143 id=143 data-nosnippet>143</a>
+<a href=#144 id=144 data-nosnippet>144</a>    <span class="doccomment">/// Returns the decommitted contract code and a flag set to `true` if this is a fresh decommit (i.e.,
+<a href=#145 id=145 data-nosnippet>145</a>    /// the code wasn't decommitted previously in the same VM run).
+<a href=#146 id=146 data-nosnippet>146</a>    </span><span class="attr">#[doc(hidden)] </span><span class="comment">// should be used for testing purposes only; can break VM operation otherwise
+<a href=#147 id=147 data-nosnippet>147</a>    </span><span class="kw">pub fn </span>decommit_opcode&lt;T: Tracer&gt;(
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#149 id=149 data-nosnippet>149</a>        world: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>World&lt;T&gt;,
+<a href=#150 id=150 data-nosnippet>150</a>        tracer: <span class="kw-2">&amp;mut </span>T,
+<a href=#151 id=151 data-nosnippet>151</a>        code_hash: U256,
+<a href=#152 id=152 data-nosnippet>152</a>    ) -&gt; (Vec&lt;u8&gt;, bool) {
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">let </span>is_new = <span class="kw">match </span><span class="self">self</span>.decommitted_hashes.as_ref().get(<span class="kw-2">&amp;</span>code_hash).copied() {
+<a href=#154 id=154 data-nosnippet>154</a>            <span class="prelude-val">None </span>| <span class="prelude-val">Some</span>(DecommitState::Unsuccessful) =&gt; <span class="bool-val">true</span>,
+<a href=#155 id=155 data-nosnippet>155</a>            <span class="prelude-val">Some</span>(DecommitState::Succeeded(<span class="kw">_</span>)) =&gt; <span class="bool-val">false</span>,
+<a href=#156 id=156 data-nosnippet>156</a>        };
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">let </span>code = world.decommit_code(code_hash);
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">if </span>is_new {
+<a href=#159 id=159 data-nosnippet>159</a>            <span class="kw">let </span>code_len = u32::try_from(code.len()).expect(<span class="string">"bytecode length overflow"</span>);
+<a href=#160 id=160 data-nosnippet>160</a>            <span class="comment">// Decommitter can process two words per cycle, hence division by 2 * 32 = 64.
+<a href=#161 id=161 data-nosnippet>161</a>            </span>tracer.on_extra_prover_cycles(CycleStats::Decommit(code_len.div_ceil(<span class="number">64</span>)));
+<a href=#162 id=162 data-nosnippet>162</a>        }
+<a href=#163 id=163 data-nosnippet>163</a>        (code, is_new)
+<a href=#164 id=164 data-nosnippet>164</a>    }
+<a href=#165 id=165 data-nosnippet>165</a>
+<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>pay_for_decommit&lt;T: Tracer, W: World&lt;T&gt;&gt;(
+<a href=#167 id=167 data-nosnippet>167</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#168 id=168 data-nosnippet>168</a>        world: <span class="kw-2">&amp;mut </span>W,
+<a href=#169 id=169 data-nosnippet>169</a>        tracer: <span class="kw-2">&amp;mut </span>T,
+<a href=#170 id=170 data-nosnippet>170</a>        decommit: UnpaidDecommit,
+<a href=#171 id=171 data-nosnippet>171</a>        gas: <span class="kw-2">&amp;mut </span>u32,
+<a href=#172 id=172 data-nosnippet>172</a>    ) -&gt; <span class="prelude-ty">Option</span>&lt;Program&lt;T, W&gt;&gt; {
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="kw">if </span>decommit.cost &gt; <span class="kw-2">*</span>gas {
+<a href=#174 id=174 data-nosnippet>174</a>            <span class="comment">// We intentionally keep this hash visible even though decommit did not execute.
+<a href=#175 id=175 data-nosnippet>175</a>            // Legacy VM includes far-call OOG attempts in "used contracts", and shadow mode
+<a href=#176 id=176 data-nosnippet>176</a>            // compares that output.
+<a href=#177 id=177 data-nosnippet>177</a>            </span><span class="kw">if </span>!<span class="macro">matches!</span>(
+<a href=#178 id=178 data-nosnippet>178</a>                <span class="self">self</span>.decommitted_hashes.as_ref().get(<span class="kw-2">&amp;</span>decommit.code_key),
+<a href=#179 id=179 data-nosnippet>179</a>                <span class="prelude-val">Some</span>(DecommitState::Succeeded(<span class="kw">_</span>))
+<a href=#180 id=180 data-nosnippet>180</a>            ) {
+<a href=#181 id=181 data-nosnippet>181</a>                <span class="self">self</span>.decommitted_hashes
+<a href=#182 id=182 data-nosnippet>182</a>                    .insert(decommit.code_key, DecommitState::Unsuccessful);
+<a href=#183 id=183 data-nosnippet>183</a>            }
+<a href=#184 id=184 data-nosnippet>184</a>            <span class="comment">// Unlike all other gas costs, this one is not paid if low on gas.
+<a href=#185 id=185 data-nosnippet>185</a>            </span><span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#186 id=186 data-nosnippet>186</a>        }
+<a href=#187 id=187 data-nosnippet>187</a>
+<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">let </span>is_new = <span class="kw">match </span><span class="self">self
+<a href=#189 id=189 data-nosnippet>189</a>            </span>.decommitted_hashes
+<a href=#190 id=190 data-nosnippet>190</a>            .as_ref()
+<a href=#191 id=191 data-nosnippet>191</a>            .get(<span class="kw-2">&amp;</span>decommit.code_key)
+<a href=#192 id=192 data-nosnippet>192</a>            .copied()
+<a href=#193 id=193 data-nosnippet>193</a>        {
+<a href=#194 id=194 data-nosnippet>194</a>            <span class="prelude-val">None </span>| <span class="prelude-val">Some</span>(DecommitState::Unsuccessful) =&gt; <span class="bool-val">true</span>,
+<a href=#195 id=195 data-nosnippet>195</a>            <span class="prelude-val">Some</span>(DecommitState::Succeeded(<span class="kw">_</span>)) =&gt; <span class="bool-val">false</span>,
+<a href=#196 id=196 data-nosnippet>196</a>        };
+<a href=#197 id=197 data-nosnippet>197</a>        <span class="kw-2">*</span>gas -= decommit.cost;
+<a href=#198 id=198 data-nosnippet>198</a>
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">let </span>decommit = world.decommit(decommit.code_key);
+<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw">if </span>is_new {
+<a href=#201 id=201 data-nosnippet>201</a>            <span class="kw">let </span>code_len_in_words =
+<a href=#202 id=202 data-nosnippet>202</a>                u32::try_from(decommit.code_page().len()).expect(<span class="string">"bytecode length overflow"</span>);
+<a href=#203 id=203 data-nosnippet>203</a>            <span class="comment">// Decommitter can process two words per cycle.
+<a href=#204 id=204 data-nosnippet>204</a>            </span>tracer.on_extra_prover_cycles(CycleStats::Decommit(code_len_in_words.div_ceil(<span class="number">2</span>)));
+<a href=#205 id=205 data-nosnippet>205</a>        }
+<a href=#206 id=206 data-nosnippet>206</a>
+<a href=#207 id=207 data-nosnippet>207</a>        <span class="prelude-val">Some</span>(decommit)
+<a href=#208 id=208 data-nosnippet>208</a>    }
+<a href=#209 id=209 data-nosnippet>209</a>}
+<a href=#210 id=210 data-nosnippet>210</a>
+<a href=#211 id=211 data-nosnippet>211</a><span class="attr">#[derive(Debug, Clone, Copy)]
+<a href=#212 id=212 data-nosnippet>212</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>UnpaidDecommit {
+<a href=#213 id=213 data-nosnippet>213</a>    cost: u32,
+<a href=#214 id=214 data-nosnippet>214</a>    code_key: U256,
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="doccomment">/// Indicates whether the decommit page should be materialized after successful payment.
+<a href=#216 id=216 data-nosnippet>216</a>    </span>should_materialize: bool,
+<a href=#217 id=217 data-nosnippet>217</a>}
+<a href=#218 id=218 data-nosnippet>218</a>
+<a href=#219 id=219 data-nosnippet>219</a><span class="kw">impl </span>UnpaidDecommit {
+<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const fn </span>code_key(<span class="self">self</span>) -&gt; U256 {
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="self">self</span>.code_key
+<a href=#222 id=222 data-nosnippet>222</a>    }
+<a href=#223 id=223 data-nosnippet>223</a>
+<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const fn </span>should_materialize(<span class="self">self</span>) -&gt; bool {
+<a href=#225 id=225 data-nosnippet>225</a>        <span class="self">self</span>.should_materialize
+<a href=#226 id=226 data-nosnippet>226</a>    }
+<a href=#227 id=227 data-nosnippet>227</a>}
+<a href=#228 id=228 data-nosnippet>228</a>
+<a href=#229 id=229 data-nosnippet>229</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>u256_into_address(source: U256) -&gt; H160 {
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">let </span><span class="kw-2">mut </span>result = H160::zero();
+<a href=#231 id=231 data-nosnippet>231</a>    <span class="kw">let </span><span class="kw-2">mut </span>bytes = [<span class="number">0</span>; <span class="number">32</span>];
+<a href=#232 id=232 data-nosnippet>232</a>    source.to_big_endian(<span class="kw-2">&amp;mut </span>bytes);
+<a href=#233 id=233 data-nosnippet>233</a>    result.assign_from_slice(<span class="kw-2">&amp;</span>bytes[<span class="number">12</span>..]);
+<a href=#234 id=234 data-nosnippet>234</a>    result
+<a href=#235 id=235 data-nosnippet>235</a>}
+<a href=#236 id=236 data-nosnippet>236</a>
+<a href=#237 id=237 data-nosnippet>237</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>is_kernel(address: H160) -&gt; bool {
+<a href=#238 id=238 data-nosnippet>238</a>    address.<span class="number">0</span>[..<span class="number">18</span>].iter().all(|<span class="kw-2">&amp;</span>byte| byte == <span class="number">0</span>)
+<a href=#239 id=239 data-nosnippet>239</a>}
+</code></pre></div></section></main></body></html>
