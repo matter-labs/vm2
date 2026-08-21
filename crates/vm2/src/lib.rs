@@ -12,6 +12,7 @@ use zksync_vm2_interface::Tracer;
 #[cfg(feature = "single_instruction_test")]
 pub(crate) use self::single_instruction_test::{heap, program, stack};
 pub use self::{
+    decommit::DecommitOpcodeOutcome,
     fat_pointer::FatPointer,
     instruction::{ExecutionEnd, Instruction},
     mode_requirements::ModeRequirements,

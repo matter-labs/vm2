@@ -6,7 +6,7 @@ use zkevm_opcode_defs::{
     Condition, DecodedOpcode, ImmMemHandlerFlags, Opcode, Operand, RegOrImmFlags, UMAOpcode,
     OPCODES_TABLE, UMA_INCREMENT_FLAG_IDX,
 };
-use zksync_vm2_interface::{opcodes, HeapId, Tracer};
+use zksync_vm2_interface::{opcodes, CycleStats, HeapId, Tracer};
 
 use crate::{
     addressing_modes::{
@@ -2514,5 +2514,127 @@ fn decommit_pin_protects_owned_page_from_returndata_compaction() {
         vm.state.heaps[decommit_page].read_u256(0),
         code_word,
         "a pinned decommit page must not be compacted even though the dying frame owns it"
+    );
+}
+
+/// Records [`CycleStats::Decommit`] emissions so a test can assert that the decommitter cycle
+/// accounting is unaffected by decommit fetch skipping.
+#[derive(Debug, Default)]
+struct DecommitCycleTracer {
+    decommit_cycles: Vec<u32>,
+}
+
+impl Tracer for DecommitCycleTracer {
+    fn on_extra_prover_cycles(&mut self, stats: CycleStats) {
+        if let CycleStats::Decommit(cycles) = stats {
+            self.decommit_cycles.push(cycles);
+        }
+    }
+}
+
+#[test]
+fn repeated_decommit_should_not_refetch_bytecode() {
+    // A repeated `decommit` reuses the page materialized by the first one, so the bytecode it
+    // would fetch is never read. Skipping the fetch must not be observable: same fat pointer,
+    // same page contents, same gas, same decommitter cycles.
+    const INSTRUCTION_ERGS: u32 = 5;
+    const EXTRA_COST: u32 = 1_000;
+
+    let code_word = U256::from(0xdead_beef_u64);
+    let contract = (
+        non_kernel_address(),
+        Program::from_raw(vec![ret_instruction()], vec![code_word]),
+    );
+    let mut world = TestWorld::new(&[contract]);
+    let code_hash = *world
+        .address_to_hash
+        .values()
+        .next()
+        .expect("test contract hash must exist");
+
+    let decommit_first = Instruction::from_decommit(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Register1(Register::new(3)),
+        Arguments::new(
+            Predicate::Always,
+            INSTRUCTION_ERGS,
+            ModeRequirements::none(),
+        ),
+    );
+    let decommit_second = Instruction::from_decommit(
+        Register1(Register::new(1)),
+        Register2(Register::new(2)),
+        Register1(Register::new(4)),
+        Arguments::new(
+            Predicate::Always,
+            INSTRUCTION_ERGS,
+            ModeRequirements::none(),
+        ),
+    );
+    let program = Program::from_raw(
+        vec![decommit_first, decommit_second, ret_instruction()],
+        vec![],
+    );
+
+    let mut vm = VirtualMachine::new(
+        kernel_address(),
+        program,
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+    let mut tracer = DecommitCycleTracer::default();
+
+    vm.state.register_pointer_flags &= !(1 << 1);
+    vm.state.registers[1] = code_hash;
+    vm.state.registers[2] = U256::from(EXTRA_COST);
+
+    let gas_before_first = vm.state.current_frame.gas;
+    execute_one_instruction(&mut vm, &mut world, &mut tracer);
+    let gas_after_first = vm.state.current_frame.gas;
+    let first = FatPointer::from(vm.state.registers[3]);
+
+    assert_eq!(
+        world.decommit_code_calls(),
+        1,
+        "a fresh decommit must fetch the bytecode exactly once"
+    );
+    assert_eq!(tracer.decommit_cycles.len(), 1);
+    assert_eq!(
+        gas_before_first - gas_after_first,
+        INSTRUCTION_ERGS + EXTRA_COST,
+        "a fresh decommit must not be refunded"
+    );
+
+    execute_one_instruction(&mut vm, &mut world, &mut tracer);
+    let gas_after_second = vm.state.current_frame.gas;
+    let second = FatPointer::from(vm.state.registers[4]);
+
+    assert_eq!(
+        world.decommit_code_calls(),
+        1,
+        "a repeated decommit must not re-fetch the bytecode"
+    );
+    assert_eq!(
+        tracer.decommit_cycles.len(),
+        1,
+        "a repeated decommit must not emit decommitter cycles"
+    );
+    assert_eq!(
+        vm.state.registers[3], vm.state.registers[4],
+        "a repeated decommit must return the same fat pointer"
+    );
+    assert_eq!(first.memory_page, second.memory_page);
+    assert_eq!(
+        vm.state.heaps[first.memory_page].read_u256(0),
+        code_word,
+        "the reused page must still hold the decommitted code"
+    );
+    assert_eq!(
+        gas_after_first - gas_after_second,
+        INSTRUCTION_ERGS,
+        "a repeated decommit must be refunded the extra cost"
     );
 }
