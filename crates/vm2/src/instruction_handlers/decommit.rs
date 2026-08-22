@@ -8,7 +8,7 @@ use crate::{
     decommit::materialize_decommit_page,
     fat_pointer::FatPointer,
     instruction::ExecutionStatus,
-    Instruction, VirtualMachine, World,
+    DecommitOpcodeOutcome, Instruction, VirtualMachine, World,
 };
 
 fn decommit<T: Tracer, W: World<T>>(
@@ -34,12 +34,16 @@ fn decommit<T: Tracer, W: World<T>>(
             return;
         }
 
-        let (code, is_fresh) = vm.world_diff.decommit_opcode(world, tracer, code_hash);
-        if !is_fresh {
-            vm.state.current_frame.gas += extra_cost;
-        }
-
-        let heap = materialize_decommit_page(vm, code_hash, &code, vm.state.current_frame.heap);
+        let heap = match vm.world_diff.decommit_opcode(world, tracer, code_hash) {
+            DecommitOpcodeOutcome::Fresh(code) => {
+                materialize_decommit_page(vm, code_hash, &code, vm.state.current_frame.heap)
+            }
+            DecommitOpcodeOutcome::Cached(heap) => {
+                // The code is already materialized in `heap`, so it is not fetched again.
+                vm.state.current_frame.gas += extra_cost;
+                heap
+            }
+        };
 
         let value = FatPointer {
             offset: 0,

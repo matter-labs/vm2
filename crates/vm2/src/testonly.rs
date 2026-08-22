@@ -20,6 +20,7 @@ use crate::{
 pub struct TestWorld<T> {
     pub(crate) address_to_hash: BTreeMap<U256, U256>,
     pub(crate) hash_to_contract: BTreeMap<U256, Program<T, Self>>,
+    decommit_code_calls: usize,
 }
 
 impl<T: Tracer> TestWorld<T> {
@@ -51,7 +52,13 @@ impl<T: Tracer> TestWorld<T> {
         Self {
             address_to_hash,
             hash_to_contract,
+            decommit_code_calls: 0,
         }
+    }
+
+    /// Number of times [`World::decommit_code()`] was called on this world.
+    pub fn decommit_code_calls(&self) -> usize {
+        self.decommit_code_calls
     }
 }
 
@@ -65,6 +72,7 @@ impl<T: Tracer> World<T> for TestWorld<T> {
     }
 
     fn decommit_code(&mut self, hash: U256) -> Vec<u8> {
+        self.decommit_code_calls += 1;
         self.decommit(hash)
             .code_page()
             .iter()

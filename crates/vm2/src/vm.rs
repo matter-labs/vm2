@@ -5,7 +5,7 @@ use zksync_vm2_interface::{opcodes::TypeLevelCallingMode, CallingMode, HeapId, T
 
 use crate::{
     callframe::{Callframe, FrameRemnant},
-    decommit::{materialize_decommit_page, u256_into_address},
+    decommit::{materialize_decommit_page, u256_into_address, DecommitOpcodeOutcome},
     instruction::ExecutionStatus,
     page_ids::{aux_heap_page_from_base, code_page_from_base, heap_page_from_base},
     stack::StackPool,
@@ -99,15 +99,17 @@ impl<T: Tracer, W: World<T>> VirtualMachine<T, W> {
     /// called in the middle of execution.
     #[doc(hidden)]
     pub fn manually_decommit(&mut self, world: &mut W, tracer: &mut T, code_hash: U256) -> bool {
-        let (code, is_fresh) = self.world_diff.decommit_opcode(world, tracer, code_hash);
-        if is_fresh {
-            // Materialize into a fresh code page rather than reusing the current frame's heap, so
-            // manual decommits performed between frames (e.g. against the bootloader frame) don't
-            // clobber live heap data.
-            let base_page = self.state.allocate_base_page();
-            materialize_decommit_page(self, code_hash, &code, code_page_from_base(base_page));
+        match self.world_diff.decommit_opcode(world, tracer, code_hash) {
+            DecommitOpcodeOutcome::Fresh(code) => {
+                // Materialize into a fresh code page rather than reusing the current frame's heap,
+                // so manual decommits performed between frames (e.g. against the bootloader frame)
+                // don't clobber live heap data.
+                let base_page = self.state.allocate_base_page();
+                materialize_decommit_page(self, code_hash, &code, code_page_from_base(base_page));
+                true
+            }
+            DecommitOpcodeOutcome::Cached(_) => false,
         }
-        is_fresh
     }
 
     /// Runs this VM with the specified [`World`] and [`Tracer`] until an end of execution due to a hook, or an error.

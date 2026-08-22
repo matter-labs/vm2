@@ -141,26 +141,30 @@ impl WorldDiff {
         ))
     }
 
-    /// Returns the decommitted contract code and a flag set to `true` if this is a fresh decommit (i.e.,
-    /// the code wasn't decommitted previously in the same VM run).
+    /// Fetches the contract code for a `decommit` opcode if this is a fresh decommit (i.e., the
+    /// code wasn't decommitted previously in the same VM run), and otherwise reports the page
+    /// that already holds it.
+    ///
+    /// A repeated decommit deliberately does *not* fetch the code: the only consumer of the
+    /// returned bytes is [`materialize_decommit_page()`], which returns early for a hash that
+    /// already has a page without reading them. Both functions branch on the same
+    /// [`Self::decommit_page()`] predicate, so the outcome here decides which of them applies.
     #[doc(hidden)] // should be used for testing purposes only; can break VM operation otherwise
     pub fn decommit_opcode<T: Tracer>(
         &mut self,
         world: &mut impl World<T>,
         tracer: &mut T,
         code_hash: U256,
-    ) -> (Vec<u8>, bool) {
-        let is_new = match self.decommitted_hashes.as_ref().get(&code_hash).copied() {
-            None | Some(DecommitState::Unsuccessful) => true,
-            Some(DecommitState::Succeeded(_)) => false,
-        };
-        let code = world.decommit_code(code_hash);
-        if is_new {
-            let code_len = u32::try_from(code.len()).expect("bytecode length overflow");
-            // Decommitter can process two words per cycle, hence division by 2 * 32 = 64.
-            tracer.on_extra_prover_cycles(CycleStats::Decommit(code_len.div_ceil(64)));
+    ) -> DecommitOpcodeOutcome {
+        if let Some(page) = self.decommit_page(code_hash) {
+            return DecommitOpcodeOutcome::Cached(page);
         }
-        (code, is_new)
+
+        let code = world.decommit_code(code_hash);
+        let code_len = u32::try_from(code.len()).expect("bytecode length overflow");
+        // Decommitter can process two words per cycle, hence division by 2 * 32 = 64.
+        tracer.on_extra_prover_cycles(CycleStats::Decommit(code_len.div_ceil(64)));
+        DecommitOpcodeOutcome::Fresh(code)
     }
 
     pub(crate) fn pay_for_decommit<T: Tracer, W: World<T>>(
@@ -206,6 +210,19 @@ impl WorldDiff {
 
         Some(decommit)
     }
+}
+
+/// Outcome of [`WorldDiff::decommit_opcode()`].
+#[derive(Debug)]
+#[doc(hidden)] // should be used for testing purposes only; can break VM operation otherwise
+pub enum DecommitOpcodeOutcome {
+    /// The bytecode hash wasn't decommitted previously in this VM run. Carries the fetched
+    /// bytecode, which the caller is expected to materialize into a heap page using
+    /// [`materialize_decommit_page()`].
+    Fresh(Vec<u8>),
+    /// The bytecode hash was already decommitted in this VM run and already has a materialized
+    /// heap page, which is provided here. The decommit cost must be refunded by the caller.
+    Cached(HeapId),
 }
 
 #[derive(Debug, Clone, Copy)]
