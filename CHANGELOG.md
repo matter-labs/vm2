@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.0](https://github.com/matter-labs/vm2/compare/v0.6.4...v0.7.0) (2026-08-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* **decommit:** `WorldDiff::decommit_opcode()` now returns `DecommitOpcodeOutcome` instead of `(Vec<u8>, bool)`. The `Cached` variant carries the `HeapId` of the page that already holds the code, and the bytecode is fetched only on the `Fresh` path.
+
+### Performance Improvements
+
+* **decommit:** don't re-fetch bytecode on a repeated `decommit` ([#130](https://github.com/matter-labs/vm2/issues/130)) ([44b1e32](https://github.com/matter-labs/vm2/commit/44b1e327bbeddcd84c2561310383e61c06e6b025))
+
 ## [0.6.4](https://github.com/matter-labs/vm2/compare/v0.6.3...v0.6.4) (2026-08-24)
 
 
