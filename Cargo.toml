@@ -30,9 +30,9 @@ primitive-types = "0.12.1"
 proptest = "1.4"
 
 # "Internal" dependencies
-zkevm_opcode_defs = { git = "https://github.com/matter-labs/zksync-protocol", tag = "v0.153.14" }
-zk_evm_abstractions = { git = "https://github.com/matter-labs/zksync-protocol", tag = "v0.153.14" }
-zk_evm = { git = "https://github.com/matter-labs/zksync-protocol", tag = "v0.153.14" }
+zkevm_opcode_defs = { git = "https://github.com/matter-labs/zksync-protocol", tag = "v0.153.15" }
+zk_evm_abstractions = { git = "https://github.com/matter-labs/zksync-protocol", tag = "v0.153.15" }
+zk_evm = { git = "https://github.com/matter-labs/zksync-protocol", tag = "v0.153.15" }
 
 # Dependencies within the workspace
 zksync_vm2_interface = { version = "=0.6.3", path = "crates/vm2-interface" }
