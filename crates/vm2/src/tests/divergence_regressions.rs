@@ -13,6 +13,7 @@ use crate::{
         Arguments, CodePage, Immediate1, Register, Register1, Register2, RegisterAndImmediate,
     },
     decode::decode,
+    decommit::materialize_decommit_page,
     fat_pointer::FatPointer,
     instruction_handlers::address_into_u256,
     page_ids::{
@@ -20,8 +21,8 @@ use crate::{
     },
     precompiles::{PrecompileMemoryReader, PrecompileOutput, Precompiles},
     testonly::TestWorld,
-    ExecutionEnd, Instruction, ModeRequirements, Predicate, Program, Settings, StorageInterface,
-    StorageSlot, VirtualMachine, World,
+    DecommitOpcodeOutcome, ExecutionEnd, Instruction, ModeRequirements, Predicate, Program,
+    Settings, StorageInterface, StorageSlot, VirtualMachine, World,
 };
 
 fn default_settings() -> Settings {
@@ -2636,5 +2637,69 @@ fn repeated_decommit_should_not_refetch_bytecode() {
         gas_after_first - gas_after_second,
         INSTRUCTION_ERGS,
         "a repeated decommit must be refunded the extra cost"
+    );
+}
+
+#[test]
+fn decommit_opcode_reports_the_cached_page_for_a_repeated_hash() {
+    // Direct coverage of `DecommitOpcodeOutcome`: the first call is `Fresh` and hands the caller
+    // the bytecode to materialize, while a second call for the same hash is `Cached` and reports
+    // the page that already holds it without going back to the world for the bytes.
+    let code_word = U256::from(0xdead_beef_u64);
+    let contract = (
+        non_kernel_address(),
+        Program::from_raw(vec![ret_instruction()], vec![code_word]),
+    );
+    let mut world = TestWorld::<()>::new(&[contract]);
+    let code_hash = *world
+        .address_to_hash
+        .values()
+        .next()
+        .expect("test contract hash must exist");
+
+    let mut vm: VirtualMachine<(), TestWorld<()>> = VirtualMachine::new(
+        kernel_address(),
+        Program::from_raw(vec![ret_instruction()], vec![]),
+        Address::zero(),
+        &[],
+        1_000_000,
+        default_settings(),
+    );
+
+    let DecommitOpcodeOutcome::Fresh(code) =
+        vm.world_diff
+            .decommit_opcode(&mut world, &mut (), code_hash)
+    else {
+        panic!("the first decommit of a hash must be fresh");
+    };
+    assert_eq!(
+        world.decommit_code_calls(),
+        1,
+        "a fresh decommit must fetch the bytecode"
+    );
+
+    let heap = vm.state.current_frame.heap;
+    let page = materialize_decommit_page(&mut vm, code_hash, &code, heap);
+    assert_eq!(vm.world_diff.decommit_page(code_hash), Some(page));
+
+    let DecommitOpcodeOutcome::Cached(cached_page) =
+        vm.world_diff
+            .decommit_opcode(&mut world, &mut (), code_hash)
+    else {
+        panic!("a repeated decommit must report the cached page");
+    };
+    assert_eq!(
+        cached_page, page,
+        "the reported page must be the one the fresh decommit materialized"
+    );
+    assert_eq!(
+        world.decommit_code_calls(),
+        1,
+        "a repeated decommit must not re-fetch the bytecode"
+    );
+    assert_eq!(
+        vm.state.heaps[cached_page].read_u256(0),
+        code_word,
+        "the reported page must still hold the decommitted code"
     );
 }
