@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.4](https://github.com/matter-labs/vm2/compare/v0.6.3...v0.6.4) (2026-08-24)
+
+
+### Bug Fixes
+
+* **deps:** bump zksync-protocol to v0.153.15 ([#131](https://github.com/matter-labs/vm2/issues/131)) ([6debf46](https://github.com/matter-labs/vm2/commit/6debf467bbfd406a4bb7c52d071ca23c36f851f5))
+* **stack:** guard alloc_zeroed against null before Box::from_raw ([#128](https://github.com/matter-labs/vm2/issues/128)) ([9a378c1](https://github.com/matter-labs/vm2/commit/9a378c1bd9cea2c3422edb4d0bba262700477877))
+
 ## [0.6.3](https://github.com/matter-labs/vm2/compare/v0.6.2...v0.6.3) (2026-08-14)
 
 
