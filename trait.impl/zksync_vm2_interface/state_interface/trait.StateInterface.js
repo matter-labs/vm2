@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["zksync_vm2",[["impl&lt;T: <a class=\"trait\" href=\"zksync_vm2_interface/tracer_interface/trait.Tracer.html\" title=\"trait zksync_vm2_interface::tracer_interface::Tracer\">Tracer</a>, W: <a class=\"trait\" href=\"zksync_vm2/trait.World.html\" title=\"trait zksync_vm2::World\">World</a>&lt;T&gt;&gt; <a class=\"trait\" href=\"zksync_vm2_interface/state_interface/trait.StateInterface.html\" title=\"trait zksync_vm2_interface::state_interface::StateInterface\">StateInterface</a> for <a class=\"struct\" href=\"zksync_vm2/struct.VirtualMachine.html\" title=\"struct zksync_vm2::VirtualMachine\">VirtualMachine</a>&lt;T, W&gt;",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[634]}
