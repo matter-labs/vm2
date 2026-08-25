@@ -55,7 +55,7 @@ impl Stack {
 
     fn assert_write_to_same_slot(&mut self, slot: u16) {
         if let Some(last_slot) = self.slot_written {
-            assert!(last_slot == slot);
+            assert_eq!(last_slot, slot);
         }
         self.slot_written = Some(slot);
     }
