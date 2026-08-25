@@ -10,8 +10,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Nightly Rust necessary for building docs.
-  RUST_NIGHTLY_VERSION: nightly-2026-02-10
+  # Pinned nightly used by every job below (build, clippy, fmt, tests, docs,
+  # fuzzing), not just the doc build. Kept in step with the toolchain the
+  # downstream consumers of this crate build on.
+  RUST_NIGHTLY_VERSION: nightly-2026-08-09
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

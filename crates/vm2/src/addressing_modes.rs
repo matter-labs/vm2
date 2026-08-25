@@ -139,11 +139,8 @@ impl Arguments {
             INVALID_INSTRUCTION_COST => 4,
             1..=4 => panic!("Reserved gas cost values overlap with actual gas costs"),
             x => {
-                if x > u8::MAX as u32 {
-                    panic!("Gas cost doesn't fit into 8 bits");
-                } else {
-                    x as u8
-                }
+                assert!(x <= u8::MAX as u32, "Gas cost doesn't fit into 8 bits");
+                x as u8
             }
         }
     }

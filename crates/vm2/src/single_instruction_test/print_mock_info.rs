@@ -39,10 +39,10 @@ impl<T: Tracer, W: World<T>> State<T, W> {
 impl<T, W> Callframe<T, W> {
     pub(crate) fn print_mock_info(&self) {
         if let Some((address, (value, tag))) = self.stack.read_that_happened() {
-            println!("  {value:?} (is_pointer: {tag}) read from stack address {address}",);
+            println!("  {value:?} (is_pointer: {tag}) read from stack address {address}");
         }
         if let Some((address, (value, tag))) = self.stack.write_that_happened() {
-            println!("  {value:?} (is_pointer: {tag}) written to stack address {address}",);
+            println!("  {value:?} (is_pointer: {tag}) written to stack address {address}");
         }
     }
 }

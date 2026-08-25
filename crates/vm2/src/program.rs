@@ -53,18 +53,20 @@ impl<T, W> fmt::Debug for Program<T, W> {
 
 impl<T: Tracer, W: World<T>> Program<T, W> {
     /// Creates a new program.
-    #[allow(clippy::missing_panics_doc)] // false positive
     pub fn new(bytecode: &[u8], enable_hooks: bool) -> Self {
+        let (words, _) = bytecode.as_chunks::<8>();
         let instructions = decode_program(
-            &bytecode
-                .chunks_exact(8)
-                .map(|chunk| u64::from_be_bytes(chunk.try_into().unwrap()))
+            &words
+                .iter()
+                .copied()
+                .map(u64::from_be_bytes)
                 .collect::<Vec<_>>(),
             enable_hooks,
         );
-        let code_page = bytecode
-            .chunks_exact(32)
-            .map(U256::from_big_endian)
+        let (cells, _) = bytecode.as_chunks::<32>();
+        let code_page = cells
+            .iter()
+            .map(|cell| U256::from_big_endian(cell))
             .collect::<Vec<_>>();
         Self {
             instructions: instructions.into(),

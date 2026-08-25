@@ -984,8 +984,8 @@ mod tests {
         world_diff.rollback(snapshot);
 
         // The per-access trace is empty — the whole point of opting out.
-        assert!(world_diff.storage_log_queries().is_empty());
-        assert!(world_diff.rollback_storage_logs.is_empty());
+        assert_eq!(world_diff.storage_log_queries(), []);
+        assert_eq!(world_diff.rollback_storage_logs.as_slice(), []);
 
         // ...but the maps a re-execution verifier derives the deduplicated set
         // from are still populated: the slot needs a protective read (read at
